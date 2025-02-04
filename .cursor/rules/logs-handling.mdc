@@ -1,0 +1,13 @@
+---
+description: Logs handling
+globs: 
+---
+
+# Logs handling
+
+- **Structured Logging**: Use JSON or other structured formats for logs to make them easily searchable and parseable.
+- **Log Levels**: Implement proper log levels (`debug`, `info`, `warn`, `error`) to control verbosity and filter logs effectively.
+- **Contextual Logging**: Include relevant metadata (e.g., request ID, user ID, timestamp) to track events across services.
+- **Persist & Rotate Logs**: Store logs in a central location, ensure log rotation to avoid excessive disk usage, and consider external log management tools.
+- **Avoid Sensitive Data**: Never log passwords, API keys, or PII; sanitise logs before writing to prevent security leaks.
+

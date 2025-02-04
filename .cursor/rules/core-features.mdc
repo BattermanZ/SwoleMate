@@ -1,0 +1,9 @@
+---
+description: Core Features
+globs: 
+---
+
+# Core features of the app
+
+- Track exercises with the following data fields: exercise type, sets, reps, weights, and an optional notes field.
+- Provide a dashboard to visualize progression over time using graphs. The graphs should allow comparisons over weeks, months, and years.

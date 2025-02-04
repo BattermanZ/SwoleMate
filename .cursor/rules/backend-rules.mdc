@@ -1,0 +1,10 @@
+---
+description: Backend requirements (Rust)
+globs: 
+---
+
+# Backend requirements
+
+- Use Rust (preferably with the Actix‑web framework) to create a lightweight, efficient RESTful API.
+- Include CRUD endpoints for managing exercise entries.
+- Use SQLite as the database to store exercise data.
