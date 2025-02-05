@@ -15,7 +15,3 @@ log = "0.4"
 chrono = { version = "0.4", features = ["serde"] }
 dotenv = "0.15"
 thiserror = "1.0"
-
-[workspace.metadata.sqlx]
-offline = true
-offline_dir = "database/.sqlx"
