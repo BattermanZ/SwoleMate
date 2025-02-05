@@ -1,3 +1,5 @@
+import { config } from './config';
+
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 interface LogEntry {
@@ -12,7 +14,7 @@ class Logger {
     private static instance: Logger;
     private logQueue: LogEntry[] = [];
     private isProcessing: boolean = false;
-    private readonly API_BASE = 'http://localhost:2469';
+    private readonly API_BASE = config.apiUrl;
     private isBrowser: boolean;
 
     private constructor() {

@@ -1,6 +1,7 @@
 import type { Workout, Exercise, Set, CreateExerciseRequest, CreateSetRequest } from './types';
+import { config } from './config';
 
-const API_BASE = 'http://localhost:2469';
+const API_BASE = config.apiUrl;
 
 async function handleResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
