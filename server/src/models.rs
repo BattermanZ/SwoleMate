@@ -19,12 +19,14 @@ pub struct Exercise {
     pub notes: Option<String>,
 }
 
+/// Represents a set of an exercise
 #[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
 pub struct Set {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<i64>,
     pub exercise_id: i64,
     pub reps: i64,
+    /// Weight in kilograms
     pub weight: f64,
     pub notes: Option<String>,
 } 

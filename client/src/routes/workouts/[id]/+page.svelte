@@ -79,7 +79,7 @@
                                             <tr>
                                                 <td>{i + 1}</td>
                                                 <td>{set.reps}</td>
-                                                <td>{set.weight} lbs</td>
+                                                <td>{set.weight} kg</td>
                                                 <td>{set.notes || '-'}</td>
                                             </tr>
                                         {/each}
