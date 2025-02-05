@@ -8,3 +8,4 @@ globs:
 - Use Svelte for the frontend of the app
 - Use Skeleton and Tailwind CSS for components and design
 - Ensure the app functions as a PWA on iOS, including offline support via service workers and a manifest that allows adding the app to the home screen.
+- Do not hardcode any addresses, use variables instead and put them in the [client.env](mdc:client/client.env) file

@@ -19,10 +19,13 @@ server/database/*.db-shm
 server/database/*.db-wal
 
 # Environment files
+*.env
 .env
 .env.*
 !.env.example
 **/server.env
+**/client.env
+client/client.env
 
 # IDE
 .idea/
