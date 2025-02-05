@@ -3,8 +3,9 @@ description: Development & Best Practices
 globs: 
 ---
 
-# YDevelopment & Best Practices
+# Development & Best Practices
 
 - Structure the project for clarity and maintainability, with clear separation between frontend and backend code.
 - Add comments in the code to explain key sections and logic.
 - Follow best practices for performance, error handling, and security.
+- Only use relative paths, never absolute paths.

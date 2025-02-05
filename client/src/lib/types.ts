@@ -11,9 +11,20 @@ export interface Exercise {
     notes?: string;
 }
 
+export interface CreateExerciseRequest {
+    exercise_type: string;
+    notes?: string;
+}
+
 export interface Set {
     id?: number;
     exercise_id: number;
+    reps: number;
+    weight: number;
+    notes?: string;
+}
+
+export interface CreateSetRequest {
     reps: number;
     weight: number;
     notes?: string;

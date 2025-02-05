@@ -1,6 +1,20 @@
 use actix_web::{web, HttpResponse, get, post};
 use serde_json::json;
 use crate::{models::*, errors::AppError, db::Database};
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize)]
+pub struct CreateExerciseRequest {
+    pub exercise_type: String,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateSetRequest {
+    pub reps: i64,
+    pub weight: f64,
+    pub notes: Option<String>,
+}
 
 #[get("/health")]
 pub async fn health_check() -> HttpResponse {
@@ -45,14 +59,26 @@ pub async fn get_workout(
     })))
 }
 
+#[get("/workouts")]
+pub async fn get_workouts(
+    db: web::Data<Database>,
+) -> Result<HttpResponse, AppError> {
+    let workouts = db.get_workouts().await?;
+    Ok(HttpResponse::Ok().json(workouts))
+}
+
 #[post("/workouts/{workout_id}/exercises")]
 pub async fn create_exercise(
     db: web::Data<Database>,
     workout_id: web::Path<i64>,
-    exercise: web::Json<Exercise>,
+    exercise_req: web::Json<CreateExerciseRequest>,
 ) -> Result<HttpResponse, AppError> {
-    let mut exercise = exercise.into_inner();
-    exercise.workout_id = *workout_id;
+    let exercise = Exercise {
+        id: None,
+        workout_id: *workout_id,
+        exercise_type: exercise_req.exercise_type.clone(),
+        notes: exercise_req.notes.clone(),
+    };
     
     let exercise_id = db.create_exercise(&exercise).await?;
     Ok(HttpResponse::Created().json(json!({
@@ -65,10 +91,15 @@ pub async fn create_exercise(
 pub async fn create_set(
     db: web::Data<Database>,
     exercise_id: web::Path<i64>,
-    set: web::Json<Set>,
+    set_req: web::Json<CreateSetRequest>,
 ) -> Result<HttpResponse, AppError> {
-    let mut set = set.into_inner();
-    set.exercise_id = *exercise_id;
+    let set = Set {
+        id: None,
+        exercise_id: *exercise_id,
+        reps: set_req.reps,
+        weight: set_req.weight,
+        notes: set_req.notes.clone(),
+    };
     
     let set_id = db.create_set(&set).await?;
     Ok(HttpResponse::Created().json(json!({
@@ -81,6 +112,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(health_check)
         .service(create_workout)
         .service(get_workout)
+        .service(get_workouts)
         .service(create_exercise)
         .service(create_set);
 } 

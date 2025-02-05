@@ -1,11 +1,18 @@
-import type { Workout, Exercise, Set } from './types';
+import type { Workout, Exercise, Set, CreateExerciseRequest, CreateSetRequest } from './types';
 
 const API_BASE = 'http://localhost:2469';
 
 async function handleResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
-        const error = await response.json().catch(() => ({ message: 'An error occurred' }));
-        throw new Error(error.message || 'An error occurred');
+        const error = await response.json().catch(() => ({ 
+            message: `HTTP error! status: ${response.status}` 
+        }));
+        console.error('API Error:', {
+            status: response.status,
+            statusText: response.statusText,
+            error
+        });
+        throw new Error(error.message || `HTTP error! status: ${response.status}`);
     }
     return response.json();
 }
@@ -26,7 +33,8 @@ export async function getWorkout(id: number): Promise<{ workout: Workout; exerci
     return handleResponse(response);
 }
 
-export async function createExercise(workoutId: number, exercise: Omit<Exercise, 'id' | 'workout_id'>): Promise<{ id: number }> {
+export async function createExercise(workoutId: number, exercise: CreateExerciseRequest): Promise<{ id: number }> {
+    console.log('Creating exercise:', { workoutId, exercise });
     const response = await fetch(`${API_BASE}/workouts/${workoutId}/exercises`, {
         method: 'POST',
         headers: {
@@ -37,7 +45,8 @@ export async function createExercise(workoutId: number, exercise: Omit<Exercise,
     return handleResponse(response);
 }
 
-export async function createSet(exerciseId: number, set: Omit<Set, 'id' | 'exercise_id'>): Promise<{ id: number }> {
+export async function createSet(exerciseId: number, set: CreateSetRequest): Promise<{ id: number }> {
+    console.log('Creating set:', { exerciseId, set });
     const response = await fetch(`${API_BASE}/exercises/${exerciseId}/sets`, {
         method: 'POST',
         headers: {
@@ -45,5 +54,10 @@ export async function createSet(exerciseId: number, set: Omit<Set, 'id' | 'exerc
         },
         body: JSON.stringify(set),
     });
+    return handleResponse(response);
+}
+
+export async function getWorkouts(): Promise<Workout[]> {
+    const response = await fetch(`${API_BASE}/workouts`);
     return handleResponse(response);
 } 

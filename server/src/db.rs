@@ -16,13 +16,14 @@ impl Database {
     pub async fn create_workout(&self, workout: &Workout) -> Result<i64, AppError> {
         debug!("Creating new workout: {:?}", workout);
         
+        let naive_date = workout.date.naive_utc();
         let result = sqlx::query!(
             r#"
             INSERT INTO workouts (date, notes)
             VALUES (?, ?)
             RETURNING id
             "#,
-            workout.date,
+            naive_date,
             workout.notes,
         )
         .fetch_one(&self.pool)
@@ -153,5 +154,34 @@ impl Database {
         })?;
 
         Ok(sets)
+    }
+
+    pub async fn get_workouts(&self) -> Result<Vec<Workout>, AppError> {
+        debug!("Fetching all workouts");
+        
+        let rows = sqlx::query!(
+            r#"
+            SELECT id, date, notes
+            FROM workouts
+            ORDER BY date DESC
+            "#
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| {
+            error!("Failed to fetch workouts: {}", e);
+            AppError::DatabaseError(e)
+        })?;
+
+        let workouts = rows.into_iter().map(|row| Workout {
+            id: Some(row.id.unwrap()),
+            date: DateTime::from_naive_utc_and_offset(
+                NaiveDateTime::from(row.date),
+                Utc,
+            ),
+            notes: row.notes,
+        }).collect();
+
+        Ok(workouts)
     }
 } 

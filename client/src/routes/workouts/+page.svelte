@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { createWorkout, createExercise, createSet } from '$lib/api';
+	import { createWorkout, createExercise, createSet, getWorkouts } from '$lib/api';
 	import type { Workout, Exercise, Set } from '$lib/types';
 
-	let workouts: Workout[] = [];
+	export let data: { workouts: Workout[] };
+	let workouts = data.workouts;
 	let loading = false;
 	let error: string | null = null;
 
@@ -31,6 +32,14 @@
 		notes: ''
 	};
 
+	async function refreshWorkouts() {
+		try {
+			workouts = await getWorkouts();
+		} catch (e) {
+			console.error('Failed to refresh workouts:', e);
+		}
+	}
+
 	async function handleCreateWorkout() {
 		try {
 			loading = true;
@@ -47,6 +56,7 @@
 				date: new Date().toISOString().split('T')[0],
 				notes: ''
 			};
+			await refreshWorkouts();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to create workout';
 		} finally {
@@ -59,7 +69,11 @@
 		try {
 			loading = true;
 			error = null;
-			const result = await createExercise(currentWorkoutId, newExercise);
+			const exerciseData = {
+				exercise_type: newExercise.exercise_type,
+				notes: newExercise.notes || undefined
+			};
+			const result = await createExercise(currentWorkoutId, exerciseData);
 			currentExerciseId = result.id;
 			showExerciseForm = false;
 			showSetForm = true;
@@ -68,6 +82,7 @@
 				exercise_type: '',
 				notes: ''
 			};
+			await refreshWorkouts();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to create exercise';
 		} finally {
@@ -88,11 +103,16 @@
 				weight: 0,
 				notes: ''
 			};
+			await refreshWorkouts();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to create set';
 		} finally {
 			loading = false;
 		}
+	}
+
+	function formatDate(dateString: string): string {
+		return new Date(dateString).toLocaleDateString();
 	}
 </script>
 
@@ -227,22 +247,29 @@
 				<thead>
 					<tr>
 						<th>Date</th>
-						<th>Exercise</th>
-						<th>Sets</th>
-						<th>Reps</th>
-						<th>Weight</th>
 						<th>Notes</th>
+						<th>Actions</th>
 					</tr>
 				</thead>
 				<tbody>
 					{#if loading}
 						<tr>
-							<td colspan="6" class="text-center">Loading...</td>
+							<td colspan="3" class="text-center">Loading...</td>
 						</tr>
 					{:else if workouts.length === 0}
 						<tr>
-							<td colspan="6" class="text-center">No workouts yet. Create one to get started!</td>
+							<td colspan="3" class="text-center">No workouts yet. Create one to get started!</td>
 						</tr>
+					{:else}
+						{#each workouts as workout}
+							<tr>
+								<td>{formatDate(workout.date)}</td>
+								<td>{workout.notes || '-'}</td>
+								<td>
+									<a href="/workouts/{workout.id}" class="btn btn-sm variant-soft">View Details</a>
+								</td>
+							</tr>
+						{/each}
 					{/if}
 				</tbody>
 			</table>
