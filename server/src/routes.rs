@@ -2,6 +2,10 @@ use actix_web::{web, HttpResponse, get, post};
 use serde_json::json;
 use crate::{models::*, errors::AppError, db::Database};
 use serde::Deserialize;
+use std::fs;
+use std::path::Path;
+use std::io::Write;
+use log::error;
 
 #[derive(Debug, Deserialize)]
 pub struct CreateExerciseRequest {
@@ -108,11 +112,56 @@ pub async fn create_set(
     })))
 }
 
+#[post("/api/logs/init")]
+pub async fn init_logs_directory() -> HttpResponse {
+    let logs_dir = Path::new("logs");
+    if !logs_dir.exists() {
+        if let Err(e) = fs::create_dir(logs_dir) {
+            error!("Failed to create logs directory: {}", e);
+            return HttpResponse::InternalServerError().json(json!({
+                "error": "Failed to create logs directory"
+            }));
+        }
+    }
+    HttpResponse::Ok().json(json!({ "status": "ok" }))
+}
+
+#[post("/api/logs")]
+pub async fn write_logs(logs: web::Json<Vec<serde_json::Value>>) -> HttpResponse {
+    let client_log_path = Path::new("logs/client.log");
+    let file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(client_log_path);
+
+    match file {
+        Ok(mut file) => {
+            for log in logs.iter() {
+                if let Err(e) = writeln!(file, "{}", serde_json::to_string(log).unwrap()) {
+                    error!("Failed to write client log: {}", e);
+                    return HttpResponse::InternalServerError().json(json!({
+                        "error": "Failed to write logs"
+                    }));
+                }
+            }
+            HttpResponse::Ok().json(json!({ "status": "ok" }))
+        }
+        Err(e) => {
+            error!("Failed to open client log file: {}", e);
+            HttpResponse::InternalServerError().json(json!({
+                "error": "Failed to open log file"
+            }))
+        }
+    }
+}
+
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(health_check)
         .service(create_workout)
         .service(get_workout)
         .service(get_workouts)
         .service(create_exercise)
-        .service(create_set);
+        .service(create_set)
+        .service(init_logs_directory)
+        .service(write_logs);
 } 

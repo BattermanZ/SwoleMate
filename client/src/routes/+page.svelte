@@ -4,6 +4,7 @@
 	import { createWorkout, createExercise, createSet } from '$lib/api';
 	import type { Workout, Exercise, Set } from '$lib/types';
 	import { ProgressRadial } from '@skeletonlabs/skeleton';
+	import { logger } from '$lib/logger';
 
 	let currentWorkout: Workout | null = null;
 	let exercises: Array<{
@@ -27,6 +28,7 @@
 		try {
 			loading = true;
 			error = null;
+			logger.info('workout', 'Starting new workout session');
 			const result = await createWorkout({
 				date: new Date().toISOString(),
 				notes: "Today's workout"
@@ -36,8 +38,10 @@
 				date: new Date().toISOString(),
 				notes: "Today's workout"
 			};
+			logger.info('workout', 'Workout session started', { workoutId: result.id });
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to start workout';
+			logger.error('workout', 'Failed to start workout', { error });
 		} finally {
 			loading = false;
 		}
@@ -50,6 +54,10 @@
 		try {
 			loading = true;
 			error = null;
+			logger.info('workout', 'Adding new exercise', { 
+				workoutId: currentWorkout.id,
+				exerciseName: newExerciseName
+			});
 			const result = await createExercise(currentWorkout.id, {
 				exercise_type: newExerciseName,
 				notes: ''
@@ -62,8 +70,10 @@
 			}];
 			newExerciseName = '';
 			showExerciseForm = false;
+			logger.info('workout', 'Exercise added successfully', { exerciseId: result.id });
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to add exercise';
+			logger.error('workout', 'Failed to add exercise', { error });
 		} finally {
 			loading = false;
 		}
@@ -80,6 +90,7 @@
 			isConfirmed: false
 		}];
 		exercises = [...exercises];
+		logger.debug('workout', 'New set form added', { exerciseId: exercise.id });
 	}
 
 	async function confirmSet(exerciseIndex: number, setIndex: number) {
@@ -90,6 +101,11 @@
 		try {
 			loading = true;
 			error = null;
+			logger.info('workout', 'Confirming set', { 
+				exerciseId: exercise.id,
+				reps: set.reps,
+				weight: set.weight
+			});
 			const result = await createSet(exercise.id, {
 				reps: set.reps,
 				weight: set.weight,
@@ -102,14 +118,17 @@
 				isConfirmed: true
 			};
 			exercises = [...exercises];
+			logger.info('workout', 'Set confirmed successfully', { setId: result.id });
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to confirm set';
+			logger.error('workout', 'Failed to confirm set', { error });
 		} finally {
 			loading = false;
 		}
 	}
 
 	async function endWorkout() {
+		logger.info('workout', 'Ending workout session', { workoutId: currentWorkout?.id });
 		currentWorkout = null;
 		exercises = [];
 		showExerciseForm = false;

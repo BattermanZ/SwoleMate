@@ -1,31 +1,81 @@
 use actix_cors::Cors;
 use actix_web::{middleware::Logger, App, HttpServer};
 use dotenv::dotenv;
-use env_logger::Env;
-use log::{error, info};
+use log::{error, info, LevelFilter};
 use sqlx::sqlite::SqlitePoolOptions;
 use std::env;
+use std::fs;
+use std::io::Write;
+use std::path::Path;
+use chrono::Local;
 
 mod models;
 mod routes;
 mod db;
 mod errors;
+mod middleware;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    // Create logs directory if it doesn't exist
+    let logs_dir = Path::new("logs");
+    if !logs_dir.exists() {
+        fs::create_dir(logs_dir)?;
+    }
+
+    // Setup file logging
+    let server_log_file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("logs/server.log")?;
+
+    // Setup structured logging with improved readability
+    env_logger::builder()
+        .format(move |buf, record| {
+            let local_time = Local::now().format("%Y-%m-%d - %H:%M:%S");
+            writeln!(
+                buf,
+                "[{}] {} - {} - {}",
+                local_time,
+                record.level(),
+                record.target(),
+                record.args()
+            )?;
+
+            // Write to file
+            if let Ok(mut file) = server_log_file.try_clone() {
+                writeln!(
+                    file,
+                    "[{}] {} - {} - {}",
+                    local_time,
+                    record.level(),
+                    record.target(),
+                    record.args()
+                )?;
+            }
+
+            Ok(())
+        })
+        .filter(None, LevelFilter::Info)
+        .parse_env("RUST_LOG")
+        .init();
+
     // Load environment variables
-    dotenv().ok();
-    
-    // Setup structured logging
-    env_logger::init_from_env(Env::default()
-        .default_filter_or("info")
-        .default_write_style_or("json"));
+    info!("Loading environment from server.env...");
+    match dotenv() {
+        Ok(_) => info!("Environment loaded successfully from server.env"),
+        Err(e) => {
+            error!("Failed to load server.env: {}", e);
+            error!("Using default configuration");
+        }
+    }
     
     info!("Starting SwoleMate server...");
 
     // Get database URL from environment
     let database_url = env::var("DATABASE_URL")
         .unwrap_or_else(|_| "sqlite:database/swolemate.db".to_string());
+    info!("Using database: {}", database_url);
 
     // Setup database connection pool
     let pool = SqlitePoolOptions::new()
@@ -55,7 +105,7 @@ async fn main() -> std::io::Result<()> {
         .parse::<u16>()
         .expect("SERVER_PORT must be a valid port number");
 
-    info!("Server will start on port {}", port);
+    info!("Server starting on port {}", port);
 
     // Create and start HTTP server
     HttpServer::new(move || {
@@ -68,8 +118,9 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(cors)
             .wrap(Logger::new(
-                r#"{"time": "%t", "remote_ip": "%a", "request": "%r", "status": "%s", "duration": "%D", "user_agent": "%{User-Agent}i", "request_id": "%{X-Request-ID}i"}"#
+                "[%t] %s %r - %D ms - %a - %{User-Agent}i"
             ))
+            .wrap(middleware::RequestLogger)
             .app_data(actix_web::web::Data::new(database.clone()))
             .configure(routes::config)
     })
