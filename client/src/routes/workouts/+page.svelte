@@ -163,6 +163,7 @@
 	}
 	.workout-card {
 		@apply card p-4 transition-transform hover:scale-[1.01] bg-surface-900/50;
+		border: 1px solid #E9A737;
 	}
 	.workout-header {
 		@apply flex justify-between items-center mb-2;
@@ -184,6 +185,7 @@
 	}
 	:global(.dark) .workout-card {
 		@apply bg-surface-900/50;
+		border: 1px solid #E9A737;
 	}
 	:global(.dark) .view-details-btn {
 		@apply bg-primary-500/80 hover:bg-primary-500;
