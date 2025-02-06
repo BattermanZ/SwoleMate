@@ -58,7 +58,7 @@
 </script>
 
 <Drawer position="right">
-	<nav class="p-4">
+	<nav class="p-4 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] px-[env(safe-area-inset-right)]">
 		<ul class="list-nav flex flex-col space-y-4">
 			{#each navItems as item}
 				<li>
@@ -78,7 +78,7 @@
 
 <AppShell>
 	<svelte:fragment slot="header">
-		<AppBar background="bg-surface-100-800-token" border="border-b-2">
+		<AppBar background="bg-surface-100-800-token" border="border-b-2" class="app-shell-header">
 			<svelte:fragment slot="lead">
 				<a href="/" class="flex items-center space-x-2">
 					<span class="text-2xl">💪</span>
@@ -112,25 +112,37 @@
 		</AppBar>
 	</svelte:fragment>
 
-	<main class="container mx-auto p-4 flex-1 flex flex-col min-h-[calc(100vh-theme(spacing.32))]">
+	<main class="container mx-auto p-4 flex-1 flex flex-col app-content h-full">
 		<slot />
 	</main>
-
-	<svelte:fragment slot="footer">
-		<div class="container mx-auto p-4">
-			<hr class="opacity-50 my-4" />
-			<div class="flex justify-between items-center">
-				<p class="text-sm opacity-50">© 2024 SwoleMate. All rights reserved.</p>
-			</div>
-		</div>
-	</svelte:fragment>
 </AppShell>
 
 <style>
 	:global(html), :global(body) {
-		@apply h-full overflow-hidden;
+		@apply h-full overflow-auto;
+		height: 100vh;
+		/* Fix for iOS height */
+		height: -webkit-fill-available;
 	}
+
 	:global(body) {
 		@apply bg-surface-50-900-token;
+		/* Ensure content fills the screen */
+		display: flex;
+		flex-direction: column;
+	}
+
+	/* Style the drawer to respect safe areas */
+	:global(.drawer-content) {
+		padding-top: env(safe-area-inset-top);
+		padding-bottom: env(safe-area-inset-bottom);
+	}
+
+	/* Ensure main content fills available space */
+	:global(.app-shell) {
+		display: flex;
+		flex-direction: column;
+		min-height: 100vh;
+		min-height: -webkit-fill-available;
 	}
 </style>

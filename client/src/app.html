@@ -3,13 +3,13 @@
 	<head>
 		<meta charset="utf-8" />
 		<link rel="icon" href="%sveltekit.assets%/favicon.png" />
-		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 		
 		<!-- PWA meta tags -->
 		<meta name="apple-mobile-web-app-capable" content="yes">
 		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 		<meta name="apple-mobile-web-app-title" content="SwoleMate">
-		<meta name="theme-color" content="#1e1e1e">
+		<meta name="theme-color" content="#652B26">
 		
 		<!-- PWA icons -->
 		<link rel="apple-touch-icon" href="%sveltekit.assets%/pwa-192.png">
@@ -18,6 +18,67 @@
 		
 		<!-- PWA manifest -->
 		<link rel="manifest" href="%sveltekit.assets%/manifest.json">
+
+		<style>
+			/* Handle iOS safe areas */
+			:root {
+				--sat: env(safe-area-inset-top);
+				--sab: env(safe-area-inset-bottom);
+				--sal: env(safe-area-inset-left);
+				--sar: env(safe-area-inset-right);
+			}
+
+			html {
+				min-height: calc(100% + env(safe-area-inset-top));
+				height: -webkit-fill-available;
+				padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+			}
+
+			body {
+				min-height: 100vh;
+				min-height: -webkit-fill-available;
+				margin: 0;
+				padding: 0;
+				display: flex;
+				flex-direction: column;
+				height: 100%;
+			}
+
+			/* Ensure content starts below the status bar */
+			.app-shell-header {
+				padding-top: max(0.5rem, env(safe-area-inset-top));
+				padding-left: max(1rem, env(safe-area-inset-left));
+				padding-right: max(1rem, env(safe-area-inset-right));
+			}
+
+			.app-content {
+				padding-left: max(1rem, env(safe-area-inset-left));
+				padding-right: max(1rem, env(safe-area-inset-right));
+				padding-bottom: max(1rem, env(safe-area-inset-bottom));
+				flex: 1;
+				display: flex;
+				flex-direction: column;
+				min-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+				min-height: calc(-webkit-fill-available - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+			}
+
+			/* Fix for drawer positioning */
+			.drawer-content {
+				padding-top: env(safe-area-inset-top);
+				padding-bottom: env(safe-area-inset-bottom);
+				padding-right: env(safe-area-inset-right);
+				height: 100vh;
+				height: -webkit-fill-available;
+			}
+
+			/* Fix for iOS height */
+			:global(.app-shell) {
+				display: flex;
+				flex-direction: column;
+				min-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+				min-height: calc(-webkit-fill-available - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+			}
+		</style>
 		
 		%sveltekit.head%
 	</head>

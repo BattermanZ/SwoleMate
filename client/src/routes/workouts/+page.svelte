@@ -34,9 +34,12 @@
 
 	async function refreshWorkouts() {
 		try {
+			loading = true;
 			workouts = await getWorkouts();
 		} catch (e) {
-			console.error('Failed to refresh workouts:', e);
+			error = e instanceof Error ? e.message : 'Failed to load workouts';
+		} finally {
+			loading = false;
 		}
 	}
 
@@ -111,17 +114,85 @@
 		}
 	}
 
-	function formatDate(dateString: string): string {
-		return new Date(dateString).toLocaleDateString();
+	function formatDateRelative(dateString: string): string {
+		const date = new Date(dateString);
+		const now = new Date();
+		const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+		const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+		// Function to add ordinal suffix
+		const getOrdinal = (n: number) => {
+			const s = ['th', 'st', 'nd', 'rd'];
+			const v = n % 100;
+			return n + (s[(v - 20) % 10] || s[v] || s[0]);
+		};
+
+		// Check if it's today
+		if (date.toDateString() === now.toDateString()) {
+			return 'Today';
+		}
+
+		// Check if it's yesterday
+		const yesterday = new Date(now);
+		yesterday.setDate(yesterday.getDate() - 1);
+		if (date.toDateString() === yesterday.toDateString()) {
+			return 'Yesterday';
+		}
+
+		// Check if it's within the last week
+		const lastWeek = new Date(now);
+		lastWeek.setDate(lastWeek.getDate() - 7);
+		if (date > lastWeek) {
+			return `Last ${days[date.getDay()]}`;
+		}
+
+		// Otherwise, return the full date
+		return `${days[date.getDay()]}, ${getOrdinal(date.getDate())} of ${months[date.getMonth()]}`;
 	}
+
+	function formatTime(dateString: string): string {
+		return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+	}
+
+	onMount(refreshWorkouts);
 </script>
 
-<div class="space-y-8">
-	<header class="flex justify-between items-center">
-		<h2 class="h2">Workouts</h2>
-		<button class="btn variant-filled-primary" on:click={() => showWorkoutForm = true}>
-			New Workout
-		</button>
+<style lang="postcss">
+	.workout-list {
+		@apply grid gap-4;
+	}
+	.workout-card {
+		@apply card p-4 transition-transform hover:scale-[1.01] bg-surface-900/50;
+	}
+	.workout-header {
+		@apply flex justify-between items-center mb-2;
+	}
+	.workout-date {
+		@apply text-2xl font-semibold;
+	}
+	.workout-time {
+		@apply text-base opacity-90;
+	}
+	.workout-notes {
+		@apply text-base opacity-90 mb-4;
+	}
+	.workout-actions {
+		@apply flex justify-end mt-2;
+	}
+	.view-details-btn {
+		@apply btn variant-filled-primary;
+	}
+	:global(.dark) .workout-card {
+		@apply bg-surface-900/50;
+	}
+	:global(.dark) .view-details-btn {
+		@apply bg-primary-500/80 hover:bg-primary-500;
+	}
+</style>
+
+<div class="container mx-auto p-4 space-y-6">
+	<header class="text-center">
+		<h2 class="h2 mb-4">Workout History</h2>
 	</header>
 
 	{#if error}
@@ -130,149 +201,43 @@
 		</div>
 	{/if}
 
-	{#if showWorkoutForm}
-		<div class="card p-4">
-			<h3 class="h3 mb-4">New Workout</h3>
-			<form on:submit|preventDefault={handleCreateWorkout} class="space-y-4">
-				<label class="label">
-					<span>Date</span>
-					<input
-						type="date"
-						class="input"
-						bind:value={newWorkout.date}
-						required
-					/>
-				</label>
-				<label class="label">
-					<span>Notes</span>
-					<textarea
-						class="textarea"
-						bind:value={newWorkout.notes}
-						rows="3"
-					></textarea>
-				</label>
-				<div class="flex justify-end space-x-2">
-					<button type="button" class="btn variant-soft" on:click={() => showWorkoutForm = false}>
-						Cancel
-					</button>
-					<button type="submit" class="btn variant-filled-primary" disabled={loading}>
-						{loading ? 'Creating...' : 'Create Workout'}
-					</button>
-				</div>
-			</form>
-		</div>
-	{/if}
-
-	{#if showExerciseForm}
-		<div class="card p-4">
-			<h3 class="h3 mb-4">Add Exercise</h3>
-			<form on:submit|preventDefault={handleCreateExercise} class="space-y-4">
-				<label class="label">
-					<span>Exercise Type</span>
-					<input
-						type="text"
-						class="input"
-						bind:value={newExercise.exercise_type}
-						required
-					/>
-				</label>
-				<label class="label">
-					<span>Notes</span>
-					<textarea
-						class="textarea"
-						bind:value={newExercise.notes}
-						rows="3"
-					></textarea>
-				</label>
-				<div class="flex justify-end space-x-2">
-					<button type="button" class="btn variant-soft" on:click={() => showExerciseForm = false}>
-						Cancel
-					</button>
-					<button type="submit" class="btn variant-filled-primary" disabled={loading}>
-						{loading ? 'Adding...' : 'Add Exercise'}
-					</button>
-				</div>
-			</form>
-		</div>
-	{/if}
-
-	{#if showSetForm}
-		<div class="card p-4">
-			<h3 class="h3 mb-4">Add Set</h3>
-			<form on:submit|preventDefault={handleCreateSet} class="space-y-4">
-				<label class="label">
-					<span>Reps</span>
-					<input
-						type="number"
-						class="input"
-						bind:value={newSet.reps}
-						min="0"
-						required
-					/>
-				</label>
-				<label class="label">
-					<span>Weight (lbs)</span>
-					<input
-						type="number"
-						class="input"
-						bind:value={newSet.weight}
-						min="0"
-						step="0.5"
-						required
-					/>
-				</label>
-				<label class="label">
-					<span>Notes</span>
-					<textarea
-						class="textarea"
-						bind:value={newSet.notes}
-						rows="3"
-					></textarea>
-				</label>
-				<div class="flex justify-end space-x-2">
-					<button type="button" class="btn variant-soft" on:click={() => showSetForm = false}>
-						Cancel
-					</button>
-					<button type="submit" class="btn variant-filled-primary" disabled={loading}>
-						{loading ? 'Adding...' : 'Add Set'}
-					</button>
-				</div>
-			</form>
-		</div>
-	{/if}
-
-	<div class="card p-4">
-		<div class="table-container">
-			<table class="table table-hover">
-				<thead>
-					<tr>
-						<th>Date</th>
-						<th>Notes</th>
-						<th>Actions</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#if loading}
-						<tr>
-							<td colspan="3" class="text-center">Loading...</td>
-						</tr>
-					{:else if workouts.length === 0}
-						<tr>
-							<td colspan="3" class="text-center">No workouts yet. Create one to get started!</td>
-						</tr>
-					{:else}
-						{#each workouts as workout}
-							<tr>
-								<td>{formatDate(workout.date)}</td>
-								<td>{workout.notes || '-'}</td>
-								<td>
-									<a href="/workouts/{workout.id}" class="btn btn-sm variant-soft">View Details</a>
-								</td>
-							</tr>
-						{/each}
+	<div class="workout-list">
+		{#if loading}
+			<div class="card p-4 text-center">
+				<span class="loading">Loading workouts...</span>
+			</div>
+		{:else if workouts.length === 0}
+			<div class="card variant-ghost p-4 text-center">
+				<p>No workouts yet. Start your fitness journey today!</p>
+			</div>
+		{:else}
+			{#each workouts as workout}
+				<div class="workout-card">
+					<div class="workout-header">
+						<div>
+							<div class="workout-date">{formatDateRelative(workout.date)}</div>
+							<div class="workout-time">
+								{formatTime(workout.start_time)} - {formatTime(workout.end_time)}
+							</div>
+						</div>
+						<div class="flex items-center gap-2">
+							{#if workout.feedback}
+								<span class="text-3xl">{workout.feedback}</span>
+							{/if}
+						</div>
+					</div>
+					
+					{#if workout.notes}
+						<div class="workout-notes">{workout.notes}</div>
 					{/if}
-				</tbody>
-			</table>
-		</div>
+
+					<div class="workout-actions">
+						<a href="/workouts/{workout.id}" class="view-details-btn">
+							View Details →
+						</a>
+					</div>
+				</div>
+			{/each}
+		{/if}
 	</div>
 </div> 

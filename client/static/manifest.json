@@ -3,10 +3,13 @@
     "short_name": "SwoleMate",
     "description": "Your personal workout tracking companion",
     "start_url": "/",
+    "id": "/",
     "display": "standalone",
-    "background_color": "#1e1e1e",
-    "theme_color": "#1e1e1e",
+    "display_override": ["standalone", "fullscreen"],
+    "background_color": "#652B26",
+    "theme_color": "#652B26",
     "orientation": "portrait",
+    "categories": ["fitness", "health"],
     "icons": [
         {
             "src": "pwa-192.png",
@@ -19,6 +22,15 @@
             "sizes": "512x512",
             "type": "image/png",
             "purpose": "any maskable"
+        }
+    ],
+    "screenshots": [
+        {
+            "src": "pwa-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "form_factor": "narrow",
+            "label": "SwoleMate Homescreen"
         }
     ]
 } 
