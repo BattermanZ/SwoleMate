@@ -332,4 +332,73 @@ impl Database {
             Ok(None)
         }
     }
+
+    pub async fn delete_exercise(&self, id: i64) -> Result<(), AppError> {
+        debug!(target: "database", "Deleting exercise #{}", id);
+        
+        // First delete all sets associated with this exercise
+        sqlx::query!(
+            r#"
+            DELETE FROM sets
+            WHERE exercise_id = ?
+            "#,
+            id,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| {
+            error!(target: "database", "Failed to delete sets for exercise: {}", e);
+            AppError::DatabaseError(e)
+        })?;
+
+        // Then delete the exercise
+        sqlx::query!(
+            r#"
+            DELETE FROM exercises
+            WHERE id = ?
+            "#,
+            id,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| {
+            error!(target: "database", "Failed to delete exercise: {}", e);
+            AppError::DatabaseError(e)
+        })?;
+
+        info!(target: "database", "Deleted exercise #{} and its sets", id);
+        Ok(())
+    }
+
+    pub async fn delete_workout(&self, id: i64) -> Result<(), AppError> {
+        debug!(target: "database", "Deleting workout #{}", id);
+        
+        // First get all exercises for this workout
+        let exercises = self.get_exercises_for_workout(id).await?;
+        
+        // Delete all sets and exercises
+        for exercise in exercises {
+            if let Some(exercise_id) = exercise.id {
+                self.delete_exercise(exercise_id).await?;
+            }
+        }
+
+        // Finally delete the workout
+        sqlx::query!(
+            r#"
+            DELETE FROM workouts
+            WHERE id = ?
+            "#,
+            id,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| {
+            error!(target: "database", "Failed to delete workout: {}", e);
+            AppError::DatabaseError(e)
+        })?;
+
+        info!(target: "database", "Deleted workout #{} and all its exercises and sets", id);
+        Ok(())
+    }
 } 

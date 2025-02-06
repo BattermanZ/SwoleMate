@@ -100,4 +100,24 @@ export async function getLastExerciseData(exerciseType: string): Promise<{ exerc
     if (!data) return null;
     const [exercise, sets] = data;
     return { exercise, sets };
+}
+
+export async function cancelExercise(id: number): Promise<void> {
+    const response = await fetch(`${API_BASE}/api/exercises/${id}`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+    });
+    return handleResponse(response);
+}
+
+export async function cancelWorkout(id: number): Promise<void> {
+    const response = await fetch(`${API_BASE}/api/workouts/${id}`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+    });
+    return handleResponse(response);
 } 

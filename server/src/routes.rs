@@ -1,4 +1,4 @@
-use actix_web::{web, HttpResponse, get, post, put};
+use actix_web::{web, HttpResponse, get, post, put, delete};
 use serde_json::json;
 use crate::{models::*, errors::AppError, db::Database};
 use serde::Deserialize;
@@ -208,6 +208,28 @@ pub async fn get_last_exercise_data(
     Ok(HttpResponse::Ok().json(data))
 }
 
+#[delete("/api/exercises/{id}")]
+pub async fn cancel_exercise(
+    db: web::Data<Database>,
+    id: web::Path<i64>,
+) -> Result<HttpResponse, AppError> {
+    db.delete_exercise(*id).await?;
+    Ok(HttpResponse::Ok().json(json!({
+        "message": "Exercise canceled successfully"
+    })))
+}
+
+#[delete("/api/workouts/{id}")]
+pub async fn cancel_workout(
+    db: web::Data<Database>,
+    id: web::Path<i64>,
+) -> Result<HttpResponse, AppError> {
+    db.delete_workout(*id).await?;
+    Ok(HttpResponse::Ok().json(json!({
+        "message": "Workout canceled successfully"
+    })))
+}
+
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(health_check)
         .service(create_workout)
@@ -220,5 +242,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(init_logs_directory)
         .service(write_logs)
         .service(get_exercise_types)
-        .service(get_last_exercise_data);
+        .service(get_last_exercise_data)
+        .service(cancel_exercise)
+        .service(cancel_workout);
 } 

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            DELETE FROM sets\n            WHERE exercise_id = ?\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "a04121c5cbaf9a884da823ede4e53639a2d723d4bed95359a16f4deb14672006"
+}
