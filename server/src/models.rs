@@ -7,7 +7,10 @@ pub struct Workout {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<i64>,
     pub date: DateTime<Utc>,
+    pub start_time: DateTime<Utc>,
+    pub end_time: DateTime<Utc>,
     pub notes: Option<String>,
+    pub feedback: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
@@ -16,6 +19,8 @@ pub struct Exercise {
     pub id: Option<i64>,
     pub workout_id: i64,
     pub exercise_type: String,
+    pub start_time: DateTime<Utc>,
+    pub end_time: DateTime<Utc>,
     pub notes: Option<String>,
 }
 
@@ -29,4 +34,31 @@ pub struct Set {
     /// Weight in kilograms
     pub weight: f64,
     pub notes: Option<String>,
+}
+
+// Request DTOs
+#[derive(Debug, Deserialize)]
+pub struct CreateWorkoutRequest {
+    pub date: DateTime<Utc>,
+    pub start_time: DateTime<Utc>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateWorkoutRequest {
+    pub end_time: DateTime<Utc>,
+    pub notes: Option<String>,
+    pub feedback: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateExerciseRequest {
+    pub exercise_type: String,
+    pub start_time: DateTime<Utc>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateExerciseRequest {
+    pub end_time: DateTime<Utc>,
 } 

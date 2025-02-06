@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n            SELECT id, workout_id, exercise_type, notes\n            FROM exercises\n            WHERE workout_id = ?\n            ",
+  "query": "\n            SELECT id, workout_id, exercise_type, start_time, end_time, notes\n            FROM exercises\n            WHERE workout_id = ?\n            ",
   "describe": {
     "columns": [
       {
@@ -19,8 +19,18 @@
         "type_info": "Text"
       },
       {
-        "name": "notes",
+        "name": "start_time",
         "ordinal": 3,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "end_time",
+        "ordinal": 4,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "notes",
+        "ordinal": 5,
         "type_info": "Text"
       }
     ],
@@ -31,8 +41,10 @@
       true,
       false,
       false,
+      false,
+      false,
       true
     ]
   },
-  "hash": "b42ad594720f87a2b76a2e173a58ade839fffb349e0cd6350facdd58fba441ae"
+  "hash": "de98a24b9596102b0893ba8c3619cf2cc24a03ff0134d1db85bc0fbc7fc7802e"
 }

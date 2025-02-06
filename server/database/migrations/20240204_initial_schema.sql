@@ -1,8 +1,11 @@
 -- Create workouts table
 CREATE TABLE IF NOT EXISTS workouts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    notes TEXT
+    date DATETIME NOT NULL,
+    start_time DATETIME NOT NULL,
+    end_time DATETIME NOT NULL,
+    notes TEXT,
+    feedback TEXT CHECK(feedback IN ('😊', '😐', '😞') OR feedback IS NULL)
 );
 
 -- Create exercises table
@@ -10,8 +13,10 @@ CREATE TABLE IF NOT EXISTS exercises (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     workout_id INTEGER NOT NULL,
     exercise_type TEXT NOT NULL,
+    start_time DATETIME NOT NULL,
+    end_time DATETIME NOT NULL,
     notes TEXT,
-    FOREIGN KEY (workout_id) REFERENCES workouts(id) ON DELETE CASCADE
+    FOREIGN KEY (workout_id) REFERENCES workouts(id)
 );
 
 -- Create sets table
@@ -21,7 +26,7 @@ CREATE TABLE IF NOT EXISTS sets (
     reps INTEGER NOT NULL,
     weight REAL NOT NULL,
     notes TEXT,
-    FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
+    FOREIGN KEY (exercise_id) REFERENCES exercises(id)
 );
 
 -- Create indexes

@@ -1,8 +1,7 @@
 use sqlx::{Pool, Sqlite};
 use crate::{models::*, errors::AppError};
 use log::{debug, error, info};
-use chrono::{DateTime, Utc, NaiveDateTime};
-use serde_json::json;
+use chrono::{DateTime, Utc};
 
 #[derive(Clone)]
 pub struct Database {
@@ -15,18 +14,19 @@ impl Database {
         Self { pool }
     }
 
-    pub async fn create_workout(&self, workout: &Workout) -> Result<i64, AppError> {
-        debug!(target: "database", "Creating new workout for date: {}", workout.date);
+    pub async fn create_workout(&self, req: &CreateWorkoutRequest) -> Result<i64, AppError> {
+        debug!(target: "database", "Creating new workout for date: {}", req.date);
         
-        let naive_date = workout.date.naive_utc();
         let result = sqlx::query!(
             r#"
-            INSERT INTO workouts (date, notes)
-            VALUES (?, ?)
+            INSERT INTO workouts (date, start_time, end_time, notes)
+            VALUES (?, ?, ?, ?)
             RETURNING id
             "#,
-            naive_date,
-            workout.notes,
+            req.date,
+            req.start_time,
+            req.start_time, // Initially set end_time to start_time
+            req.notes,
         )
         .fetch_one(&self.pool)
         .await
@@ -35,8 +35,33 @@ impl Database {
             AppError::DatabaseError(e)
         })?;
 
-        info!(target: "database", "Created workout #{} for date {}", result.id, workout.date);
+        info!(target: "database", "Created workout #{} for date {}", result.id, req.date);
         Ok(result.id)
+    }
+
+    pub async fn update_workout_end_time(&self, id: i64, end_time: DateTime<Utc>, notes: Option<String>, feedback: Option<String>) -> Result<(), AppError> {
+        debug!(target: "database", "Updating workout #{} end time to {} with feedback", id, end_time);
+        
+        sqlx::query!(
+            r#"
+            UPDATE workouts
+            SET end_time = ?, notes = ?, feedback = ?
+            WHERE id = ?
+            "#,
+            end_time,
+            notes,
+            feedback,
+            id,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| {
+            error!(target: "database", "Failed to update workout end time: {}", e);
+            AppError::DatabaseError(e)
+        })?;
+
+        info!(target: "database", "Updated workout #{} end time and feedback", id);
+        Ok(())
     }
 
     pub async fn create_exercise(&self, exercise: &Exercise) -> Result<i64, AppError> {
@@ -45,12 +70,14 @@ impl Database {
         
         let result = sqlx::query!(
             r#"
-            INSERT INTO exercises (workout_id, exercise_type, notes)
-            VALUES (?, ?, ?)
+            INSERT INTO exercises (workout_id, exercise_type, start_time, end_time, notes)
+            VALUES (?, ?, ?, ?, ?)
             RETURNING id
             "#,
             exercise.workout_id,
             exercise.exercise_type,
+            exercise.start_time,
+            exercise.end_time,
             exercise.notes,
         )
         .fetch_one(&self.pool)
@@ -60,8 +87,32 @@ impl Database {
             AppError::DatabaseError(e)
         })?;
 
-        debug!(target: "database", "Created exercise #{}", result.id);
+        info!(target: "database", "Created exercise #{}", result.id);
         Ok(result.id)
+    }
+
+    pub async fn update_exercise_end_time(&self, id: i64, end_time: DateTime<Utc>, notes: Option<String>) -> Result<(), AppError> {
+        debug!(target: "database", "Updating exercise #{} end time to {} with notes", id, end_time);
+        
+        sqlx::query!(
+            r#"
+            UPDATE exercises
+            SET end_time = ?, notes = ?
+            WHERE id = ?
+            "#,
+            end_time,
+            notes,
+            id,
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| {
+            error!(target: "database", "Failed to update exercise end time: {}", e);
+            AppError::DatabaseError(e)
+        })?;
+
+        info!(target: "database", "Updated exercise #{} end time and notes", id);
+        Ok(())
     }
 
     pub async fn create_set(&self, set: &Set) -> Result<i64, AppError> {
@@ -95,7 +146,7 @@ impl Database {
         
         let result = sqlx::query!(
             r#"
-            SELECT id, date, notes
+            SELECT id, date, start_time, end_time, notes, feedback
             FROM workouts
             WHERE id = ?
             "#,
@@ -111,21 +162,20 @@ impl Database {
 
         Ok(Workout {
             id: Some(result.id),
-            date: DateTime::from_naive_utc_and_offset(
-                NaiveDateTime::from(result.date),
-                Utc,
-            ),
+            date: DateTime::from_naive_utc_and_offset(result.date, Utc),
+            start_time: DateTime::from_naive_utc_and_offset(result.start_time, Utc),
+            end_time: DateTime::from_naive_utc_and_offset(result.end_time, Utc),
             notes: result.notes,
+            feedback: result.feedback,
         })
     }
 
     pub async fn get_exercises_for_workout(&self, workout_id: i64) -> Result<Vec<Exercise>, AppError> {
         debug!(target: "database", "Fetching exercises for workout #{}", workout_id);
         
-        let exercises = sqlx::query_as!(
-            Exercise,
+        let rows = sqlx::query!(
             r#"
-            SELECT id, workout_id, exercise_type, notes
+            SELECT id, workout_id, exercise_type, start_time, end_time, notes
             FROM exercises
             WHERE workout_id = ?
             "#,
@@ -137,6 +187,15 @@ impl Database {
             error!(target: "database", "Failed to fetch exercises: {}", e);
             AppError::DatabaseError(e)
         })?;
+
+        let exercises: Vec<Exercise> = rows.into_iter().map(|row| Exercise {
+            id: Some(row.id.expect("Exercise ID should not be null")),
+            workout_id: row.workout_id,
+            exercise_type: row.exercise_type,
+            start_time: DateTime::from_naive_utc_and_offset(row.start_time, Utc),
+            end_time: DateTime::from_naive_utc_and_offset(row.end_time, Utc),
+            notes: row.notes,
+        }).collect();
 
         debug!(target: "database", "Found {} exercises for workout #{}", exercises.len(), workout_id);
         Ok(exercises)
@@ -170,7 +229,7 @@ impl Database {
         
         let rows = sqlx::query!(
             r#"
-            SELECT id, date, notes
+            SELECT id, date, start_time, end_time, notes, feedback
             FROM workouts
             ORDER BY date DESC
             "#
@@ -183,15 +242,41 @@ impl Database {
         })?;
 
         let workouts: Vec<Workout> = rows.into_iter().map(|row| Workout {
-            id: Some(row.id.unwrap()),
-            date: DateTime::from_naive_utc_and_offset(
-                NaiveDateTime::from(row.date),
-                Utc,
-            ),
+            id: Some(row.id.expect("Workout ID should not be null")),
+            date: DateTime::from_naive_utc_and_offset(row.date, Utc),
+            start_time: DateTime::from_naive_utc_and_offset(row.start_time, Utc),
+            end_time: DateTime::from_naive_utc_and_offset(row.end_time, Utc),
             notes: row.notes,
+            feedback: row.feedback,
         }).collect();
 
         info!(target: "database", "Retrieved {} workouts", workouts.len());
         Ok(workouts)
+    }
+
+    pub async fn get_unique_exercise_types(&self) -> Result<Vec<String>, AppError> {
+        debug!(target: "database", "Fetching unique exercise types");
+        
+        let rows = sqlx::query!(
+            r#"
+            SELECT DISTINCT exercise_type
+            FROM exercises
+            ORDER BY exercise_type ASC
+            "#
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| {
+            error!(target: "database", "Failed to fetch exercise types: {}", e);
+            AppError::DatabaseError(e)
+        })?;
+
+        let row_count = rows.len();
+        let exercise_types = rows.into_iter()
+            .map(|row| row.exercise_type)
+            .collect();
+
+        debug!(target: "database", "Found {} unique exercise types", row_count);
+        Ok(exercise_types)
     }
 } 

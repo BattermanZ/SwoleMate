@@ -1,4 +1,9 @@
-import type { Workout, Exercise, Set, CreateExerciseRequest, CreateSetRequest } from './types';
+import type { 
+    Workout, Exercise, Set, 
+    CreateWorkoutRequest, UpdateWorkoutRequest,
+    CreateExerciseRequest, UpdateExerciseRequest,
+    CreateSetRequest 
+} from './types';
 import { config } from './config';
 
 const API_BASE = config.apiUrl;
@@ -18,7 +23,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
     return response.json();
 }
 
-export async function createWorkout(workout: Omit<Workout, 'id'>): Promise<{ id: number }> {
+export async function createWorkout(workout: CreateWorkoutRequest): Promise<{ id: number }> {
     const response = await fetch(`${API_BASE}/workouts`, {
         method: 'POST',
         headers: {
@@ -29,19 +34,40 @@ export async function createWorkout(workout: Omit<Workout, 'id'>): Promise<{ id:
     return handleResponse(response);
 }
 
+export async function endWorkout(id: number, endTime: UpdateWorkoutRequest): Promise<void> {
+    const response = await fetch(`${API_BASE}/workouts/${id}/end`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(endTime),
+    });
+    return handleResponse(response);
+}
+
 export async function getWorkout(id: number): Promise<{ workout: Workout; exercises: Array<{ exercise: Exercise; sets: Set[] }> }> {
     const response = await fetch(`${API_BASE}/workouts/${id}`);
     return handleResponse(response);
 }
 
 export async function createExercise(workoutId: number, exercise: CreateExerciseRequest): Promise<{ id: number }> {
-    console.log('Creating exercise:', { workoutId, exercise });
     const response = await fetch(`${API_BASE}/workouts/${workoutId}/exercises`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
         body: JSON.stringify(exercise),
+    });
+    return handleResponse(response);
+}
+
+export async function endExercise(id: number, endTime: UpdateExerciseRequest): Promise<void> {
+    const response = await fetch(`${API_BASE}/exercises/${id}/end`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(endTime),
     });
     return handleResponse(response);
 }
@@ -60,5 +86,10 @@ export async function createSet(exerciseId: number, set: CreateSetRequest): Prom
 
 export async function getWorkouts(): Promise<Workout[]> {
     const response = await fetch(`${API_BASE}/workouts`);
+    return handleResponse(response);
+}
+
+export async function getExerciseTypes(): Promise<string[]> {
+    const response = await fetch(`${API_BASE}/exercises/types`);
     return handleResponse(response);
 } 

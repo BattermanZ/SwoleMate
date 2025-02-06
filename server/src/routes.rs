@@ -1,4 +1,4 @@
-use actix_web::{web, HttpResponse, get, post};
+use actix_web::{web, HttpResponse, get, post, put};
 use serde_json::json;
 use crate::{models::*, errors::AppError, db::Database};
 use serde::Deserialize;
@@ -6,17 +6,31 @@ use std::fs;
 use std::path::Path;
 use std::io::Write;
 use log::error;
-
-#[derive(Debug, Deserialize)]
-pub struct CreateExerciseRequest {
-    pub exercise_type: String,
-    pub notes: Option<String>,
-}
+use crate::models;
 
 #[derive(Debug, Deserialize)]
 pub struct CreateSetRequest {
     pub reps: i64,
     pub weight: f64,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateWorkoutRequest {
+    pub name: String,
+    pub exercises: Vec<CreateExerciseRequest>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateWorkoutRequest {
+    pub end_time: chrono::DateTime<chrono::Utc>,
+    pub notes: Option<String>,
+    pub feedback: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateExerciseRequest {
+    pub end_time: chrono::DateTime<chrono::Utc>,
     pub notes: Option<String>,
 }
 
@@ -31,12 +45,24 @@ pub async fn health_check() -> HttpResponse {
 #[post("/workouts")]
 pub async fn create_workout(
     db: web::Data<Database>,
-    workout: web::Json<Workout>,
+    workout_req: web::Json<models::CreateWorkoutRequest>,
 ) -> Result<HttpResponse, AppError> {
-    let workout_id = db.create_workout(&workout).await?;
+    let workout_id = db.create_workout(&workout_req.0).await?;
     Ok(HttpResponse::Created().json(json!({
         "id": workout_id,
         "message": "Workout created successfully"
+    })))
+}
+
+#[put("/workouts/{id}/end")]
+pub async fn end_workout(
+    db: web::Data<Database>,
+    id: web::Path<i64>,
+    end_req: web::Json<UpdateWorkoutRequest>,
+) -> Result<HttpResponse, AppError> {
+    db.update_workout_end_time(*id, end_req.end_time, end_req.notes.clone(), end_req.feedback.clone()).await?;
+    Ok(HttpResponse::Ok().json(json!({
+        "message": "Workout ended successfully"
     })))
 }
 
@@ -81,6 +107,8 @@ pub async fn create_exercise(
         id: None,
         workout_id: *workout_id,
         exercise_type: exercise_req.exercise_type.clone(),
+        start_time: exercise_req.start_time,
+        end_time: exercise_req.start_time, // Will be updated later
         notes: exercise_req.notes.clone(),
     };
     
@@ -88,6 +116,18 @@ pub async fn create_exercise(
     Ok(HttpResponse::Created().json(json!({
         "id": exercise_id,
         "message": "Exercise created successfully"
+    })))
+}
+
+#[put("/exercises/{id}/end")]
+pub async fn end_exercise(
+    db: web::Data<Database>,
+    id: web::Path<i64>,
+    end_req: web::Json<UpdateExerciseRequest>,
+) -> Result<HttpResponse, AppError> {
+    db.update_exercise_end_time(*id, end_req.end_time, end_req.notes.clone()).await?;
+    Ok(HttpResponse::Ok().json(json!({
+        "message": "Exercise ended successfully"
     })))
 }
 
@@ -155,13 +195,22 @@ pub async fn write_logs(logs: web::Json<Vec<serde_json::Value>>) -> HttpResponse
     }
 }
 
+#[get("/exercises/types")]
+pub async fn get_exercise_types(db: web::Data<Database>) -> Result<HttpResponse, AppError> {
+    let types = db.get_unique_exercise_types().await?;
+    Ok(HttpResponse::Ok().json(types))
+}
+
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(health_check)
         .service(create_workout)
+        .service(end_workout)
         .service(get_workout)
         .service(get_workouts)
         .service(create_exercise)
+        .service(end_exercise)
         .service(create_set)
         .service(init_logs_directory)
-        .service(write_logs);
+        .service(write_logs)
+        .service(get_exercise_types);
 } 

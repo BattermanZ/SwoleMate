@@ -1,6 +1,6 @@
 ---
 description: Backend requirements (Rust)
-globs: 
+globs: *.rs
 ---
 
 # Backend requirements

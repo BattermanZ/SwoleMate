@@ -1,12 +1,14 @@
 <!-- YOU CAN DELETE EVERYTHING IN THIS PAGE -->
 
 <script lang="ts">
-	import { createWorkout, createExercise, createSet } from '$lib/api';
-	import type { Workout, Exercise, Set } from '$lib/types';
-	import { ProgressRadial } from '@skeletonlabs/skeleton';
+	import { createWorkout, createExercise, createSet, endWorkout, endExercise, getExerciseTypes } from '$lib/api';
+	import type { Workout, Exercise, UpdateExerciseRequest } from '$lib/types';
+	import { ProgressRadial, TabGroup, Tab, SlideToggle, RadioGroup, RadioItem, Autocomplete } from '@skeletonlabs/skeleton';
 	import { logger } from '$lib/logger';
+	import { onMount } from 'svelte';
 
 	let currentWorkout: Workout | null = null;
+	let currentExercise: Exercise | null = null;
 	let exercises: Array<{
 		id?: number;
 		name: string;
@@ -18,24 +20,75 @@
 			isConfirmed: boolean;
 		}>;
 		showSetForm: boolean;
+		notes?: string;
+		isEditingNotes: boolean;
+		end_time?: string;
 	}> = [];
 	let loading = false;
 	let error: string | null = null;
 	let showExerciseForm = false;
 	let newExerciseName = '';
+	let showFeedbackModal = false;
+	let sessionNotes = '';
+	let sessionFeedback: '😊' | '😐' | '😞' | null = null;
+	let exerciseTypes: string[] = [];
+	let filteredExerciseTypes: string[] = [];
+	let inputValue = '';
+
+	const FEEDBACK_OPTIONS = ['😊', '😐', '😞'] as const;
+	type FeedbackEmoji = typeof FEEDBACK_OPTIONS[number];
+
+	onMount(async () => {
+		try {
+			exerciseTypes = await getExerciseTypes();
+		} catch (e) {
+			logger.error('workout', 'Failed to fetch exercise types', { error: e });
+		}
+	});
+
+	function filterExerciseTypes(input: string) {
+		const searchTerm = input.toLowerCase().trim();
+		
+		// Show all types if input is empty
+		if (!searchTerm) {
+			filteredExerciseTypes = exerciseTypes.slice(0, 10); // Show top 10 by default
+			return;
+		}
+
+		// Filter and sort by relevance
+		filteredExerciseTypes = exerciseTypes
+			.filter(type => type.toLowerCase().includes(searchTerm))
+			.sort((a, b) => {
+				// Exact matches first
+				const aStartsWith = a.toLowerCase().startsWith(searchTerm);
+				const bStartsWith = b.toLowerCase().startsWith(searchTerm);
+				if (aStartsWith && !bStartsWith) return -1;
+				if (!aStartsWith && bStartsWith) return 1;
+				return a.localeCompare(b);
+			})
+			.slice(0, 10); // Limit to top 10 matches
+	}
+
+	function handleSelect(event: CustomEvent<string>) {
+		newExerciseName = event.detail;
+	}
 
 	async function startWorkout() {
 		try {
 			loading = true;
 			error = null;
 			logger.info('workout', 'Starting new workout session');
+			const now = new Date().toISOString();
 			const result = await createWorkout({
-				date: new Date().toISOString(),
+				date: now,
+				start_time: now,
 				notes: "Today's workout"
 			});
 			currentWorkout = {
 				id: result.id,
-				date: new Date().toISOString(),
+				date: now,
+				start_time: now,
+				end_time: now, // Will be updated when workout ends
 				notes: "Today's workout"
 			};
 			logger.info('workout', 'Workout session started', { workoutId: result.id });
@@ -54,19 +107,47 @@
 		try {
 			loading = true;
 			error = null;
+
+			// If there's a current exercise, end it
+			if (currentExercise?.id) {
+				const now = new Date().toISOString();
+				await endExercise(currentExercise.id, { end_time: now });
+				logger.info('workout', 'Previous exercise ended', { 
+					exerciseId: currentExercise.id,
+					endTime: now
+				});
+			}
+
+			// Start new exercise
+			const now = new Date().toISOString();
 			logger.info('workout', 'Adding new exercise', { 
 				workoutId: currentWorkout.id,
 				exerciseName: newExerciseName
 			});
+
 			const result = await createExercise(currentWorkout.id, {
 				exercise_type: newExerciseName,
+				start_time: now,
 				notes: ''
 			});
+
+			const newExercise = {
+				id: result.id,
+				workout_id: currentWorkout.id,
+				exercise_type: newExerciseName,
+				start_time: now,
+				end_time: now, // Will be updated when next exercise starts or workout ends
+				notes: ''
+			};
+
+			currentExercise = newExercise;
 			exercises = [...exercises, {
 				id: result.id,
 				name: newExerciseName,
 				sets: [],
-				showSetForm: true
+				showSetForm: true,
+				notes: '',
+				isEditingNotes: true
 			}];
 			newExerciseName = '';
 			showExerciseForm = false;
@@ -79,13 +160,37 @@
 		}
 	}
 
+	async function updateExerciseNotes(exerciseIndex: number) {
+		const exercise = exercises[exerciseIndex];
+		if (!exercise.id) return;
+
+		try {
+			const updateRequest: UpdateExerciseRequest = {
+				end_time: exercise.end_time || new Date().toISOString(),
+				notes: exercise.notes
+			};
+			await endExercise(exercise.id, updateRequest);
+			exercises[exerciseIndex].isEditingNotes = false;
+			exercises = [...exercises];
+			logger.info('workout', 'Exercise notes updated', { exerciseId: exercise.id });
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to update exercise notes';
+			logger.error('workout', 'Failed to update exercise notes', { error });
+		}
+	}
+
 	async function addSet(exerciseIndex: number) {
 		const exercise = exercises[exerciseIndex];
 		if (!exercise.id) return;
 
+		// Get the last set's values if they exist
+		const lastSet = exercise.sets[exercise.sets.length - 1];
+		const defaultReps = lastSet ? lastSet.reps : 12;
+		const defaultWeight = lastSet ? lastSet.weight : 0;
+
 		exercises[exerciseIndex].sets = [...exercise.sets, {
-			reps: 12,
-			weight: 0,
+			reps: defaultReps,
+			weight: defaultWeight,
 			isEditing: true,
 			isConfirmed: false
 		}];
@@ -127,11 +232,54 @@
 		}
 	}
 
-	async function endWorkout() {
-		logger.info('workout', 'Ending workout session', { workoutId: currentWorkout?.id });
-		currentWorkout = null;
-		exercises = [];
-		showExerciseForm = false;
+	async function endWorkoutSession() {
+		if (!currentWorkout?.id) return;
+		showFeedbackModal = true;
+	}
+
+	async function submitWorkoutFeedback() {
+		if (!currentWorkout?.id || !sessionFeedback) return;
+
+		try {
+			loading = true;
+			error = null;
+			const now = new Date().toISOString();
+
+			// End current exercise if exists
+			if (currentExercise?.id) {
+				await endExercise(currentExercise.id, { end_time: now });
+				logger.info('workout', 'Final exercise ended', { 
+					exerciseId: currentExercise.id,
+					endTime: now
+				});
+			}
+
+			// End workout with feedback
+			await endWorkout(currentWorkout.id, { 
+				end_time: now,
+				notes: sessionNotes,
+				feedback: sessionFeedback
+			});
+			logger.info('workout', 'Ending workout session', { 
+				workoutId: currentWorkout.id,
+				endTime: now,
+				feedback: sessionFeedback
+			});
+
+			// Reset state
+			currentWorkout = null;
+			currentExercise = null;
+			exercises = [];
+			showExerciseForm = false;
+			showFeedbackModal = false;
+			sessionNotes = '';
+			sessionFeedback = null;
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to end workout';
+			logger.error('workout', 'Failed to end workout', { error });
+		} finally {
+			loading = false;
+		}
 	}
 </script>
 
@@ -145,107 +293,259 @@
 	input[type="number"] {
 		-moz-appearance: textfield;
 	}
+	.exercise-card {
+		transition: transform 0.2s;
+	}
+	.exercise-card:hover {
+		transform: scale(1.01);
+	}
+	.round-btn {
+		@apply aspect-square rounded-full flex items-center justify-center;
+		padding: 0;
+		width: 2rem;
+		height: 2rem;
+	}
+	.content-container {
+		@apply flex flex-col min-h-full;
+	}
+	.workout-container {
+		@apply flex-1 flex flex-col;
+	}
 </style>
 
-<div class="container mx-auto p-4 space-y-8">
+<div class="content-container">
 	<header class="text-center space-y-4">
-		<h1 class="h1">Today's Workout</h1>
-		{#if !currentWorkout}
-			<button class="btn variant-filled-primary w-full md:w-auto" on:click={startWorkout} disabled={loading}>
-				{#if loading}
-					<ProgressRadial width="w-6" stroke={150} meter="stroke-primary-500" track="stroke-primary-500/30"/>
-				{:else}
-					Start New Session
-				{/if}
-			</button>
-		{/if}
+		<div class="card variant-filled-tertiary p-4">
+			<h1 class="h1">Today's Workout</h1>
+			{#if !currentWorkout}
+				<div class="p-4">
+					<button 
+						class="btn variant-filled-primary w-full md:w-auto {loading ? 'opacity-50' : ''}" 
+						on:click={startWorkout} 
+						disabled={loading}
+					>
+						{#if loading}
+							<ProgressRadial width="w-6" stroke={150} meter="stroke-primary-500" track="stroke-primary-500/30"/>
+						{:else}
+							<span class="text-2xl mr-2">💪</span> Start New Session
+						{/if}
+					</button>
+				</div>
+			{/if}
+		</div>
 	</header>
 
 	{#if error}
 		<div class="alert variant-filled-error">
-			{error}
+			<span class="text-2xl">⚠️</span>
+			<span>{error}</span>
 		</div>
 	{/if}
 
 	{#if currentWorkout}
-		<div class="card p-4 space-y-4">
-			<div class="flex justify-between items-center">
-				<h2 class="h2">Current Session</h2>
-				<button class="btn variant-soft-error" on:click={endWorkout}>End Session</button>
-			</div>
+		<div class="workout-container">
+			<div class="card variant-filled-surface p-4 space-y-4 flex-1">
+				<header class="flex justify-between items-center">
+					<h2 class="h2">Current Session</h2>
+					<button class="btn variant-soft-error" on:click={endWorkoutSession}>
+						<span class="text-lg mr-2">🏁</span> End Session
+					</button>
+				</header>
 
-			{#each exercises as exercise, exerciseIndex}
-				<div class="card variant-soft p-4">
-					<div class="flex flex-wrap gap-4 items-center">
-						<span class="font-bold flex-grow">{exercise.name}</span>
-						{#each exercise.sets as set, setIndex}
-							{#if set.isEditing}
-								<div class="flex gap-2 items-center">
-									<span class="text-sm font-medium">Set {setIndex + 1}</span>
-									<input
-										type="number"
-										inputmode="numeric"
-										pattern="[0-9]*"
-										class="input w-16 text-center"
-										bind:value={set.reps}
-										min="0"
-									/>
-									<span class="text-sm">×</span>
-									<input
-										type="number"
-										inputmode="numeric"
-										pattern="[0-9]*"
-										class="input w-16 text-center"
-										bind:value={set.weight}
-										min="0"
-										step="0.5"
-									/>
-									<span class="text-sm">kg</span>
-									<button 
-										class="btn variant-filled-success btn-sm"
-										on:click={() => confirmSet(exerciseIndex, setIndex)}
-										disabled={loading}
-									>
-										✓
-									</button>
+				<div class="space-y-4">
+					{#each exercises as exercise, exerciseIndex}
+						<div class="card variant-soft p-4 exercise-card">
+							<div class="flex flex-col gap-4">
+								<div class="flex items-center gap-4">
+									<span class="text-lg font-bold">{exercise.name}</span>
+									<div class="flex-grow flex flex-wrap gap-2 items-center">
+										{#each exercise.sets as set, setIndex}
+											{#if set.isEditing}
+												<div class="card variant-ghost p-2 flex gap-2 items-center">
+													<span class="text-sm">{setIndex + 1}</span>
+													<input
+														type="number"
+														inputmode="numeric"
+														pattern="[0-9]*"
+														class="input w-16 text-center"
+														bind:value={set.reps}
+														min="0"
+													/>
+													<span>×</span>
+													<input
+														type="number"
+														inputmode="numeric"
+														pattern="[0-9]*"
+														class="input w-16 text-center"
+														bind:value={set.weight}
+														min="0"
+														step="0.5"
+													/>
+													<span>kg</span>
+													<button 
+														class="btn variant-filled-success btn-sm round-btn"
+														on:click={() => confirmSet(exerciseIndex, setIndex)}
+														disabled={loading}
+													>
+														✓
+													</button>
+												</div>
+											{:else}
+												<div class="chip variant-filled">
+													{set.reps}×{set.weight}kg
+												</div>
+											{/if}
+										{/each}
+										{#if !exercise.sets.some(s => s.isEditing)}
+											<button 
+												class="btn variant-filled-secondary round-btn" 
+												on:click={() => addSet(exerciseIndex)}
+											>
+												+
+											</button>
+										{/if}
+									</div>
 								</div>
-							{:else}
-								<div class="chip variant-filled">
-									{set.reps}×{set.weight}kg
-								</div>
-							{/if}
-						{/each}
-						{#if !exercise.sets.some(s => s.isEditing)}
-							<button 
-								class="btn variant-filled-secondary btn-sm" 
-								on:click={() => addSet(exerciseIndex)}
-							>
-								+
+								
+								{#if exercise.isEditingNotes}
+									<div class="card variant-ghost p-2">
+										<div class="flex gap-2 items-center">
+											<span class="text-lg">📝</span>
+											<input
+												type="text"
+												class="input flex-grow"
+												placeholder="Exercise notes..."
+												bind:value={exercise.notes}
+											/>
+											<button 
+												class="btn variant-filled-success btn-sm round-btn"
+												on:click={() => updateExerciseNotes(exerciseIndex)}
+											>
+												✓
+											</button>
+										</div>
+									</div>
+								{:else if exercise.notes}
+									<div class="card variant-ghost p-2">
+										<div class="flex gap-2 items-center">
+											<span class="text-lg">📝</span>
+											<span class="flex-grow">{exercise.notes}</span>
+											<button 
+												class="btn variant-filled btn-sm round-btn"
+												on:click={() => exercises[exerciseIndex].isEditingNotes = true}
+											>
+												✎
+											</button>
+										</div>
+									</div>
+								{/if}
+							</div>
+						</div>
+					{/each}
+				</div>
+
+				{#if showExerciseForm}
+					<div class="card variant-ghost p-4">
+						<form on:submit|preventDefault={addExercise} class="flex gap-2">
+							<div class="relative flex-grow">
+								<input
+									type="text"
+									class="input w-full"
+									placeholder="Exercise name"
+									bind:value={newExerciseName}
+									on:input={(e) => filterExerciseTypes(e.currentTarget.value)}
+									required
+									autocomplete="off"
+								/>
+								{#if filteredExerciseTypes.length > 0}
+									<div class="absolute w-full mt-1 max-h-48 overflow-y-auto z-50 card variant-filled-surface shadow-xl">
+										{#each filteredExerciseTypes as type}
+											<button
+												class="block w-full text-left px-4 py-2 hover:variant-soft-primary transition-colors"
+												on:click|preventDefault={() => {
+													newExerciseName = type;
+													filteredExerciseTypes = [];
+												}}
+											>
+												{type}
+											</button>
+										{/each}
+									</div>
+								{/if}
+							</div>
+							<button type="submit" class="btn variant-filled-primary">
+								<span class="text-lg mr-2">✨</span> Add
 							</button>
-						{/if}
+							<button type="button" class="btn variant-soft" on:click={() => {
+								showExerciseForm = false;
+								filteredExerciseTypes = [];
+							}}>
+								Cancel
+							</button>
+						</form>
 					</div>
-				</div>
-			{/each}
+				{:else}
+					<button 
+						class="btn variant-filled w-full" 
+						on:click={() => {
+							showExerciseForm = true;
+							filterExerciseTypes('');
+						}}
+					>
+						<span class="text-lg mr-2">{currentExercise ? '➡️' : '+'}</span>
+						{currentExercise ? 'Next Exercise' : 'Add Exercise'}
+					</button>
+				{/if}
+			</div>
+		</div>
+	{/if}
 
-			{#if showExerciseForm}
-				<div class="card variant-ghost p-4">
-					<form on:submit|preventDefault={addExercise} class="flex gap-2">
-						<input
-							type="text"
-							class="input flex-grow"
-							placeholder="Exercise name"
-							bind:value={newExerciseName}
-							required
-						/>
-						<button type="submit" class="btn variant-filled-primary">Add</button>
-						<button type="button" class="btn variant-soft" on:click={() => showExerciseForm = false}>Cancel</button>
-					</form>
+	<!-- Feedback Modal -->
+	{#if showFeedbackModal}
+		<div class="modal-backdrop fixed inset-0 bg-black/50 flex items-center justify-center">
+			<div class="modal card variant-filled-surface p-4 w-full max-w-lg mx-4 space-y-4">
+				<header class="text-center">
+					<h3 class="h3">How was your workout?</h3>
+				</header>
+
+				<div class="flex justify-center gap-4">
+					{#each FEEDBACK_OPTIONS as emoji}
+						<button
+							class="card {sessionFeedback === emoji ? 'variant-filled-primary' : 'variant-soft'} p-4 text-4xl hover:scale-110 transition-transform"
+							on:click={() => sessionFeedback = emoji}
+						>
+							{emoji}
+						</button>
+					{/each}
 				</div>
-			{:else}
-				<button class="btn variant-filled w-full" on:click={() => showExerciseForm = true}>
-					Add Exercise
-				</button>
-			{/if}
+
+				<textarea
+					class="textarea"
+					rows="3"
+					placeholder="Add notes about your session..."
+					bind:value={sessionNotes}
+				></textarea>
+
+				<footer class="flex justify-end gap-2">
+					<button 
+						class="btn variant-soft"
+						on:click={() => showFeedbackModal = false}
+					>
+						Cancel
+					</button>
+					<button
+						class="btn variant-filled-primary"
+						on:click={submitWorkoutFeedback}
+						disabled={!sessionFeedback || loading}
+					>
+						{#if loading}
+							<ProgressRadial width="w-6" stroke={150} meter="stroke-primary-500" track="stroke-primary-500/30"/>
+						{:else}
+							<span class="text-lg mr-2">✨</span> Submit
+						{/if}
+					</button>
+				</footer>
+			</div>
 		</div>
 	{/if}
 </div>

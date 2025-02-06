@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT id, date, start_time, end_time, notes, feedback\n            FROM workouts\n            ORDER BY date DESC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Int64"
+      },
+      {
+        "name": "date",
+        "ordinal": 1,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "start_time",
+        "ordinal": 2,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "end_time",
+        "ordinal": 3,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "notes",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "feedback",
+        "ordinal": 5,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "c4876686140660ac1b43fc223bca456c205567e885489e2e0045c8a8141f9307"
+}
