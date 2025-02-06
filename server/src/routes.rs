@@ -17,12 +17,6 @@ pub struct CreateSetRequest {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct CreateWorkoutRequest {
-    pub name: String,
-    pub exercises: Vec<CreateExerciseRequest>,
-}
-
-#[derive(Debug, Deserialize)]
 pub struct UpdateWorkoutRequest {
     pub end_time: chrono::DateTime<chrono::Utc>,
     pub notes: Option<String>,

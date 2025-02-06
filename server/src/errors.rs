@@ -13,9 +13,6 @@ pub enum AppError {
 
     #[error("Bad request: {0}")]
     BadRequest(String),
-
-    #[error("Internal server error: {0}")]
-    InternalError(String),
 }
 
 impl ResponseError for AppError {
@@ -25,7 +22,6 @@ impl ResponseError for AppError {
             AppError::DatabaseError(_) => "database_error",
             AppError::NotFound(_) => "not_found",
             AppError::BadRequest(_) => "bad_request",
-            AppError::InternalError(_) => "internal_error",
         };
 
         error!(
@@ -59,13 +55,6 @@ impl ResponseError for AppError {
                     "error": "Bad request",
                     "message": msg,
                     "error_type": "bad_request"
-                }))
-            }
-            AppError::InternalError(msg) => {
-                HttpResponse::InternalServerError().json(json!({
-                    "error": "Internal server error",
-                    "message": msg,
-                    "error_type": "internal_error"
                 }))
             }
         }

@@ -394,9 +394,6 @@
 	:global(.dark) .variant-soft {
 		background-color: rgba(0, 0, 0, 0.3) !important;
 	}
-	:global(.dark) .variant-soft-primary {
-		background-color: rgba(var(--color-primary-500), 0.2) !important;
-	}
 	.exercise-list {
 		@apply grid gap-1;
 	}

@@ -113,7 +113,7 @@
 </AppShell>
 
 <style>
-	:global(html, body) {
+	:global(html), :global(body) {
 		@apply h-full overflow-hidden;
 	}
 	:global(body) {
