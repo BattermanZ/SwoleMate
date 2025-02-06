@@ -7,6 +7,7 @@ use std::path::Path;
 use std::io::Write;
 use log::error;
 use crate::models;
+use urlencoding;
 
 #[derive(Debug, Deserialize)]
 pub struct CreateSetRequest {
@@ -34,7 +35,7 @@ pub struct UpdateExerciseRequest {
     pub notes: Option<String>,
 }
 
-#[get("/health")]
+#[get("/api/health")]
 pub async fn health_check() -> HttpResponse {
     HttpResponse::Ok().json(json!({
         "status": "healthy",
@@ -42,7 +43,7 @@ pub async fn health_check() -> HttpResponse {
     }))
 }
 
-#[post("/workouts")]
+#[post("/api/workouts")]
 pub async fn create_workout(
     db: web::Data<Database>,
     workout_req: web::Json<models::CreateWorkoutRequest>,
@@ -54,7 +55,7 @@ pub async fn create_workout(
     })))
 }
 
-#[put("/workouts/{id}/end")]
+#[put("/api/workouts/{id}/end")]
 pub async fn end_workout(
     db: web::Data<Database>,
     id: web::Path<i64>,
@@ -66,7 +67,7 @@ pub async fn end_workout(
     })))
 }
 
-#[get("/workouts/{id}")]
+#[get("/api/workouts/{id}")]
 pub async fn get_workout(
     db: web::Data<Database>,
     id: web::Path<i64>,
@@ -89,7 +90,7 @@ pub async fn get_workout(
     })))
 }
 
-#[get("/workouts")]
+#[get("/api/workouts")]
 pub async fn get_workouts(
     db: web::Data<Database>,
 ) -> Result<HttpResponse, AppError> {
@@ -97,7 +98,7 @@ pub async fn get_workouts(
     Ok(HttpResponse::Ok().json(workouts))
 }
 
-#[post("/workouts/{workout_id}/exercises")]
+#[post("/api/workouts/{workout_id}/exercises")]
 pub async fn create_exercise(
     db: web::Data<Database>,
     workout_id: web::Path<i64>,
@@ -119,7 +120,7 @@ pub async fn create_exercise(
     })))
 }
 
-#[put("/exercises/{id}/end")]
+#[put("/api/exercises/{id}/end")]
 pub async fn end_exercise(
     db: web::Data<Database>,
     id: web::Path<i64>,
@@ -131,7 +132,7 @@ pub async fn end_exercise(
     })))
 }
 
-#[post("/exercises/{exercise_id}/sets")]
+#[post("/api/exercises/{exercise_id}/sets")]
 pub async fn create_set(
     db: web::Data<Database>,
     exercise_id: web::Path<i64>,
@@ -195,10 +196,22 @@ pub async fn write_logs(logs: web::Json<Vec<serde_json::Value>>) -> HttpResponse
     }
 }
 
-#[get("/exercises/types")]
+#[get("/api/exercises/types")]
 pub async fn get_exercise_types(db: web::Data<Database>) -> Result<HttpResponse, AppError> {
     let types = db.get_unique_exercise_types().await?;
     Ok(HttpResponse::Ok().json(types))
+}
+
+#[get("/api/exercises/last/{exercise_type}")]
+pub async fn get_last_exercise_data(
+    db: web::Data<Database>,
+    exercise_type: web::Path<String>,
+) -> Result<HttpResponse, AppError> {
+    let decoded_type = urlencoding::decode(&exercise_type)
+        .map_err(|e| AppError::BadRequest(format!("Invalid exercise type: {}", e)))?
+        .into_owned();
+    let data = db.get_last_exercise_data(&decoded_type).await?;
+    Ok(HttpResponse::Ok().json(data))
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
@@ -212,5 +225,6 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(create_set)
         .service(init_logs_directory)
         .service(write_logs)
-        .service(get_exercise_types);
+        .service(get_exercise_types)
+        .service(get_last_exercise_data);
 } 

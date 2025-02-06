@@ -24,7 +24,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
 }
 
 export async function createWorkout(workout: CreateWorkoutRequest): Promise<{ id: number }> {
-    const response = await fetch(`${API_BASE}/workouts`, {
+    const response = await fetch(`${API_BASE}/api/workouts`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -35,7 +35,7 @@ export async function createWorkout(workout: CreateWorkoutRequest): Promise<{ id
 }
 
 export async function endWorkout(id: number, endTime: UpdateWorkoutRequest): Promise<void> {
-    const response = await fetch(`${API_BASE}/workouts/${id}/end`, {
+    const response = await fetch(`${API_BASE}/api/workouts/${id}/end`, {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json',
@@ -46,12 +46,12 @@ export async function endWorkout(id: number, endTime: UpdateWorkoutRequest): Pro
 }
 
 export async function getWorkout(id: number): Promise<{ workout: Workout; exercises: Array<{ exercise: Exercise; sets: Set[] }> }> {
-    const response = await fetch(`${API_BASE}/workouts/${id}`);
+    const response = await fetch(`${API_BASE}/api/workouts/${id}`);
     return handleResponse(response);
 }
 
 export async function createExercise(workoutId: number, exercise: CreateExerciseRequest): Promise<{ id: number }> {
-    const response = await fetch(`${API_BASE}/workouts/${workoutId}/exercises`, {
+    const response = await fetch(`${API_BASE}/api/workouts/${workoutId}/exercises`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -62,7 +62,7 @@ export async function createExercise(workoutId: number, exercise: CreateExercise
 }
 
 export async function endExercise(id: number, endTime: UpdateExerciseRequest): Promise<void> {
-    const response = await fetch(`${API_BASE}/exercises/${id}/end`, {
+    const response = await fetch(`${API_BASE}/api/exercises/${id}/end`, {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json',
@@ -74,7 +74,7 @@ export async function endExercise(id: number, endTime: UpdateExerciseRequest): P
 
 export async function createSet(exerciseId: number, set: CreateSetRequest): Promise<{ id: number }> {
     console.log('Creating set:', { exerciseId, set });
-    const response = await fetch(`${API_BASE}/exercises/${exerciseId}/sets`, {
+    const response = await fetch(`${API_BASE}/api/exercises/${exerciseId}/sets`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -85,11 +85,19 @@ export async function createSet(exerciseId: number, set: CreateSetRequest): Prom
 }
 
 export async function getWorkouts(): Promise<Workout[]> {
-    const response = await fetch(`${API_BASE}/workouts`);
+    const response = await fetch(`${API_BASE}/api/workouts`);
     return handleResponse(response);
 }
 
 export async function getExerciseTypes(): Promise<string[]> {
-    const response = await fetch(`${API_BASE}/exercises/types`);
+    const response = await fetch(`${API_BASE}/api/exercises/types`);
     return handleResponse(response);
+}
+
+export async function getLastExerciseData(exerciseType: string): Promise<{ exercise: Exercise; sets: Set[] } | null> {
+    const response = await fetch(`${API_BASE}/api/exercises/last/${encodeURIComponent(exerciseType)}`);
+    const data = await handleResponse<[Exercise, Set[]]>(response);
+    if (!data) return null;
+    const [exercise, sets] = data;
+    return { exercise, sets };
 } 

@@ -1,7 +1,7 @@
 <!-- YOU CAN DELETE EVERYTHING IN THIS PAGE -->
 
 <script lang="ts">
-	import { createWorkout, createExercise, createSet, endWorkout, endExercise, getExerciseTypes, getWorkouts, getWorkout } from '$lib/api';
+	import { createWorkout, createExercise, createSet, endWorkout, endExercise, getExerciseTypes, getWorkouts, getWorkout, getLastExerciseData } from '$lib/api';
 	import type { Workout, Exercise, UpdateExerciseRequest, Set as WorkoutSet } from '$lib/types';
 	import { ProgressRadial, TabGroup, Tab, SlideToggle, RadioGroup, RadioItem, Autocomplete } from '@skeletonlabs/skeleton';
 	import { logger } from '$lib/logger';
@@ -23,6 +23,13 @@
 		notes?: string;
 		isEditingNotes: boolean;
 		end_time?: string;
+		lastExerciseData?: {
+			date: string;
+			sets: Array<{
+				reps: number;
+				weight: number;
+			}>;
+		};
 	}> = [];
 	let loading = false;
 	let error: string | null = null;
@@ -138,6 +145,9 @@
 				});
 			}
 
+			// Get last exercise data
+			const lastData = await getLastExerciseData(newExerciseName);
+
 			// Start new exercise
 			const now = new Date().toISOString();
 			logger.info('workout', 'Adding new exercise', { 
@@ -156,7 +166,7 @@
 				workout_id: currentWorkout.id,
 				exercise_type: newExerciseName,
 				start_time: now,
-				end_time: now, // Will be updated when next exercise starts or workout ends
+				end_time: now,
 				notes: ''
 			};
 
@@ -167,7 +177,11 @@
 				sets: [],
 				showSetForm: true,
 				notes: '',
-				isEditingNotes: true
+				isEditingNotes: true,
+				lastExerciseData: lastData ? {
+					date: lastData.exercise.start_time,
+					sets: lastData.sets.map(s => ({ reps: s.reps, weight: s.weight }))
+				} : undefined
 			}];
 			newExerciseName = '';
 			showExerciseForm = false;
@@ -180,22 +194,11 @@
 		}
 	}
 
-	async function updateExerciseNotes(exerciseIndex: number) {
-		const exercise = exercises[exerciseIndex];
-		if (!exercise.id) return;
-
+	async function refreshRecentWorkouts() {
 		try {
-			const updateRequest: UpdateExerciseRequest = {
-				end_time: exercise.end_time || new Date().toISOString(),
-				notes: exercise.notes || undefined
-			};
-			await endExercise(exercise.id, updateRequest);
-			exercises[exerciseIndex].isEditingNotes = false;
-			exercises = [...exercises];
-			logger.info('workout', 'Exercise notes updated', { exerciseId: exercise.id });
-
-			// Refresh recent workouts to show the updated notes
 			const workouts = (await getWorkouts()).slice(0, 3);
+			
+			// Fetch complete data for each workout
 			recentWorkoutsWithExercises = await Promise.all(
 				workouts.map(async (workout) => {
 					const details = await getWorkout(workout.id!);
@@ -206,28 +209,8 @@
 				})
 			);
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to update exercise notes';
-			logger.error('workout', 'Failed to update exercise notes', { error });
+			logger.error('workout', 'Failed to refresh recent workouts', { error: e });
 		}
-	}
-
-	async function addSet(exerciseIndex: number) {
-		const exercise = exercises[exerciseIndex];
-		if (!exercise.id) return;
-
-		// Get the last set's values if they exist
-		const lastSet = exercise.sets[exercise.sets.length - 1];
-		const defaultReps = lastSet ? lastSet.reps : 12;
-		const defaultWeight = lastSet ? lastSet.weight : 0;
-
-		exercises[exerciseIndex].sets = [...exercise.sets, {
-			reps: defaultReps,
-			weight: defaultWeight,
-			isEditing: true,
-			isConfirmed: false
-		}];
-		exercises = [...exercises];
-		logger.debug('workout', 'New set form added', { exerciseId: exercise.id });
 	}
 
 	async function confirmSet(exerciseIndex: number, setIndex: number) {
@@ -267,23 +250,55 @@
 
 			logger.info('workout', 'Set confirmed successfully', { setId: result.id });
 
-			// Refresh recent workouts to show the updated data
-			const workouts = (await getWorkouts()).slice(0, 3);
-			recentWorkoutsWithExercises = await Promise.all(
-				workouts.map(async (workout) => {
-					const details = await getWorkout(workout.id!);
-					return {
-						workout: details.workout,
-						exercises: details.exercises
-					};
-				})
-			);
+			// Refresh recent workouts
+			await refreshRecentWorkouts();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to confirm set';
 			logger.error('workout', 'Failed to confirm set', { error });
 		} finally {
 			loading = false;
 		}
+	}
+
+	async function updateExerciseNotes(exerciseIndex: number) {
+		const exercise = exercises[exerciseIndex];
+		if (!exercise.id) return;
+
+		try {
+			const updateRequest: UpdateExerciseRequest = {
+				end_time: exercise.end_time || new Date().toISOString(),
+				notes: exercise.notes || undefined
+			};
+			await endExercise(exercise.id, updateRequest);
+			exercises[exerciseIndex].isEditingNotes = false;
+			exercises = [...exercises];
+			logger.info('workout', 'Exercise notes updated', { exerciseId: exercise.id });
+
+			// Refresh recent workouts
+			await refreshRecentWorkouts();
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to update exercise notes';
+			logger.error('workout', 'Failed to update exercise notes', { error });
+		}
+	}
+
+	async function addSet(exerciseIndex: number) {
+		const exercise = exercises[exerciseIndex];
+		if (!exercise.id) return;
+
+		// Get the last set's values if they exist
+		const lastSet = exercise.sets[exercise.sets.length - 1];
+		const defaultReps = lastSet ? lastSet.reps : 12;
+		const defaultWeight = lastSet ? lastSet.weight : 0;
+
+		exercises[exerciseIndex].sets = [...exercise.sets, {
+			reps: defaultReps,
+			weight: defaultWeight,
+			isEditing: true,
+			isConfirmed: false
+		}];
+		exercises = [...exercises];
+		logger.debug('workout', 'New set form added', { exerciseId: exercise.id });
 	}
 
 	async function endWorkoutSession() {
@@ -403,6 +418,18 @@
 	:global(.dark) .set-chip {
 		@apply bg-surface-700/50;
 	}
+	.last-exercise-info {
+		@apply text-sm p-2 rounded-lg bg-surface-900/30 flex items-center gap-2;
+	}
+	.last-sets {
+		@apply flex gap-1 flex-wrap items-center;
+	}
+	:global(.dark) .last-exercise-info {
+		@apply bg-surface-700/30;
+	}
+	.badge {
+		@apply px-2 py-1 rounded-full text-sm font-medium;
+	}
 </style>
 
 <div class="content-container">
@@ -449,6 +476,16 @@
 						{#each exercises as exercise, exerciseIndex}
 							<div class="card variant-soft p-4 exercise-card">
 								<div class="flex flex-col gap-4">
+									{#if exercise.lastExerciseData}
+										<div class="last-exercise-info flex items-center gap-2">
+											<span class="opacity-75">Last time ({formatDate(exercise.lastExerciseData.date)}):</span>
+											<div class="last-sets">
+												{#each exercise.lastExerciseData.sets as set}
+													<span class="badge variant-filled-secondary">{set.reps}×{set.weight}kg</span>
+												{/each}
+											</div>
+										</div>
+									{/if}
 									<div class="flex items-center gap-4">
 										<span class="text-lg font-bold">{exercise.name}</span>
 										<div class="flex-grow flex flex-wrap gap-2 items-center">

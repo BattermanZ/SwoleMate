@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n            SELECT id, date, start_time, end_time, notes, feedback\n            FROM workouts\n            WHERE id = ?\n            ",
+  "query": "\n            SELECT \n                id,\n                date as \"date: DateTime<Utc>\",\n                start_time as \"start_time: DateTime<Utc>\",\n                end_time as \"end_time: DateTime<Utc>\",\n                notes,\n                feedback\n            FROM workouts\n            WHERE id = ?\n            ",
   "describe": {
     "columns": [
       {
@@ -9,17 +9,17 @@
         "type_info": "Int64"
       },
       {
-        "name": "date",
+        "name": "date: DateTime<Utc>",
         "ordinal": 1,
         "type_info": "Datetime"
       },
       {
-        "name": "start_time",
+        "name": "start_time: DateTime<Utc>",
         "ordinal": 2,
         "type_info": "Datetime"
       },
       {
-        "name": "end_time",
+        "name": "end_time: DateTime<Utc>",
         "ordinal": 3,
         "type_info": "Datetime"
       },
@@ -46,5 +46,5 @@
       true
     ]
   },
-  "hash": "0d96759782fb4544b5fd524d73702c9eecf78e32287a70040d7eac8e29b57f05"
+  "hash": "60896adba6fb2ef61f8373ce271849145c8107e1866e894066837bcf60da09fa"
 }
