@@ -1,8 +1,8 @@
 <!-- YOU CAN DELETE EVERYTHING IN THIS PAGE -->
 
 <script lang="ts">
-	import { createWorkout, createExercise, createSet, endWorkout, endExercise, getExerciseTypes } from '$lib/api';
-	import type { Workout, Exercise, UpdateExerciseRequest } from '$lib/types';
+	import { createWorkout, createExercise, createSet, endWorkout, endExercise, getExerciseTypes, getWorkouts, getWorkout } from '$lib/api';
+	import type { Workout, Exercise, UpdateExerciseRequest, Set as WorkoutSet } from '$lib/types';
 	import { ProgressRadial, TabGroup, Tab, SlideToggle, RadioGroup, RadioItem, Autocomplete } from '@skeletonlabs/skeleton';
 	import { logger } from '$lib/logger';
 	import { onMount } from 'svelte';
@@ -34,6 +34,14 @@
 	let exerciseTypes: string[] = [];
 	let filteredExerciseTypes: string[] = [];
 	let inputValue = '';
+	let recentWorkouts: Workout[] = [];
+	let recentWorkoutsWithExercises: Array<{
+		workout: Workout;
+		exercises: Array<{
+			exercise: Exercise;
+			sets: Array<WorkoutSet>;
+		}>;
+	}> = [];
 
 	const FEEDBACK_OPTIONS = ['😊', '😐', '😞'] as const;
 	type FeedbackEmoji = typeof FEEDBACK_OPTIONS[number];
@@ -41,8 +49,20 @@
 	onMount(async () => {
 		try {
 			exerciseTypes = await getExerciseTypes();
+			const workouts = (await getWorkouts()).slice(0, 3);
+			
+			// Fetch complete data for each workout
+			recentWorkoutsWithExercises = await Promise.all(
+				workouts.map(async (workout) => {
+					const details = await getWorkout(workout.id!);
+					return {
+						workout: details.workout,
+						exercises: details.exercises
+					};
+				})
+			);
 		} catch (e) {
-			logger.error('workout', 'Failed to fetch exercise types', { error: e });
+			logger.error('workout', 'Failed to fetch initial data', { error: e });
 		}
 	});
 
@@ -167,12 +187,24 @@
 		try {
 			const updateRequest: UpdateExerciseRequest = {
 				end_time: exercise.end_time || new Date().toISOString(),
-				notes: exercise.notes
+				notes: exercise.notes || undefined
 			};
 			await endExercise(exercise.id, updateRequest);
 			exercises[exerciseIndex].isEditingNotes = false;
 			exercises = [...exercises];
 			logger.info('workout', 'Exercise notes updated', { exerciseId: exercise.id });
+
+			// Refresh recent workouts to show the updated notes
+			const workouts = (await getWorkouts()).slice(0, 3);
+			recentWorkoutsWithExercises = await Promise.all(
+				workouts.map(async (workout) => {
+					const details = await getWorkout(workout.id!);
+					return {
+						workout: details.workout,
+						exercises: details.exercises
+					};
+				})
+			);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to update exercise notes';
 			logger.error('workout', 'Failed to update exercise notes', { error });
@@ -223,7 +255,29 @@
 				isConfirmed: true
 			};
 			exercises = [...exercises];
+
+			// Update exercise notes to ensure they're preserved
+			if (exercise.notes) {
+				const updateRequest: UpdateExerciseRequest = {
+					end_time: exercise.end_time || new Date().toISOString(),
+					notes: exercise.notes
+				};
+				await endExercise(exercise.id, updateRequest);
+			}
+
 			logger.info('workout', 'Set confirmed successfully', { setId: result.id });
+
+			// Refresh recent workouts to show the updated data
+			const workouts = (await getWorkouts()).slice(0, 3);
+			recentWorkoutsWithExercises = await Promise.all(
+				workouts.map(async (workout) => {
+					const details = await getWorkout(workout.id!);
+					return {
+						workout: details.workout,
+						exercises: details.exercises
+					};
+				})
+			);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to confirm set';
 			logger.error('workout', 'Failed to confirm set', { error });
@@ -281,6 +335,14 @@
 			loading = false;
 		}
 	}
+
+	function formatDate(dateString: string): string {
+		return new Date(dateString).toLocaleDateString();
+	}
+
+	function formatTime(dateString: string): string {
+		return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+	}
 </script>
 
 <style>
@@ -311,10 +373,40 @@
 	.workout-container {
 		@apply flex-1 flex flex-col;
 	}
+	:global(.dark) .variant-ghost {
+		background-color: rgba(0, 0, 0, 0.2) !important;
+	}
+	:global(.dark) .variant-soft {
+		background-color: rgba(0, 0, 0, 0.3) !important;
+	}
+	:global(.dark) .variant-soft-primary {
+		background-color: rgba(var(--color-primary-500), 0.2) !important;
+	}
+	.exercise-list {
+		@apply grid gap-1;
+	}
+	.exercise-row {
+		@apply flex justify-between items-center p-2 rounded-lg bg-surface-700/50;
+	}
+	.exercise-name {
+		@apply font-semibold;
+	}
+	.sets-list {
+		@apply flex flex-wrap gap-1 items-center;
+	}
+	.set-chip {
+		@apply px-2 py-1 rounded-md bg-surface-900/50 text-sm;
+	}
+	:global(.dark) .exercise-row {
+		@apply bg-surface-900/50;
+	}
+	:global(.dark) .set-chip {
+		@apply bg-surface-700/50;
+	}
 </style>
 
 <div class="content-container">
-	<header class="text-center space-y-4">
+	<header class="text-center space-y-4 mb-8">
 		<div class="card variant-filled-tertiary p-4">
 			<h1 class="h1">Today's Workout</h1>
 			{#if !currentWorkout}
@@ -342,163 +434,215 @@
 		</div>
 	{/if}
 
-	{#if currentWorkout}
-		<div class="workout-container">
-			<div class="card variant-filled-surface p-4 space-y-4 flex-1">
-				<header class="flex justify-between items-center">
-					<h2 class="h2">Current Session</h2>
-					<button class="btn variant-soft-error" on:click={endWorkoutSession}>
-						<span class="text-lg mr-2">🏁</span> End Session
-					</button>
-				</header>
+	<div class="grid gap-8">
+		{#if currentWorkout}
+			<div class="workout-container">
+				<div class="card variant-filled-surface p-4 space-y-4">
+					<header class="flex justify-between items-center">
+						<h2 class="h2">Current Session</h2>
+						<button class="btn variant-soft-error" on:click={endWorkoutSession}>
+							<span class="text-lg mr-2">🏁</span> End Session
+						</button>
+					</header>
 
-				<div class="space-y-4">
-					{#each exercises as exercise, exerciseIndex}
-						<div class="card variant-soft p-4 exercise-card">
-							<div class="flex flex-col gap-4">
-								<div class="flex items-center gap-4">
-									<span class="text-lg font-bold">{exercise.name}</span>
-									<div class="flex-grow flex flex-wrap gap-2 items-center">
-										{#each exercise.sets as set, setIndex}
-											{#if set.isEditing}
-												<div class="card variant-ghost p-2 flex gap-2 items-center">
-													<span class="text-sm">{setIndex + 1}</span>
-													<input
-														type="number"
-														inputmode="numeric"
-														pattern="[0-9]*"
-														class="input w-16 text-center"
-														bind:value={set.reps}
-														min="0"
-													/>
-													<span>×</span>
-													<input
-														type="number"
-														inputmode="numeric"
-														pattern="[0-9]*"
-														class="input w-16 text-center"
-														bind:value={set.weight}
-														min="0"
-														step="0.5"
-													/>
-													<span>kg</span>
-													<button 
-														class="btn variant-filled-success btn-sm round-btn"
-														on:click={() => confirmSet(exerciseIndex, setIndex)}
-														disabled={loading}
-													>
-														✓
-													</button>
-												</div>
-											{:else}
-												<div class="chip variant-filled">
-													{set.reps}×{set.weight}kg
-												</div>
+					<div class="space-y-4">
+						{#each exercises as exercise, exerciseIndex}
+							<div class="card variant-soft p-4 exercise-card">
+								<div class="flex flex-col gap-4">
+									<div class="flex items-center gap-4">
+										<span class="text-lg font-bold">{exercise.name}</span>
+										<div class="flex-grow flex flex-wrap gap-2 items-center">
+											{#each exercise.sets as set, setIndex}
+												{#if set.isEditing}
+													<div class="card variant-ghost p-2 flex gap-2 items-center">
+														<span class="text-sm">{setIndex + 1}</span>
+														<input
+															type="number"
+															inputmode="numeric"
+															pattern="[0-9]*"
+															class="input w-16 text-center"
+															bind:value={set.reps}
+															min="0"
+														/>
+														<span>×</span>
+														<input
+															type="number"
+															inputmode="numeric"
+															pattern="[0-9]*"
+															class="input w-16 text-center"
+															bind:value={set.weight}
+															min="0"
+															step="0.5"
+														/>
+														<span>kg</span>
+														<button 
+															class="btn variant-filled-success btn-sm round-btn"
+															on:click={() => confirmSet(exerciseIndex, setIndex)}
+															disabled={loading}
+														>
+															✓
+														</button>
+													</div>
+												{:else}
+													<div class="chip variant-filled">
+														{set.reps}×{set.weight}kg
+													</div>
+												{/if}
+											{/each}
+											{#if !exercise.sets.some(s => s.isEditing)}
+												<button 
+													class="btn variant-filled-secondary round-btn" 
+													on:click={() => addSet(exerciseIndex)}
+												>
+													+
+												</button>
 											{/if}
-										{/each}
-										{#if !exercise.sets.some(s => s.isEditing)}
-											<button 
-												class="btn variant-filled-secondary round-btn" 
-												on:click={() => addSet(exerciseIndex)}
-											>
-												+
-											</button>
-										{/if}
+										</div>
 									</div>
+									
+									{#if exercise.isEditingNotes}
+										<div class="card variant-ghost p-2">
+											<div class="flex gap-2 items-center">
+												<span class="text-lg">📝</span>
+												<input
+													type="text"
+													class="input flex-grow"
+													placeholder="Exercise notes..."
+													bind:value={exercise.notes}
+												/>
+												<button 
+													class="btn variant-filled-success btn-sm round-btn"
+													on:click={() => updateExerciseNotes(exerciseIndex)}
+												>
+													✓
+												</button>
+											</div>
+										</div>
+									{:else if exercise.notes}
+										<div class="card variant-ghost p-2">
+											<div class="flex gap-2 items-center">
+												<span class="text-lg">📝</span>
+												<span class="flex-grow">{exercise.notes}</span>
+												<button 
+													class="btn variant-filled btn-sm round-btn"
+													on:click={() => exercises[exerciseIndex].isEditingNotes = true}
+												>
+													✎
+												</button>
+											</div>
+										</div>
+									{/if}
 								</div>
-								
-								{#if exercise.isEditingNotes}
-									<div class="card variant-ghost p-2">
-										<div class="flex gap-2 items-center">
-											<span class="text-lg">📝</span>
-											<input
-												type="text"
-												class="input flex-grow"
-												placeholder="Exercise notes..."
-												bind:value={exercise.notes}
-											/>
-											<button 
-												class="btn variant-filled-success btn-sm round-btn"
-												on:click={() => updateExerciseNotes(exerciseIndex)}
-											>
-												✓
-											</button>
+							</div>
+						{/each}
+					</div>
+
+					{#if showExerciseForm}
+						<div class="card variant-ghost p-4">
+							<form on:submit|preventDefault={addExercise} class="flex gap-2">
+								<div class="relative flex-grow">
+									<input
+										type="text"
+										class="input w-full"
+										placeholder="Exercise name"
+										bind:value={newExerciseName}
+										on:input={(e) => filterExerciseTypes(e.currentTarget.value)}
+										required
+										autocomplete="off"
+									/>
+									{#if filteredExerciseTypes.length > 0}
+										<div class="absolute w-full mt-1 max-h-48 overflow-y-auto z-50 card variant-filled-surface shadow-xl">
+											{#each filteredExerciseTypes as type}
+												<button
+													class="block w-full text-left px-4 py-2 hover:variant-soft-primary transition-colors"
+													on:click|preventDefault={() => {
+														newExerciseName = type;
+														filteredExerciseTypes = [];
+													}}
+												>
+													{type}
+												</button>
+											{/each}
+										</div>
+									{/if}
+								</div>
+								<button type="submit" class="btn variant-filled-primary">
+									<span class="text-lg mr-2">✨</span> Add
+								</button>
+								<button type="button" class="btn variant-soft" on:click={() => {
+									showExerciseForm = false;
+									filteredExerciseTypes = [];
+								}}>
+									Cancel
+								</button>
+							</form>
+						</div>
+					{:else}
+						<button 
+							class="btn variant-filled w-full" 
+							on:click={() => {
+								showExerciseForm = true;
+								filterExerciseTypes('');
+							}}
+						>
+							<span class="text-lg mr-2">{currentExercise ? '➡️' : '+'}</span>
+							{currentExercise ? 'Next Exercise' : 'Add Exercise'}
+						</button>
+					{/if}
+				</div>
+			</div>
+		{/if}
+
+		{#if recentWorkoutsWithExercises.length > 0}
+			<div class="card variant-ghost p-4 space-y-4">
+				<h2 class="h2 text-center">Recent Workouts</h2>
+				<div class="grid gap-4">
+					{#each recentWorkoutsWithExercises as {workout, exercises}}
+						<div class="card variant-soft p-4 space-y-2">
+							<div class="flex justify-between items-center">
+								<div>
+									<h3 class="h3">{formatDate(workout.date)}</h3>
+									<p class="opacity-80">
+										{formatTime(workout.start_time)} - {formatTime(workout.end_time)}
+									</p>
+								</div>
+								<div class="flex items-center gap-2">
+									{#if workout.feedback}
+										<span class="text-2xl">{workout.feedback}</span>
+									{/if}
+									<a href="/workouts/{workout.id}" class="btn btn-sm variant-soft">View Details →</a>
+								</div>
+							</div>
+							
+							{#if workout.notes}
+								<p class="opacity-70">{workout.notes}</p>
+							{/if}
+
+							<div class="exercise-list">
+								{#each exercises as {exercise, sets}}
+									<div class="exercise-row">
+										<div class="flex-1">
+											<span class="exercise-name">{exercise.exercise_type}</span>
+											{#if exercise.notes}
+												<p class="text-sm opacity-90 mt-0.5">📝 {exercise.notes}</p>
+											{/if}
+										</div>
+										<div class="sets-list">
+											{#each sets as set}
+												<span class="set-chip">
+													{set.reps}×{set.weight}kg
+												</span>
+											{/each}
 										</div>
 									</div>
-								{:else if exercise.notes}
-									<div class="card variant-ghost p-2">
-										<div class="flex gap-2 items-center">
-											<span class="text-lg">📝</span>
-											<span class="flex-grow">{exercise.notes}</span>
-											<button 
-												class="btn variant-filled btn-sm round-btn"
-												on:click={() => exercises[exerciseIndex].isEditingNotes = true}
-											>
-												✎
-											</button>
-										</div>
-									</div>
-								{/if}
+								{/each}
 							</div>
 						</div>
 					{/each}
 				</div>
-
-				{#if showExerciseForm}
-					<div class="card variant-ghost p-4">
-						<form on:submit|preventDefault={addExercise} class="flex gap-2">
-							<div class="relative flex-grow">
-								<input
-									type="text"
-									class="input w-full"
-									placeholder="Exercise name"
-									bind:value={newExerciseName}
-									on:input={(e) => filterExerciseTypes(e.currentTarget.value)}
-									required
-									autocomplete="off"
-								/>
-								{#if filteredExerciseTypes.length > 0}
-									<div class="absolute w-full mt-1 max-h-48 overflow-y-auto z-50 card variant-filled-surface shadow-xl">
-										{#each filteredExerciseTypes as type}
-											<button
-												class="block w-full text-left px-4 py-2 hover:variant-soft-primary transition-colors"
-												on:click|preventDefault={() => {
-													newExerciseName = type;
-													filteredExerciseTypes = [];
-												}}
-											>
-												{type}
-											</button>
-										{/each}
-									</div>
-								{/if}
-							</div>
-							<button type="submit" class="btn variant-filled-primary">
-								<span class="text-lg mr-2">✨</span> Add
-							</button>
-							<button type="button" class="btn variant-soft" on:click={() => {
-								showExerciseForm = false;
-								filteredExerciseTypes = [];
-							}}>
-								Cancel
-							</button>
-						</form>
-					</div>
-				{:else}
-					<button 
-						class="btn variant-filled w-full" 
-						on:click={() => {
-							showExerciseForm = true;
-							filterExerciseTypes('');
-						}}
-					>
-						<span class="text-lg mr-2">{currentExercise ? '➡️' : '+'}</span>
-						{currentExercise ? 'Next Exercise' : 'Add Exercise'}
-					</button>
-				{/if}
 			</div>
-		</div>
-	{/if}
+		{/if}
+	</div>
 
 	<!-- Feedback Modal -->
 	{#if showFeedbackModal}
