@@ -25,6 +25,7 @@
 		end_time?: string;
 		lastExerciseData?: {
 			date: string;
+			notes?: string;
 			sets: Array<{
 				reps: number;
 				weight: number;
@@ -158,7 +159,7 @@
 			const result = await createExercise(currentWorkout.id, {
 				exercise_type: newExerciseName,
 				start_time: now,
-				notes: ''
+				notes: undefined // Explicitly set to undefined since we'll edit notes later
 			});
 
 			const newExercise = {
@@ -167,7 +168,7 @@
 				exercise_type: newExerciseName,
 				start_time: now,
 				end_time: now,
-				notes: ''
+				notes: undefined
 			};
 
 			currentExercise = newExercise;
@@ -176,10 +177,11 @@
 				name: newExerciseName,
 				sets: [],
 				showSetForm: true,
-				notes: '',
 				isEditingNotes: true,
+				notes: undefined,
 				lastExerciseData: lastData ? {
 					date: lastData.exercise.start_time,
+					notes: lastData.exercise.notes,
 					sets: lastData.sets.map(s => ({ reps: s.reps, weight: s.weight }))
 				} : undefined
 			}];
@@ -239,15 +241,6 @@
 			};
 			exercises = [...exercises];
 
-			// Update exercise notes to ensure they're preserved
-			if (exercise.notes) {
-				const updateRequest: UpdateExerciseRequest = {
-					end_time: exercise.end_time || new Date().toISOString(),
-					notes: exercise.notes
-				};
-				await endExercise(exercise.id, updateRequest);
-			}
-
 			logger.info('workout', 'Set confirmed successfully', { setId: result.id });
 
 			// Refresh recent workouts
@@ -267,14 +260,14 @@
 		try {
 			const updateRequest: UpdateExerciseRequest = {
 				end_time: exercise.end_time || new Date().toISOString(),
-				notes: exercise.notes || undefined
+				notes: exercise.notes
 			};
 			await endExercise(exercise.id, updateRequest);
 			exercises[exerciseIndex].isEditingNotes = false;
 			exercises = [...exercises];
-			logger.info('workout', 'Exercise notes updated', { exerciseId: exercise.id });
+			logger.info('workout', 'Exercise notes updated', { exerciseId: exercise.id, notes: exercise.notes });
 
-			// Refresh recent workouts
+			// Refresh recent workouts to show updated notes
 			await refreshRecentWorkouts();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to update exercise notes';
@@ -314,13 +307,21 @@
 			error = null;
 			const now = new Date().toISOString();
 
-			// End current exercise if exists
+			// End current exercise if exists, preserving its notes
 			if (currentExercise?.id) {
-				await endExercise(currentExercise.id, { end_time: now });
-				logger.info('workout', 'Final exercise ended', { 
-					exerciseId: currentExercise.id,
-					endTime: now
-				});
+				const currentExerciseIndex = exercises.findIndex(e => e.id === currentExercise?.id);
+				if (currentExerciseIndex !== -1) {
+					const exerciseNotes = exercises[currentExerciseIndex].notes;
+					await endExercise(currentExercise.id, { 
+						end_time: now,
+						notes: exerciseNotes  // Preserve the notes when ending the exercise
+					});
+					logger.info('workout', 'Final exercise ended', { 
+						exerciseId: currentExercise.id,
+						endTime: now,
+						notes: exerciseNotes
+					});
+				}
 			}
 
 			// End workout with feedback
@@ -357,6 +358,57 @@
 
 	function formatTime(dateString: string): string {
 		return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+	}
+
+	function formatDateRelative(dateString: string): string {
+		const date = new Date(dateString);
+		const now = new Date();
+		const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+		const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+		// Function to add ordinal suffix
+		const getOrdinal = (n: number) => {
+			const s = ['th', 'st', 'nd', 'rd'];
+			const v = n % 100;
+			return n + (s[(v - 20) % 10] || s[v] || s[0]);
+		};
+
+		// Check if it's today
+		if (date.toDateString() === now.toDateString()) {
+			return 'Today';
+		}
+
+		// Check if it's yesterday
+		const yesterday = new Date(now);
+		yesterday.setDate(yesterday.getDate() - 1);
+		if (date.toDateString() === yesterday.toDateString()) {
+			return 'Yesterday';
+		}
+
+		// Check if it's within the last week
+		const lastWeek = new Date(now);
+		lastWeek.setDate(lastWeek.getDate() - 7);
+		if (date > lastWeek) {
+			return `Last ${days[date.getDay()]}`;
+		}
+
+		// Otherwise, return the full date
+		return `${days[date.getDay()]}, ${getOrdinal(date.getDate())} of ${months[date.getMonth()]}`;
+	}
+
+	function compressSets(sets: Array<{ reps: number; weight: number }>) {
+		const compressed: Array<{ count: number; reps: number; weight: number }> = [];
+		
+		sets.forEach(set => {
+			const existing = compressed.find(c => c.reps === set.reps && c.weight === set.weight);
+			if (existing) {
+				existing.count++;
+			} else {
+				compressed.push({ count: 1, reps: set.reps, weight: set.weight });
+			}
+		});
+		
+		return compressed;
 	}
 </script>
 
@@ -407,7 +459,7 @@
 		@apply flex flex-wrap gap-1 items-center;
 	}
 	.set-chip {
-		@apply px-2 py-1 rounded-md bg-surface-900/50 text-sm;
+		@apply px-2 py-1 rounded-md bg-surface-900/50 text-sm whitespace-nowrap;
 	}
 	:global(.dark) .exercise-row {
 		@apply bg-surface-900/50;
@@ -425,7 +477,10 @@
 		@apply bg-surface-700/30;
 	}
 	.badge {
-		@apply px-3 py-1.5 rounded-full text-sm font-medium;
+		@apply px-2 py-1 rounded-full text-sm font-medium whitespace-nowrap;
+	}
+	.badge .badge {
+		@apply ml-1;
 	}
 </style>
 
@@ -475,17 +530,28 @@
 								<div class="flex flex-col gap-5">
 									{#if exercise.lastExerciseData}
 										<div class="last-exercise-info">
-											<span class="opacity-75 whitespace-nowrap">Last time ({formatDate(exercise.lastExerciseData.date)}):</span>
+											<span class="opacity-75 whitespace-nowrap">Last time ({formatDateRelative(exercise.lastExerciseData.date)}):</span>
 											<div class="last-sets">
-												{#each exercise.lastExerciseData.sets as set}
-													<span class="badge variant-filled-secondary">{set.reps}×{set.weight}kg</span>
+												{#each compressSets(exercise.lastExerciseData.sets) as set}
+													{#if set.count > 1}
+														<span class="badge variant-filled-secondary">
+															{set.count}×<span class="badge variant-filled-primary">{set.reps}×{set.weight}kg</span>
+														</span>
+													{:else}
+														<span class="badge variant-filled-primary">{set.reps}×{set.weight}kg</span>
+													{/if}
 												{/each}
 											</div>
+											{#if exercise.lastExerciseData.notes}
+												<div class="w-full mt-2">
+													<span class="opacity-75">Notes:</span> {exercise.lastExerciseData.notes}
+												</div>
+											{/if}
 										</div>
 									{/if}
 									<div class="flex flex-col gap-4">
 										<span class="text-xl font-bold">{exercise.name}</span>
-										<div class="flex flex-wrap gap-3 items-center">
+										<div class="flex flex-wrap gap-3 items-center pl-2">
 											{#each exercise.sets as set, setIndex}
 												{#if set.isEditing}
 													<div class="card variant-ghost p-3 flex gap-3 items-center w-full sm:w-auto">
@@ -635,7 +701,7 @@
 						<div class="card variant-soft p-4 space-y-2">
 							<div class="flex justify-between items-center">
 								<div>
-									<h3 class="h3">{formatDate(workout.date)}</h3>
+									<h3 class="h3">{formatDateRelative(workout.date)}</h3>
 									<p class="opacity-80">
 										{formatTime(workout.start_time)} - {formatTime(workout.end_time)}
 									</p>
@@ -662,10 +728,14 @@
 											{/if}
 										</div>
 										<div class="sets-list">
-											{#each sets as set}
-												<span class="set-chip">
-													{set.reps}×{set.weight}kg
-												</span>
+											{#each compressSets(sets) as set}
+												{#if set.count > 1}
+													<span class="badge variant-filled-secondary">
+														{set.count}×<span class="badge variant-filled-primary">{set.reps}×{set.weight}kg</span>
+													</span>
+												{:else}
+													<span class="badge variant-filled-primary">{set.reps}×{set.weight}kg</span>
+												{/if}
 											{/each}
 										</div>
 									</div>
