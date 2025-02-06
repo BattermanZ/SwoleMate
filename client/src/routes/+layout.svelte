@@ -3,6 +3,7 @@
 	import { AppShell, AppBar, LightSwitch, Drawer, initializeStores } from '@skeletonlabs/skeleton';
 	import { getDrawerStore } from '@skeletonlabs/skeleton';
 	import { page } from '$app/stores';
+	import { onMount } from 'svelte';
 
 	// Initialize all Skeleton stores
 	initializeStores();
@@ -41,6 +42,19 @@
 	function toggleDrawer(): void {
 		drawerStore.set({ open: true });
 	}
+
+	// Add service worker registration
+	onMount(() => {
+		if ('serviceWorker' in navigator) {
+			navigator.serviceWorker.register('/service-worker.js')
+				.then(registration => {
+					console.log('ServiceWorker registration successful');
+				})
+				.catch(err => {
+					console.error('ServiceWorker registration failed:', err);
+				});
+		}
+	});
 </script>
 
 <Drawer position="right">
