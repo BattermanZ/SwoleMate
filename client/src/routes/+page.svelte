@@ -371,16 +371,16 @@
 		-moz-appearance: textfield;
 	}
 	.exercise-card {
-		transition: transform 0.2s;
+		@apply transition-transform;
 	}
 	.exercise-card:hover {
-		transform: scale(1.01);
+		@apply scale-[1.01];
 	}
 	.round-btn {
 		@apply aspect-square rounded-full flex items-center justify-center;
 		padding: 0;
-		width: 2rem;
-		height: 2rem;
+		width: 2.5rem;
+		height: 2.5rem;
 	}
 	.content-container {
 		@apply flex flex-col min-h-full;
@@ -416,25 +416,25 @@
 		@apply bg-surface-700/50;
 	}
 	.last-exercise-info {
-		@apply text-sm p-2 rounded-lg bg-surface-900/30 flex items-center gap-2;
+		@apply text-sm p-3 rounded-lg bg-surface-900/30 flex flex-wrap items-center gap-3;
 	}
 	.last-sets {
-		@apply flex gap-1 flex-wrap items-center;
+		@apply flex gap-2 flex-wrap items-center;
 	}
 	:global(.dark) .last-exercise-info {
 		@apply bg-surface-700/30;
 	}
 	.badge {
-		@apply px-2 py-1 rounded-full text-sm font-medium;
+		@apply px-3 py-1.5 rounded-full text-sm font-medium;
 	}
 </style>
 
 <div class="content-container">
-	<header class="text-center space-y-4 mb-8">
+	<header class="text-center space-y-4 mb-6">
 		<div class="card variant-filled-tertiary p-4">
-			<h1 class="h1">Today's Workout</h1>
+			<h1 class="h1 mb-4">Today's Workout</h1>
 			{#if !currentWorkout}
-				<div class="p-4">
+				<div class="p-2">
 					<button 
 						class="btn variant-filled-primary w-full md:w-auto {loading ? 'opacity-50' : ''}" 
 						on:click={startWorkout} 
@@ -452,30 +452,30 @@
 	</header>
 
 	{#if error}
-		<div class="alert variant-filled-error">
+		<div class="alert variant-filled-error mb-4">
 			<span class="text-2xl">⚠️</span>
 			<span>{error}</span>
 		</div>
 	{/if}
 
-	<div class="grid gap-8">
+	<div class="grid gap-6">
 		{#if currentWorkout}
 			<div class="workout-container">
-				<div class="card variant-filled-surface p-4 space-y-4">
-					<header class="flex justify-between items-center">
+				<div class="card variant-filled-surface p-4 space-y-5">
+					<header class="flex justify-between items-center mb-4">
 						<h2 class="h2">Current Session</h2>
 						<button class="btn variant-soft-error" on:click={endWorkoutSession}>
 							<span class="text-lg mr-2">🏁</span> End Session
 						</button>
 					</header>
 
-					<div class="space-y-4">
+					<div class="space-y-5">
 						{#each exercises as exercise, exerciseIndex}
-							<div class="card variant-soft p-4 exercise-card">
-								<div class="flex flex-col gap-4">
+							<div class="card variant-soft p-5 exercise-card">
+								<div class="flex flex-col gap-5">
 									{#if exercise.lastExerciseData}
-										<div class="last-exercise-info flex items-center gap-2">
-											<span class="opacity-75">Last time ({formatDate(exercise.lastExerciseData.date)}):</span>
+										<div class="last-exercise-info">
+											<span class="opacity-75 whitespace-nowrap">Last time ({formatDate(exercise.lastExerciseData.date)}):</span>
 											<div class="last-sets">
 												{#each exercise.lastExerciseData.sets as set}
 													<span class="badge variant-filled-secondary">{set.reps}×{set.weight}kg</span>
@@ -483,13 +483,13 @@
 											</div>
 										</div>
 									{/if}
-									<div class="flex items-center gap-4">
-										<span class="text-lg font-bold">{exercise.name}</span>
-										<div class="flex-grow flex flex-wrap gap-2 items-center">
+									<div class="flex flex-col gap-4">
+										<span class="text-xl font-bold">{exercise.name}</span>
+										<div class="flex flex-wrap gap-3 items-center">
 											{#each exercise.sets as set, setIndex}
 												{#if set.isEditing}
-													<div class="card variant-ghost p-2 flex gap-2 items-center">
-														<span class="text-sm">{setIndex + 1}</span>
+													<div class="card variant-ghost p-3 flex gap-3 items-center w-full sm:w-auto">
+														<span class="text-sm opacity-75">{setIndex + 1}</span>
 														<input
 															type="number"
 															inputmode="numeric"
@@ -510,7 +510,7 @@
 														/>
 														<span>kg</span>
 														<button 
-															class="btn variant-filled-success btn-sm round-btn"
+															class="btn variant-filled-success btn-sm round-btn ml-auto"
 															on:click={() => confirmSet(exerciseIndex, setIndex)}
 															disabled={loading}
 														>
@@ -535,9 +535,8 @@
 									</div>
 									
 									{#if exercise.isEditingNotes}
-										<div class="card variant-ghost p-2">
-											<div class="flex gap-2 items-center">
-												<span class="text-lg">📝</span>
+										<div class="card variant-ghost p-3">
+											<div class="flex gap-3 items-center">
 												<input
 													type="text"
 													class="input flex-grow"
@@ -553,9 +552,8 @@
 											</div>
 										</div>
 									{:else if exercise.notes}
-										<div class="card variant-ghost p-2">
-											<div class="flex gap-2 items-center">
-												<span class="text-lg">📝</span>
+										<div class="card variant-ghost p-3">
+											<div class="flex gap-3 items-center">
 												<span class="flex-grow">{exercise.notes}</span>
 												<button 
 													class="btn variant-filled btn-sm round-btn"
@@ -573,7 +571,7 @@
 
 					{#if showExerciseForm}
 						<div class="card variant-ghost p-4">
-							<form on:submit|preventDefault={addExercise} class="flex gap-2">
+							<form on:submit|preventDefault={addExercise} class="flex flex-col sm:flex-row gap-3">
 								<div class="relative flex-grow">
 									<input
 										type="text"
@@ -588,7 +586,7 @@
 										<div class="absolute w-full mt-1 max-h-48 overflow-y-auto z-50 card variant-filled-surface shadow-xl">
 											{#each filteredExerciseTypes as type}
 												<button
-													class="block w-full text-left px-4 py-2 hover:variant-soft-primary transition-colors"
+													class="block w-full text-left px-4 py-3 hover:variant-soft-primary transition-colors"
 													on:click|preventDefault={() => {
 														newExerciseName = type;
 														filteredExerciseTypes = [];
@@ -600,15 +598,17 @@
 										</div>
 									{/if}
 								</div>
-								<button type="submit" class="btn variant-filled-primary">
-									<span class="text-lg mr-2">✨</span> Add
-								</button>
-								<button type="button" class="btn variant-soft" on:click={() => {
-									showExerciseForm = false;
-									filteredExerciseTypes = [];
-								}}>
-									Cancel
-								</button>
+								<div class="flex gap-2">
+									<button type="submit" class="btn variant-filled-primary flex-1 sm:flex-none">
+										<span class="text-lg mr-2">✨</span> Add
+									</button>
+									<button type="button" class="btn variant-soft flex-1 sm:flex-none" on:click={() => {
+										showExerciseForm = false;
+										filteredExerciseTypes = [];
+									}}>
+										Cancel
+									</button>
+								</div>
 							</form>
 						</div>
 					{:else}
