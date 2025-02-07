@@ -50,8 +50,5 @@ RUN apt-get update && \
 # Copy only the binary
 COPY --from=builder /usr/src/app/target/release/swolemate-server ./
 
-# Copy migrations directory
-COPY --from=builder /usr/src/app/database/migrations ./database/migrations
-
 EXPOSE 2469
 CMD ["./swolemate-server"] 
