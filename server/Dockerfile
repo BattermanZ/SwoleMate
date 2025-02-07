@@ -47,11 +47,10 @@ RUN apt-get update && \
     apt-get install -y libsqlite3-0 && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy binary and migrations
+# Copy only the binary
 COPY --from=builder /usr/src/app/target/release/swolemate-server ./
-COPY --from=builder /usr/src/app/database/migrations ./database/migrations
 
-# Create necessary directories
+# Create mount points
 RUN mkdir -p database logs
 
 EXPOSE 2469

@@ -8,6 +8,7 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 use chrono::Local;
+use std::fs::File;
 
 mod models;
 mod routes;
@@ -62,6 +63,7 @@ async fn main() -> std::io::Result<()> {
 
     // Load environment variables
     info!("Loading environment from server.env...");
+    info!("Current working directory: {}", std::env::current_dir()?.display());
     match dotenv() {
         Ok(_) => info!("Environment loaded successfully from server.env"),
         Err(e) => {
@@ -76,6 +78,21 @@ async fn main() -> std::io::Result<()> {
     let database_url = env::var("DATABASE_URL")
         .unwrap_or_else(|_| "sqlite:database/swolemate.db".to_string());
     info!("Using database: {}", database_url);
+
+    // Ensure database directory exists and create if needed
+    let db_path = Path::new("database");
+    if !db_path.exists() {
+        fs::create_dir_all(db_path)?;
+        info!("Created database directory at: {}", db_path.display());
+    }
+
+    // Extract SQLite file path from URL and create if needed
+    let db_file = database_url.trim_start_matches("sqlite:");
+    let db_file = Path::new(db_file);
+    if !db_file.exists() {
+        File::create(db_file)?;
+        info!("Created new database file at: {}", db_file.display());
+    }
 
     // Setup database connection pool
     let pool = SqlitePoolOptions::new()
@@ -124,7 +141,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(actix_web::web::Data::new(database.clone()))
             .configure(routes::config)
     })
-    .bind(("127.0.0.1", port))?
+    .bind(("0.0.0.0", port))?
     .run()
     .await
 } 
