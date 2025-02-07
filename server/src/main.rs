@@ -1,6 +1,5 @@
 use actix_cors::Cors;
 use actix_web::{middleware::Logger, App, HttpServer};
-use dotenv::dotenv;
 use log::{error, info, LevelFilter};
 use sqlx::sqlite::SqlitePoolOptions;
 use std::env;
