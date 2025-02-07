@@ -174,6 +174,6 @@ export async function getExerciseProgress(exerciseType: string): Promise<Exercis
 }
 
 export async function getVolumeStats(exerciseType: string): Promise<VolumeStats> {
-    const response = await fetch(`${API_BASE}/api/progress/volume/${encodeURIComponent(exerciseType)}`);
+    const response = await fetch(`${API_BASE}/api/progress/volume?exercise_type=${encodeURIComponent(exerciseType)}`);
     return handleResponse(response);
 } 

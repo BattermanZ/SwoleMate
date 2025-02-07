@@ -70,6 +70,17 @@ export interface WorkoutStats {
         neutral: number;
         bad: number;
     };
+    workout_frequency: {
+        average_per_week: number;
+    };
+    popular_hours: Array<{
+        hour: string;
+        count: number;
+    }>;
+    duration_distribution: Array<{
+        range: string;
+        count: number;
+    }>;
 }
 
 export interface VolumeStats {
@@ -78,13 +89,26 @@ export interface VolumeStats {
         total_volume: number;
         max_weight: number;
         total_reps: number;
-        sessions: number;
+        total_sets: number;
+        max_estimated_1rm: number;
+        set_schemes?: string[];
     }>;
-    personal_records: Array<{
-        reps: number;
-        weight: number;
-        achieved_at: string;
+    monthly_volume: Array<{
+        month: string;
+        total_volume: number;
+        max_weight: number;
+        total_reps: number;
+        total_sets: number;
     }>;
+    personal_records: {
+        all_time_max_weight: number;
+        max_volume: number;
+        estimated_max_1rm: number;
+        rep_prs?: Array<{
+            reps: number;
+            weight: number;
+        }>;
+    };
 }
 
 export interface ExerciseProgress {

@@ -30,6 +30,11 @@ pub struct UpdateExerciseRequest {
     pub notes: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ExerciseTypeQuery {
+    pub exercise_type: String,
+}
+
 #[get("/api/health")]
 pub async fn health_check() -> HttpResponse {
     HttpResponse::Ok().json(json!({
@@ -312,12 +317,12 @@ pub async fn get_workout_stats(
     Ok(HttpResponse::Ok().json(stats))
 }
 
-#[get("/api/progress/volume/{exercise_type}")]
+#[get("/api/progress/volume")]
 pub async fn get_volume_stats(
     db: web::Data<Database>,
-    exercise_type: web::Path<String>,
+    query: web::Query<ExerciseTypeQuery>,
 ) -> Result<HttpResponse, AppError> {
-    let decoded_type = urlencoding::decode(&exercise_type)
+    let decoded_type = urlencoding::decode(&query.exercise_type)
         .map_err(|e| AppError::BadRequest(format!("Invalid exercise type: {}", e)))?
         .into_owned();
     let stats = db.get_volume_stats(&decoded_type).await?;

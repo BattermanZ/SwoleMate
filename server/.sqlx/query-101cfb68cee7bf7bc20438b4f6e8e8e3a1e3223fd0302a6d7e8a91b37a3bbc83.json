@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            WITH exercise_stats AS (\n                SELECT \n                    e.start_time,\n                    s.reps,\n                    s.weight,\n                    s.reps * s.weight as volume,\n                    ROUND(s.weight * (36.0 / (37.0 - CAST(s.reps AS FLOAT))), 2) as estimated_1rm\n                FROM exercises e\n                JOIN sets s ON e.id = s.exercise_id\n                WHERE LOWER(e.exercise_type) = LOWER(?)\n            ),\n            weekly_stats AS (\n                SELECT \n                    strftime('%Y-%W', start_time) as week,\n                    SUM(volume) as total_volume,\n                    MAX(weight) as max_weight,\n                    SUM(reps) as total_reps,\n                    COUNT(*) as total_sets,\n                    MAX(estimated_1rm) as max_estimated_1rm,\n                    GROUP_CONCAT(CAST(reps AS TEXT) || 'x' || CAST(ROUND(weight, 1) AS TEXT)) as set_schemes\n                FROM exercise_stats\n                GROUP BY strftime('%Y-%W', start_time)\n            )\n            SELECT \n                week as \"week!: String\",\n                COALESCE(total_volume, 0.0) as \"total_volume!: f64\",\n                COALESCE(max_weight, 0.0) as \"max_weight!: f64\",\n                COALESCE(total_reps, 0) as \"total_reps!: i64\",\n                total_sets as \"total_sets!: i64\",\n                COALESCE(max_estimated_1rm, 0.0) as \"max_estimated_1rm!: f64\",\n                COALESCE(set_schemes, '') as \"set_schemes!: String\"\n            FROM weekly_stats\n            ORDER BY week ASC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "week!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "total_volume!: f64",
+        "ordinal": 1,
+        "type_info": "Float"
+      },
+      {
+        "name": "max_weight!: f64",
+        "ordinal": 2,
+        "type_info": "Float"
+      },
+      {
+        "name": "total_reps!: i64",
+        "ordinal": 3,
+        "type_info": "Int64"
+      },
+      {
+        "name": "total_sets!: i64",
+        "ordinal": 4,
+        "type_info": "Int64"
+      },
+      {
+        "name": "max_estimated_1rm!: f64",
+        "ordinal": 5,
+        "type_info": "Int64"
+      },
+      {
+        "name": "set_schemes!: String",
+        "ordinal": 6,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "101cfb68cee7bf7bc20438b4f6e8e8e3a1e3223fd0302a6d7e8a91b37a3bbc83"
+}

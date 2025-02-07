@@ -17,6 +17,9 @@
     let volumeChart: Chart | null = null;
     let progressChart: Chart | null = null;
     let feedbackChart: Chart | null = null;
+    let timeDistributionChart: Chart | null = null;
+    let durationDistributionChart: Chart | null = null;
+    let monthlyVolumeChart: Chart | null = null;
 
     onMount(async () => {
         try {
@@ -27,6 +30,8 @@
                 await loadExerciseData();
             }
             createFeedbackChart();
+            createTimeDistributionChart();
+            createDurationDistributionChart();
         } catch (error) {
             console.error('Error loading initial data:', error);
         }
@@ -38,6 +43,7 @@
             exerciseProgress = await getExerciseProgress(selectedExercise);
             createVolumeChart();
             createProgressChart();
+            createMonthlyVolumeChart();
         } catch (error) {
             console.error('Error loading exercise data:', error);
         }
@@ -60,13 +66,15 @@
                         label: 'Total Volume (kg)',
                         data: volumeStats.weekly_volume.map(v => v.total_volume),
                         borderColor: 'rgb(75, 192, 192)',
-                        tension: 0.1
+                        tension: 0.1,
+                        yAxisID: 'y'
                     },
                     {
-                        label: 'Max Weight (kg)',
-                        data: volumeStats.weekly_volume.map(v => v.max_weight),
+                        label: 'Estimated 1RM (kg)',
+                        data: volumeStats.weekly_volume.map(v => v.max_estimated_1rm),
                         borderColor: 'rgb(255, 99, 132)',
-                        tension: 0.1
+                        tension: 0.1,
+                        yAxisID: 'y1'
                     }
                 ]
             },
@@ -74,7 +82,124 @@
                 responsive: true,
                 scales: {
                     y: {
-                        beginAtZero: true
+                        beginAtZero: true,
+                        position: 'left',
+                        title: {
+                            display: true,
+                            text: 'Volume (kg)'
+                        }
+                    },
+                    y1: {
+                        beginAtZero: true,
+                        position: 'right',
+                        title: {
+                            display: true,
+                            text: 'Estimated 1RM (kg)'
+                        },
+                        grid: {
+                            drawOnChartArea: false
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function createMonthlyVolumeChart() {
+        if (!volumeStats) return;
+
+        const ctx = document.getElementById('monthlyVolumeChart') as HTMLCanvasElement;
+        if (!ctx) return;
+
+        if (monthlyVolumeChart) monthlyVolumeChart.destroy();
+
+        monthlyVolumeChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: volumeStats.monthly_volume.map(v => v.month),
+                datasets: [
+                    {
+                        label: 'Monthly Volume (kg)',
+                        data: volumeStats.monthly_volume.map(v => v.total_volume),
+                        backgroundColor: 'rgb(75, 192, 192)'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Volume (kg)'
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function createTimeDistributionChart() {
+        if (!workoutStats?.popular_hours) return;
+
+        const ctx = document.getElementById('timeDistributionChart') as HTMLCanvasElement;
+        if (!ctx) return;
+
+        if (timeDistributionChart) timeDistributionChart.destroy();
+
+        timeDistributionChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: workoutStats.popular_hours.map(h => `${h.hour}:00`),
+                datasets: [{
+                    label: 'Workouts',
+                    data: workoutStats.popular_hours.map(h => h.count),
+                    backgroundColor: 'rgb(54, 162, 235)'
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Number of Workouts'
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function createDurationDistributionChart() {
+        if (!workoutStats?.duration_distribution) return;
+
+        const ctx = document.getElementById('durationDistributionChart') as HTMLCanvasElement;
+        if (!ctx) return;
+
+        if (durationDistributionChart) durationDistributionChart.destroy();
+
+        durationDistributionChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: workoutStats.duration_distribution.map(d => `${d.range} min`),
+                datasets: [{
+                    label: 'Workouts',
+                    data: workoutStats.duration_distribution.map(d => d.count),
+                    backgroundColor: 'rgb(153, 102, 255)'
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Number of Workouts'
+                        }
                     }
                 }
             }
@@ -90,7 +215,7 @@
         if (progressChart) progressChart.destroy();
 
         const data = exerciseProgress.map(ep => ({
-            x: new Date(ep.exercise.start_time),
+            x: new Date(ep.exercise.start_time).getTime(),
             y: Math.max(...ep.sets.map(s => s.weight))
         }));
 
@@ -100,7 +225,9 @@
                 datasets: [{
                     label: 'Max Weight per Session',
                     data: data,
-                    backgroundColor: 'rgb(75, 192, 192)'
+                    backgroundColor: 'rgb(75, 192, 192)',
+                    borderColor: 'rgb(75, 192, 192)',
+                    showLine: true
                 }]
             },
             options: {
@@ -109,7 +236,14 @@
                     x: {
                         type: 'time',
                         time: {
-                            unit: 'day'
+                            unit: 'day',
+                            displayFormats: {
+                                day: 'MMM d, yyyy'
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Date'
                         }
                     },
                     y: {
@@ -117,6 +251,15 @@
                         title: {
                             display: true,
                             text: 'Weight (kg)'
+                        }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => {
+                                return `Weight: ${context.parsed.y}kg`;
+                            }
                         }
                     }
                 }
@@ -167,18 +310,35 @@
     {#if workoutStats}
         <div class="card p-4 mb-8">
             <h2 class="h2 mb-4">Overall Statistics</h2>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                <div class="card variant-soft p-4">
+                    <h3 class="h3">Workout Frequency</h3>
+                    <p class="text-4xl font-bold">{workoutStats.workout_frequency.average_per_week}</p>
+                    <p class="text-sm">workouts per week</p>
+                </div>
+                <div class="card variant-soft p-4">
+                    <h3 class="h3">Average Duration</h3>
+                    <p class="text-4xl font-bold">{Math.round(workoutStats.average_duration_minutes)}</p>
+                    <p class="text-sm">minutes</p>
+                </div>
                 <div class="card variant-soft p-4">
                     <h3 class="h3">Total Workouts</h3>
                     <p class="text-4xl font-bold">{workoutStats.total_workouts}</p>
                 </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div class="card variant-soft p-4">
-                    <h3 class="h3">Average Duration</h3>
-                    <p class="text-4xl font-bold">{Math.round(workoutStats.average_duration_minutes)} min</p>
+                    <h3 class="h3 mb-4">Workout Feedback</h3>
+                    <canvas id="feedbackChart"></canvas>
                 </div>
                 <div class="card variant-soft p-4">
-                    <h3 class="h3">Workout Feedback</h3>
-                    <canvas id="feedbackChart"></canvas>
+                    <h3 class="h3 mb-4">Popular Workout Times</h3>
+                    <canvas id="timeDistributionChart"></canvas>
+                </div>
+                <div class="card variant-soft p-4">
+                    <h3 class="h3 mb-4">Workout Duration Distribution</h3>
+                    <canvas id="durationDistributionChart"></canvas>
                 </div>
             </div>
         </div>
@@ -197,39 +357,71 @@
         </select>
 
         {#if volumeStats}
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div class="grid grid-cols-1 gap-8">
+                <!-- Personal Records -->
                 <div class="card variant-soft p-4">
-                    <h3 class="h3 mb-4">Volume Progress</h3>
-                    <canvas id="volumeChart"></canvas>
-                </div>
-                <div class="card variant-soft p-4">
-                    <h3 class="h3 mb-4">Weight Progress</h3>
-                    <canvas id="progressChart"></canvas>
-                </div>
-            </div>
+                    <h3 class="h3 mb-4">Personal Records</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                        <div>
+                            <h4 class="h4">All-Time Max Weight</h4>
+                            <p class="text-3xl font-bold">{volumeStats.personal_records.all_time_max_weight}kg</p>
+                        </div>
+                        <div>
+                            <h4 class="h4">Estimated 1RM</h4>
+                            <p class="text-3xl font-bold">{volumeStats.personal_records.estimated_max_1rm}kg</p>
+                        </div>
+                        <div>
+                            <h4 class="h4">Max Volume</h4>
+                            <p class="text-3xl font-bold">{volumeStats.personal_records.max_volume}kg</p>
+                        </div>
+                    </div>
 
-            <!-- Personal Records -->
-            <div class="mt-8">
-                <h3 class="h3 mb-4">Personal Records</h3>
-                <div class="table-container">
-                    <table class="table table-hover">
-                        <thead>
-                            <tr>
-                                <th>Reps</th>
-                                <th>Weight (kg)</th>
-                                <th>Date Achieved</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {#each volumeStats.personal_records as pr}
-                                <tr>
-                                    <td>{pr.reps}</td>
-                                    <td>{pr.weight}</td>
-                                    <td>{new Date(pr.achieved_at).toLocaleDateString()}</td>
-                                </tr>
-                            {/each}
-                        </tbody>
-                    </table>
+                    {#if volumeStats.personal_records.rep_prs}
+                        <div class="table-container">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Reps</th>
+                                        <th>Weight (kg)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {#each volumeStats.personal_records.rep_prs as pr}
+                                        <tr>
+                                            <td>{pr.reps}</td>
+                                            <td>{pr.weight}</td>
+                                        </tr>
+                                    {/each}
+                                </tbody>
+                            </table>
+                        </div>
+                    {/if}
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div class="card variant-soft p-4">
+                        <h3 class="h3 mb-4">Weekly Progress</h3>
+                        <canvas id="volumeChart"></canvas>
+                    </div>
+                    <div class="card variant-soft p-4">
+                        <h3 class="h3 mb-4">Weight Progress</h3>
+                        <canvas id="progressChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="card variant-soft p-4">
+                    <h3 class="h3 mb-4">Monthly Volume</h3>
+                    <canvas id="monthlyVolumeChart"></canvas>
+                </div>
+
+                <!-- Set Schemes -->
+                <div class="card variant-soft p-4">
+                    <h3 class="h3 mb-4">Recent Set Schemes</h3>
+                    <div class="flex flex-wrap gap-2">
+                        {#each volumeStats.weekly_volume.slice(-1)[0].set_schemes || [] as scheme}
+                            <span class="badge variant-filled">{scheme}</span>
+                        {/each}
+                    </div>
                 </div>
             </div>
         {/if}

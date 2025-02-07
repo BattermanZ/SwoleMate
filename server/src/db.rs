@@ -449,25 +449,61 @@ impl Database {
         let pool = self.get_pool();
         let stats = sqlx::query!(
             r#"
+            WITH workout_times AS (
+                SELECT 
+                    strftime('%H', start_time) as hour,
+                    ROUND((julianday(end_time) - julianday(start_time)) * 24 * 60) as duration,
+                    date(start_time) as workout_date,
+                    feedback
+                FROM workouts
+            ),
+            feedback_counts AS (
+                SELECT 
+                    COUNT(*) FILTER (WHERE feedback = '😊') as good_workouts,
+                    COUNT(*) FILTER (WHERE feedback = '😐') as neutral_workouts,
+                    COUNT(*) FILTER (WHERE feedback = '😞') as bad_workouts
+                FROM workout_times
+            ),
+            popular_hours AS (
+                SELECT hour, COUNT(*) as count
+                FROM workout_times
+                GROUP BY hour
+                ORDER BY count DESC
+                LIMIT 3
+            ),
+            weekly_counts AS (
+                SELECT COUNT(*) as workouts_per_week
+                FROM workout_times
+                GROUP BY strftime('%Y-%W', workout_date)
+            ),
+            duration_ranges AS (
+                SELECT 
+                    CASE 
+                        WHEN duration < 30 THEN '0-30'
+                        WHEN duration < 60 THEN '30-60'
+                        WHEN duration < 90 THEN '60-90'
+                        ELSE '90+'
+                    END as duration_range,
+                    COUNT(*) as count
+                FROM workout_times
+                GROUP BY 
+                    CASE 
+                        WHEN duration < 30 THEN '0-30'
+                        WHEN duration < 60 THEN '30-60'
+                        WHEN duration < 90 THEN '60-90'
+                        ELSE '90+'
+                    END
+            )
             SELECT 
                 COUNT(*) as total_workouts,
-                AVG(ROUND((julianday(end_time) - julianday(start_time)) * 24 * 60)) as avg_duration,
-                (
-                    SELECT COUNT(*)
-                    FROM workouts w2
-                    WHERE feedback = '😊'
-                ) as good_workouts,
-                (
-                    SELECT COUNT(*)
-                    FROM workouts w3
-                    WHERE feedback = '😐'
-                ) as neutral_workouts,
-                (
-                    SELECT COUNT(*)
-                    FROM workouts w4
-                    WHERE feedback = '😞'
-                ) as bad_workouts
-            FROM workouts w1
+                AVG(duration) as avg_duration,
+                (SELECT good_workouts FROM feedback_counts) as good_workouts,
+                (SELECT neutral_workouts FROM feedback_counts) as neutral_workouts,
+                (SELECT bad_workouts FROM feedback_counts) as bad_workouts,
+                (SELECT GROUP_CONCAT(hour || ':' || count) FROM popular_hours) as popular_hours,
+                (SELECT ROUND(AVG(workouts_per_week), 1) FROM weekly_counts) as avg_workouts_per_week,
+                (SELECT GROUP_CONCAT(duration_range || ':' || count) FROM duration_ranges) as duration_distribution
+            FROM workout_times
             "#
         )
         .fetch_one(&pool)
@@ -484,7 +520,40 @@ impl Database {
                 "good": stats.good_workouts,
                 "neutral": stats.neutral_workouts,
                 "bad": stats.bad_workouts
-            }
+            },
+            "workout_frequency": {
+                "average_per_week": stats.avg_workouts_per_week
+            },
+            "popular_hours": stats.popular_hours.map(|h| {
+                h.split(',')
+                    .filter_map(|pair| {
+                        let parts: Vec<&str> = pair.split(':').collect();
+                        if parts.len() == 2 {
+                            Some(json!({
+                                "hour": parts[0],
+                                "count": parts[1].parse::<i64>().unwrap_or(0)
+                            }))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            }),
+            "duration_distribution": stats.duration_distribution.map(|d| {
+                d.split(',')
+                    .filter_map(|pair| {
+                        let parts: Vec<&str> = pair.split(':').collect();
+                        if parts.len() == 2 {
+                            Some(json!({
+                                "range": parts[0],
+                                "count": parts[1].parse::<i64>().unwrap_or(0)
+                            }))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            })
         }))
     }
 
@@ -494,16 +563,38 @@ impl Database {
         let pool = self.get_pool();
         let weekly_volume = sqlx::query!(
             r#"
+            WITH exercise_stats AS (
+                SELECT 
+                    e.start_time,
+                    s.reps,
+                    s.weight,
+                    s.reps * s.weight as volume,
+                    ROUND(s.weight * (36.0 / (37.0 - CAST(s.reps AS FLOAT))), 2) as estimated_1rm
+                FROM exercises e
+                JOIN sets s ON e.id = s.exercise_id
+                WHERE LOWER(e.exercise_type) = LOWER(?)
+            ),
+            weekly_stats AS (
+                SELECT 
+                    strftime('%Y-%W', start_time) as week,
+                    SUM(volume) as total_volume,
+                    MAX(weight) as max_weight,
+                    SUM(reps) as total_reps,
+                    COUNT(*) as total_sets,
+                    MAX(estimated_1rm) as max_estimated_1rm,
+                    GROUP_CONCAT(CAST(reps AS TEXT) || 'x' || CAST(ROUND(weight, 1) AS TEXT)) as set_schemes
+                FROM exercise_stats
+                GROUP BY strftime('%Y-%W', start_time)
+            )
             SELECT 
-                strftime('%Y-%W', e.start_time) as week,
-                SUM(s.reps * s.weight) as total_volume,
-                MAX(s.weight) as max_weight,
-                SUM(s.reps) as total_reps,
-                COUNT(DISTINCT e.id) as sessions
-            FROM exercises e
-            JOIN sets s ON e.id = s.exercise_id
-            WHERE LOWER(e.exercise_type) = LOWER(?)
-            GROUP BY strftime('%Y-%W', e.start_time)
+                week as "week!: String",
+                COALESCE(total_volume, 0.0) as "total_volume!: f64",
+                COALESCE(max_weight, 0.0) as "max_weight!: f64",
+                COALESCE(total_reps, 0) as "total_reps!: i64",
+                total_sets as "total_sets!: i64",
+                COALESCE(max_estimated_1rm, 0.0) as "max_estimated_1rm!: f64",
+                COALESCE(set_schemes, '') as "set_schemes!: String"
+            FROM weekly_stats
             ORDER BY week ASC
             "#,
             exercise_type
@@ -515,21 +606,51 @@ impl Database {
             AppError::DatabaseError(e)
         })?;
 
-        let personal_records = sqlx::query!(
+        let monthly_volume = sqlx::query!(
             r#"
             SELECT 
+                strftime('%Y-%m', e.start_time) as month,
+                SUM(s.reps * s.weight) as total_volume,
                 MAX(s.weight) as max_weight,
-                s.reps,
-                e.start_time as "achieved_at: DateTime<Utc>"
+                SUM(s.reps) as total_reps,
+                COUNT(*) as total_sets
             FROM exercises e
             JOIN sets s ON e.id = s.exercise_id
             WHERE LOWER(e.exercise_type) = LOWER(?)
-            GROUP BY s.reps
-            ORDER BY s.reps ASC
+            GROUP BY strftime('%Y-%m', e.start_time)
+            ORDER BY month ASC
             "#,
             exercise_type
         )
         .fetch_all(&pool)
+        .await
+        .map_err(|e| {
+            error!(target: "database", "Failed to fetch monthly volume: {}", e);
+            AppError::DatabaseError(e)
+        })?;
+
+        let personal_records = sqlx::query!(
+            r#"
+            WITH exercise_stats AS (
+                SELECT 
+                    s.reps,
+                    s.weight,
+                    s.reps * s.weight as volume,
+                    ROUND(s.weight * (36.0 / (37.0 - CAST(s.reps AS FLOAT))), 2) as estimated_1rm
+                FROM exercises e
+                JOIN sets s ON e.id = s.exercise_id
+                WHERE LOWER(e.exercise_type) = LOWER(?)
+            )
+            SELECT 
+                COALESCE(MAX(weight), 0.0) as "all_time_max_weight!: f64",
+                COALESCE(MAX(volume), 0.0) as "max_volume!: f64",
+                COALESCE(MAX(estimated_1rm), 0.0) as "estimated_max_1rm!: f64",
+                COALESCE(GROUP_CONCAT(CAST(reps AS TEXT) || ':' || CAST(weight AS TEXT)), '') as "rep_prs!: String"
+            FROM exercise_stats
+            "#,
+            exercise_type
+        )
+        .fetch_one(&pool)
         .await
         .map_err(|e| {
             error!(target: "database", "Failed to fetch PRs: {}", e);
@@ -543,16 +664,46 @@ impl Database {
                     "total_volume": row.total_volume,
                     "max_weight": row.max_weight,
                     "total_reps": row.total_reps,
-                    "sessions": row.sessions
+                    "total_sets": row.total_sets,
+                    "max_estimated_1rm": row.max_estimated_1rm,
+                    "set_schemes": if !row.set_schemes.is_empty() {
+                        Some(row.set_schemes.split(',').collect::<Vec<_>>())
+                    } else {
+                        None
+                    }
                 })
             }).collect::<Vec<_>>(),
-            "personal_records": personal_records.iter().map(|row| {
+            "monthly_volume": monthly_volume.iter().map(|row| {
                 json!({
-                    "reps": row.reps,
-                    "weight": row.max_weight,
-                    "achieved_at": row.achieved_at
+                    "month": row.month,
+                    "total_volume": row.total_volume,
+                    "max_weight": row.max_weight,
+                    "total_reps": row.total_reps,
+                    "total_sets": row.total_sets
                 })
-            }).collect::<Vec<_>>()
+            }).collect::<Vec<_>>(),
+            "personal_records": {
+                "all_time_max_weight": personal_records.all_time_max_weight,
+                "max_volume": personal_records.max_volume,
+                "estimated_max_1rm": personal_records.estimated_max_1rm,
+                "rep_prs": if personal_records.rep_prs.is_empty() {
+                    None
+                } else {
+                    Some(personal_records.rep_prs.split(',')
+                        .filter_map(|pair| {
+                            let parts: Vec<&str> = pair.split(':').collect();
+                            if parts.len() == 2 {
+                                Some(json!({
+                                    "reps": parts[0].parse::<i64>().unwrap_or(0),
+                                    "weight": parts[1].parse::<f64>().unwrap_or(0.0)
+                                }))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<_>>())
+                }
+            }
         }))
     }
 } 

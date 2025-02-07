@@ -1,0 +1,44 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT \n                strftime('%Y-%m', e.start_time) as month,\n                SUM(s.reps * s.weight) as total_volume,\n                MAX(s.weight) as max_weight,\n                SUM(s.reps) as total_reps,\n                COUNT(*) as total_sets\n            FROM exercises e\n            JOIN sets s ON e.id = s.exercise_id\n            WHERE LOWER(e.exercise_type) = LOWER(?)\n            GROUP BY strftime('%Y-%m', e.start_time)\n            ORDER BY month ASC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "month",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "total_volume",
+        "ordinal": 1,
+        "type_info": "Float"
+      },
+      {
+        "name": "max_weight",
+        "ordinal": 2,
+        "type_info": "Float"
+      },
+      {
+        "name": "total_reps",
+        "ordinal": 3,
+        "type_info": "Int64"
+      },
+      {
+        "name": "total_sets",
+        "ordinal": 4,
+        "type_info": "Int64"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "2ca1dd806f3184083b4c1c120cc2782162633153e27456aba01252684b292574"
+}
