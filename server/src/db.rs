@@ -336,22 +336,8 @@ impl Database {
     pub async fn delete_exercise(&self, id: i64) -> Result<(), AppError> {
         debug!(target: "database", "Deleting exercise #{}", id);
         
-        // First delete all sets associated with this exercise
-        sqlx::query!(
-            r#"
-            DELETE FROM sets
-            WHERE exercise_id = ?
-            "#,
-            id,
-        )
-        .execute(&self.pool)
-        .await
-        .map_err(|e| {
-            error!(target: "database", "Failed to delete sets for exercise: {}", e);
-            AppError::DatabaseError(e)
-        })?;
-
-        // Then delete the exercise
+        // With CASCADE DELETE, we only need to delete the exercise
+        // and all related sets will be automatically deleted
         sqlx::query!(
             r#"
             DELETE FROM exercises
@@ -373,17 +359,8 @@ impl Database {
     pub async fn delete_workout(&self, id: i64) -> Result<(), AppError> {
         debug!(target: "database", "Deleting workout #{}", id);
         
-        // First get all exercises for this workout
-        let exercises = self.get_exercises_for_workout(id).await?;
-        
-        // Delete all sets and exercises
-        for exercise in exercises {
-            if let Some(exercise_id) = exercise.id {
-                self.delete_exercise(exercise_id).await?;
-            }
-        }
-
-        // Finally delete the workout
+        // With CASCADE DELETE, we only need to delete the workout
+        // and all related exercises and sets will be automatically deleted
         sqlx::query!(
             r#"
             DELETE FROM workouts

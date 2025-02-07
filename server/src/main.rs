@@ -144,6 +144,15 @@ async fn main() -> std::io::Result<()> {
             panic!("Database connection failed");
         });
 
+    // Enable foreign key support
+    sqlx::query!("PRAGMA foreign_keys = ON;")
+        .execute(&pool)
+        .await
+        .unwrap_or_else(|e| {
+            error!("Failed to enable foreign keys: {}", e);
+            panic!("Failed to enable foreign keys");
+        });
+
     // Run database migrations
     match sqlx::migrate!("./database/migrations").run(&pool).await {
         Ok(_) => info!("Database migrations completed successfully"),
