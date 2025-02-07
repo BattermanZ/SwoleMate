@@ -2,8 +2,6 @@
 target/
 **/target/     # For nested target directories
 **/*.rs.bk
-server/Cargo.lock  # Server's Cargo.lock
-**/Cargo.lock  # Any other Cargo.lock files
 
 # Node.js
 node_modules/

@@ -1,4 +1,20 @@
-# Stage 1: Build
+# Stage 1: Plan
+FROM rust:1.82-slim as planner
+WORKDIR /usr/src/app
+
+# Install build dependencies and cargo-chef
+RUN apt-get update && \
+    apt-get install -y pkg-config libssl-dev libsqlite3-dev && \
+    rm -rf /var/lib/apt/lists/* && \
+    cargo install cargo-chef
+
+# Copy source code for planning
+COPY . .
+
+# Create the recipe
+RUN cargo chef prepare --recipe-path recipe.json
+
+# Stage 2: Build
 FROM rust:1.82-slim as builder
 WORKDIR /usr/src/app
 
@@ -10,23 +26,19 @@ RUN apt-get update && \
 # Install Cargo Chef
 RUN cargo install cargo-chef
 
-# Copy manifests
-COPY Cargo.toml Cargo.lock ./
+# Copy the recipe from the planner
+COPY --from=planner /usr/src/app/recipe.json recipe.json
 
-# Prepare the build plan
-RUN cargo chef prepare --recipe-path recipe.json
+# Build dependencies - this is the caching layer
+RUN cargo chef cook --release --recipe-path recipe.json
 
 # Copy source code
-COPY src ./src
-COPY database/migrations ./database/migrations
+COPY . .
 
-# Cook the build plan
-RUN cargo chef cook --recipe-path recipe.json
-
-# Build
+# Build the binary
 RUN cargo build --release
 
-# Stage 2: Run
+# Stage 3: Run
 FROM debian:bookworm-slim
 WORKDIR /app
 
