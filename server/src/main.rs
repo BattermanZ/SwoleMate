@@ -24,8 +24,9 @@ fn find_env_file() -> Option<String> {
     ];
 
     for path in env_paths.iter() {
-        if Path::new(path).exists() {
-            info!("Found server.env at: {}", path);
+        // Try to actually open the file to verify it exists and is readable
+        if let Ok(_) = File::open(path) {
+            info!("Found and verified server.env at: {}", path);
             return Some(path.to_string());
         }
     }
@@ -83,9 +84,20 @@ async fn main() -> std::io::Result<()> {
     
     match find_env_file() {
         Some(env_path) => {
+            // Set the environment variable for dotenv
             env::set_var("DOTENV_PATH", &env_path);
             match dotenv() {
-                Ok(_) => info!("Environment loaded successfully from {}", env_path),
+                Ok(_) => {
+                    info!("Environment loaded successfully from {}", env_path);
+                    // Verify some key environment variables were loaded
+                    info!("Verifying environment variables...");
+                    if let Ok(db_url) = env::var("DATABASE_URL") {
+                        info!("DATABASE_URL is set to: {}", db_url);
+                    }
+                    if let Ok(port) = env::var("SERVER_PORT") {
+                        info!("SERVER_PORT is set to: {}", port);
+                    }
+                },
                 Err(e) => {
                     error!("Failed to load {}: {}", env_path, e);
                     error!("Using default configuration");
