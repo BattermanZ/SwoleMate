@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT \n                MAX(s.weight) as max_weight,\n                s.reps,\n                e.start_time as \"achieved_at: DateTime<Utc>\"\n            FROM exercises e\n            JOIN sets s ON e.id = s.exercise_id\n            WHERE LOWER(e.exercise_type) = LOWER(?)\n            GROUP BY s.reps\n            ORDER BY s.reps ASC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "max_weight",
+        "ordinal": 0,
+        "type_info": "Float"
+      },
+      {
+        "name": "reps",
+        "ordinal": 1,
+        "type_info": "Int64"
+      },
+      {
+        "name": "achieved_at: DateTime<Utc>",
+        "ordinal": 2,
+        "type_info": "Datetime"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "ea2c4fcacc25da0723cd37f6e1de06cb86411ced9b67aeebfb2c9f1f676ba299"
+}

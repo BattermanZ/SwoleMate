@@ -292,6 +292,38 @@ pub async fn delete_backup(filename: web::Path<String>) -> Result<HttpResponse, 
     })))
 }
 
+#[get("/api/progress/exercise/{exercise_type}")]
+pub async fn get_exercise_progress(
+    db: web::Data<Database>,
+    exercise_type: web::Path<String>,
+) -> Result<HttpResponse, AppError> {
+    let decoded_type = urlencoding::decode(&exercise_type)
+        .map_err(|e| AppError::BadRequest(format!("Invalid exercise type: {}", e)))?
+        .into_owned();
+    let progress = db.get_exercise_progress(&decoded_type).await?;
+    Ok(HttpResponse::Ok().json(progress))
+}
+
+#[get("/api/progress/workout-stats")]
+pub async fn get_workout_stats(
+    db: web::Data<Database>,
+) -> Result<HttpResponse, AppError> {
+    let stats = db.get_workout_stats().await?;
+    Ok(HttpResponse::Ok().json(stats))
+}
+
+#[get("/api/progress/volume/{exercise_type}")]
+pub async fn get_volume_stats(
+    db: web::Data<Database>,
+    exercise_type: web::Path<String>,
+) -> Result<HttpResponse, AppError> {
+    let decoded_type = urlencoding::decode(&exercise_type)
+        .map_err(|e| AppError::BadRequest(format!("Invalid exercise type: {}", e)))?
+        .into_owned();
+    let stats = db.get_volume_stats(&decoded_type).await?;
+    Ok(HttpResponse::Ok().json(stats))
+}
+
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(health_check)
         .service(create_workout)
@@ -310,5 +342,8 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(list_backups)
         .service(create_manual_backup)
         .service(restore_backup)
-        .service(delete_backup);
+        .service(delete_backup)
+        .service(get_exercise_progress)
+        .service(get_workout_stats)
+        .service(get_volume_stats);
 } 

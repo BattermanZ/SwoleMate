@@ -161,4 +161,19 @@ export async function deleteBackup(filename: string): Promise<void> {
         },
     });
     return handleResponse(response);
+}
+
+export async function getWorkoutStats(): Promise<WorkoutStats> {
+    const response = await fetch(`${API_BASE}/api/progress/workout-stats`);
+    return handleResponse(response);
+}
+
+export async function getExerciseProgress(exerciseType: string): Promise<ExerciseProgress[]> {
+    const response = await fetch(`${API_BASE}/api/progress/exercise/${encodeURIComponent(exerciseType)}`);
+    return handleResponse(response);
+}
+
+export async function getVolumeStats(exerciseType: string): Promise<VolumeStats> {
+    const response = await fetch(`${API_BASE}/api/progress/volume/${encodeURIComponent(exerciseType)}`);
+    return handleResponse(response);
 } 

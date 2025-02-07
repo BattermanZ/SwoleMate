@@ -3,6 +3,7 @@ use crate::{models::*, errors::AppError};
 use log::{debug, error, info};
 use chrono::{DateTime, Utc};
 use std::sync::{Arc, Mutex};
+use serde_json::json;
 
 #[derive(Clone)]
 pub struct Database {
@@ -403,5 +404,155 @@ impl Database {
 
         info!(target: "database", "Deleted workout #{} and all its exercises and sets", id);
         Ok(())
+    }
+
+    pub async fn get_exercise_progress(&self, exercise_type: &str) -> Result<Vec<(Exercise, Vec<Set>)>, AppError> {
+        debug!(target: "database", "Fetching progress data for exercise type: {}", exercise_type);
+        
+        let pool = self.get_pool();
+        let exercises = sqlx::query_as!(
+            Exercise,
+            r#"
+            SELECT 
+                id as "id?",
+                workout_id,
+                exercise_type,
+                start_time as "start_time: DateTime<Utc>",
+                end_time as "end_time: DateTime<Utc>",
+                notes
+            FROM exercises
+            WHERE LOWER(exercise_type) = LOWER(?)
+            ORDER BY start_time ASC
+            "#,
+            exercise_type
+        )
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| {
+            error!(target: "database", "Failed to fetch exercise progress: {}", e);
+            AppError::DatabaseError(e)
+        })?;
+
+        let mut result = Vec::new();
+        for exercise in exercises {
+            let sets = self.get_sets_for_exercise(exercise.id.unwrap()).await?;
+            result.push((exercise, sets));
+        }
+
+        debug!(target: "database", "Found {} exercises for progress data", result.len());
+        Ok(result)
+    }
+
+    pub async fn get_workout_stats(&self) -> Result<serde_json::Value, AppError> {
+        debug!(target: "database", "Calculating workout statistics");
+        
+        let pool = self.get_pool();
+        let stats = sqlx::query!(
+            r#"
+            SELECT 
+                COUNT(*) as total_workouts,
+                AVG(ROUND((julianday(end_time) - julianday(start_time)) * 24 * 60)) as avg_duration,
+                (
+                    SELECT COUNT(*)
+                    FROM workouts w2
+                    WHERE feedback = '😊'
+                ) as good_workouts,
+                (
+                    SELECT COUNT(*)
+                    FROM workouts w3
+                    WHERE feedback = '😐'
+                ) as neutral_workouts,
+                (
+                    SELECT COUNT(*)
+                    FROM workouts w4
+                    WHERE feedback = '😞'
+                ) as bad_workouts
+            FROM workouts w1
+            "#
+        )
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| {
+            error!(target: "database", "Failed to fetch workout stats: {}", e);
+            AppError::DatabaseError(e)
+        })?;
+
+        Ok(json!({
+            "total_workouts": stats.total_workouts,
+            "average_duration_minutes": stats.avg_duration,
+            "feedback_distribution": {
+                "good": stats.good_workouts,
+                "neutral": stats.neutral_workouts,
+                "bad": stats.bad_workouts
+            }
+        }))
+    }
+
+    pub async fn get_volume_stats(&self, exercise_type: &str) -> Result<serde_json::Value, AppError> {
+        debug!(target: "database", "Calculating volume statistics for {}", exercise_type);
+        
+        let pool = self.get_pool();
+        let weekly_volume = sqlx::query!(
+            r#"
+            SELECT 
+                strftime('%Y-%W', e.start_time) as week,
+                SUM(s.reps * s.weight) as total_volume,
+                MAX(s.weight) as max_weight,
+                SUM(s.reps) as total_reps,
+                COUNT(DISTINCT e.id) as sessions
+            FROM exercises e
+            JOIN sets s ON e.id = s.exercise_id
+            WHERE LOWER(e.exercise_type) = LOWER(?)
+            GROUP BY strftime('%Y-%W', e.start_time)
+            ORDER BY week ASC
+            "#,
+            exercise_type
+        )
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| {
+            error!(target: "database", "Failed to fetch volume stats: {}", e);
+            AppError::DatabaseError(e)
+        })?;
+
+        let personal_records = sqlx::query!(
+            r#"
+            SELECT 
+                MAX(s.weight) as max_weight,
+                s.reps,
+                e.start_time as "achieved_at: DateTime<Utc>"
+            FROM exercises e
+            JOIN sets s ON e.id = s.exercise_id
+            WHERE LOWER(e.exercise_type) = LOWER(?)
+            GROUP BY s.reps
+            ORDER BY s.reps ASC
+            "#,
+            exercise_type
+        )
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| {
+            error!(target: "database", "Failed to fetch PRs: {}", e);
+            AppError::DatabaseError(e)
+        })?;
+
+        Ok(json!({
+            "weekly_volume": weekly_volume.iter().map(|row| {
+                json!({
+                    "week": row.week,
+                    "total_volume": row.total_volume,
+                    "max_weight": row.max_weight,
+                    "total_reps": row.total_reps,
+                    "sessions": row.sessions
+                })
+            }).collect::<Vec<_>>(),
+            "personal_records": personal_records.iter().map(|row| {
+                json!({
+                    "reps": row.reps,
+                    "weight": row.max_weight,
+                    "achieved_at": row.achieved_at
+                })
+            }).collect::<Vec<_>>()
+        }))
     }
 } 

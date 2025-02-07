@@ -1,0 +1,44 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT \n                COUNT(*) as total_workouts,\n                AVG(ROUND((julianday(end_time) - julianday(start_time)) * 24 * 60)) as avg_duration,\n                (\n                    SELECT COUNT(*)\n                    FROM workouts w2\n                    WHERE feedback = '😊'\n                ) as good_workouts,\n                (\n                    SELECT COUNT(*)\n                    FROM workouts w3\n                    WHERE feedback = '😐'\n                ) as neutral_workouts,\n                (\n                    SELECT COUNT(*)\n                    FROM workouts w4\n                    WHERE feedback = '😞'\n                ) as bad_workouts\n            FROM workouts w1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "total_workouts",
+        "ordinal": 0,
+        "type_info": "Int"
+      },
+      {
+        "name": "avg_duration",
+        "ordinal": 1,
+        "type_info": "Float"
+      },
+      {
+        "name": "good_workouts",
+        "ordinal": 2,
+        "type_info": "Int"
+      },
+      {
+        "name": "neutral_workouts",
+        "ordinal": 3,
+        "type_info": "Int"
+      },
+      {
+        "name": "bad_workouts",
+        "ordinal": 4,
+        "type_info": "Int"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "54318348b4f0ecbf807301c2c32e42f40969dbde16c5db25b3448c69a3aa4047"
+}

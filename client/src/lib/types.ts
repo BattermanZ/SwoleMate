@@ -60,4 +60,34 @@ export interface WorkoutWithExercises extends Workout {
         exercise: Exercise;
         sets: Set[];
     }>;
+}
+
+export interface WorkoutStats {
+    total_workouts: number;
+    average_duration_minutes: number;
+    feedback_distribution: {
+        good: number;
+        neutral: number;
+        bad: number;
+    };
+}
+
+export interface VolumeStats {
+    weekly_volume: Array<{
+        week: string;
+        total_volume: number;
+        max_weight: number;
+        total_reps: number;
+        sessions: number;
+    }>;
+    personal_records: Array<{
+        reps: number;
+        weight: number;
+        achieved_at: string;
+    }>;
+}
+
+export interface ExerciseProgress {
+    exercise: Exercise;
+    sets: Set[];
 } 

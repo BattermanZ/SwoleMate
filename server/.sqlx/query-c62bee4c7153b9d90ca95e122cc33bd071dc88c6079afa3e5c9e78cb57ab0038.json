@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT \n                id as \"id?\",\n                workout_id,\n                exercise_type,\n                start_time as \"start_time: DateTime<Utc>\",\n                end_time as \"end_time: DateTime<Utc>\",\n                notes\n            FROM exercises\n            WHERE LOWER(exercise_type) = LOWER(?)\n            ORDER BY start_time ASC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id?",
+        "ordinal": 0,
+        "type_info": "Int64"
+      },
+      {
+        "name": "workout_id",
+        "ordinal": 1,
+        "type_info": "Int64"
+      },
+      {
+        "name": "exercise_type",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "start_time: DateTime<Utc>",
+        "ordinal": 3,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "end_time: DateTime<Utc>",
+        "ordinal": 4,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "notes",
+        "ordinal": 5,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "c62bee4c7153b9d90ca95e122cc33bd071dc88c6079afa3e5c9e78cb57ab0038"
+}
