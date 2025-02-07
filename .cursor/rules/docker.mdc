@@ -1,0 +1,12 @@
+---
+description: Dockerization
+globs: 
+---
+
+# Dockerization
+
+- Use latest versions of every software/component
+- Use multi-stage building
+- Docker containers as small as possible
+- Keep it simple
+- Respect the correct filepaths of the apps and keep in mind that client and server will be in different containers when creating filepaths related to docker

@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=${VITE_API_URL:-http://localhost:2469}
+    ports:
+      - "2470:2470"
+    depends_on:
+      - server
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "2469:2469"
+    volumes:
+      - ./server/server.env:/app/server.env:ro
+      - ./server/database:/app/database
+      - ./server/logs:/app/logs
+    environment:
+      - DATABASE_URL=sqlite:/app/database/swolemate.db
+      - RUST_LOG=debug
+      - SERVER_PORT=2469
+
+volumes:
+  database:
+  logs: 

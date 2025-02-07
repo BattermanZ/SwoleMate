@@ -46,9 +46,9 @@
 	// Add service worker registration
 	onMount(() => {
 		if ('serviceWorker' in navigator) {
-			navigator.serviceWorker.register('/service-worker.js')
+			navigator.serviceWorker.register('./service-worker.js', { scope: '/' })
 				.then(registration => {
-					console.log('ServiceWorker registration successful');
+					console.log('ServiceWorker registration successful:', registration.scope);
 				})
 				.catch(err => {
 					console.error('ServiceWorker registration failed:', err);

@@ -2,8 +2,9 @@
     "name": "SwoleMate",
     "short_name": "SwoleMate",
     "description": "Your personal workout tracking companion",
-    "start_url": "/",
-    "id": "/",
+    "start_url": "./",
+    "id": "./",
+    "scope": "./",
     "display": "standalone",
     "display_override": ["standalone", "fullscreen"],
     "background_color": "#652B26",
@@ -31,6 +32,17 @@
             "type": "image/png",
             "form_factor": "narrow",
             "label": "SwoleMate Homescreen"
+        }
+    ],
+    "prefer_related_applications": false,
+    "related_applications": [],
+    "shortcuts": [
+        {
+            "name": "Start Workout",
+            "short_name": "Workout",
+            "description": "Start a new workout session",
+            "url": "./",
+            "icons": [{ "src": "pwa-192.png", "sizes": "192x192" }]
         }
     ]
 } 
