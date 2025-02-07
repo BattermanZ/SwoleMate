@@ -50,9 +50,8 @@ RUN apt-get update && \
 # Copy only the binary
 COPY --from=builder /usr/src/app/target/release/swolemate-server ./
 
-# Create migrations directory and copy schema file
-RUN mkdir -p database/migrations
-COPY --from=builder /usr/src/app/database/migrations/20240207_initial_schema.sql database/migrations/
+# Copy migrations directory
+COPY --from=builder /usr/src/app/database/migrations ./database/migrations
 
 EXPOSE 2469
 CMD ["./swolemate-server"] 
