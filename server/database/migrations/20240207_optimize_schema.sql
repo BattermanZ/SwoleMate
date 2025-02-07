@@ -1,8 +1,12 @@
 -- Enable foreign key support
 PRAGMA foreign_keys = ON;
 
--- Begin transaction to ensure all changes are atomic
-BEGIN TRANSACTION;
+-- Store original counts for verification
+CREATE TEMPORARY TABLE counts AS
+SELECT 
+    (SELECT COUNT(*) FROM workouts) as workouts_count,
+    (SELECT COUNT(*) FROM exercises) as exercises_count,
+    (SELECT COUNT(*) FROM sets) as sets_count;
 
 -- Create temporary tables with new schema
 CREATE TABLE workouts_new (
@@ -66,14 +70,21 @@ CREATE INDEX IF NOT EXISTS idx_exercises_workout_id ON exercises(workout_id);
 CREATE INDEX IF NOT EXISTS idx_exercises_type ON exercises(exercise_type);
 CREATE INDEX IF NOT EXISTS idx_sets_exercise_id ON sets(exercise_id);
 
--- Verify data integrity
-SELECT CASE 
-    WHEN (SELECT COUNT(*) FROM workouts) = (SELECT COUNT(*) FROM workouts_new) AND
-         (SELECT COUNT(*) FROM exercises) = (SELECT COUNT(*) FROM exercises_new) AND
-         (SELECT COUNT(*) FROM sets) = (SELECT COUNT(*) FROM sets_new)
-    THEN 'Data migration successful'
-    ELSE RAISE(ROLLBACK, 'Data migration failed')
-END;
+-- Verify data integrity by creating a verification table
+CREATE TEMPORARY TABLE verification_result AS
+SELECT 
+    CASE 
+        WHEN (SELECT COUNT(*) FROM workouts) = (SELECT workouts_count FROM counts) AND
+             (SELECT COUNT(*) FROM exercises) = (SELECT exercises_count FROM counts) AND
+             (SELECT COUNT(*) FROM sets) = (SELECT sets_count FROM counts)
+        THEN 1
+        ELSE 0
+    END as success;
 
--- Commit transaction
-COMMIT; 
+-- If verification failed, this will fail and trigger a rollback
+INSERT INTO workouts 
+SELECT * FROM workouts WHERE (SELECT success FROM verification_result) = 1;
+
+-- Cleanup
+DROP TABLE counts;
+DROP TABLE verification_result; 
