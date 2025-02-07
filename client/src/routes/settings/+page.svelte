@@ -2,6 +2,7 @@
 	import { TabGroup, Tab } from '@skeletonlabs/skeleton';
 	import { getContext, setContext } from 'svelte';
 	import { writable } from 'svelte/store';
+	import { getWorkouts } from '$lib/api';
 
 	// Settings stores
 	const unitPreference = writable(localStorage.getItem('unitPreference') || 'kg');
@@ -23,8 +24,7 @@
 
 	async function exportData() {
 		try {
-			const response = await fetch('/api/workouts');
-			const data = await response.json();
+			const data = await getWorkouts();
 			const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
 			const url = window.URL.createObjectURL(blob);
 			const a = document.createElement('a');
