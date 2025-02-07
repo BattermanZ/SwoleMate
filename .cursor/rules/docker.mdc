@@ -1,6 +1,6 @@
 ---
 description: Dockerization
-globs: 
+globs: docker-compose.yml, Dockerfile, .dockerignore
 ---
 
 # Dockerization
@@ -10,3 +10,4 @@ globs:
 - Docker containers as small as possible
 - Keep it simple
 - Respect the correct filepaths of the apps and keep in mind that client and server will be in different containers when creating filepaths related to docker
+- do not repeat as environment variables in the docker-cpomse what is already in a .env file

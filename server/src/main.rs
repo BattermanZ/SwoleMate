@@ -16,6 +16,22 @@ mod db;
 mod errors;
 mod middleware;
 
+fn find_env_file() -> Option<String> {
+    let env_paths = [
+        "server.env",
+        "../server.env",
+        "../../server.env",
+    ];
+
+    for path in env_paths.iter() {
+        if Path::new(path).exists() {
+            info!("Found server.env at: {}", path);
+            return Some(path.to_string());
+        }
+    }
+    None
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     // Create logs directory if it doesn't exist
@@ -62,12 +78,22 @@ async fn main() -> std::io::Result<()> {
         .init();
 
     // Load environment variables
-    info!("Loading environment from server.env...");
+    info!("Looking for server.env file...");
     info!("Current working directory: {}", std::env::current_dir()?.display());
-    match dotenv() {
-        Ok(_) => info!("Environment loaded successfully from server.env"),
-        Err(e) => {
-            error!("Failed to load server.env: {}", e);
+    
+    match find_env_file() {
+        Some(env_path) => {
+            env::set_var("DOTENV_PATH", &env_path);
+            match dotenv() {
+                Ok(_) => info!("Environment loaded successfully from {}", env_path),
+                Err(e) => {
+                    error!("Failed to load {}: {}", env_path, e);
+                    error!("Using default configuration");
+                }
+            }
+        }
+        None => {
+            error!("Could not find server.env in any of the search paths");
             error!("Using default configuration");
         }
     }
@@ -122,15 +148,25 @@ async fn main() -> std::io::Result<()> {
         .parse::<u16>()
         .expect("SERVER_PORT must be a valid port number");
 
+    // Get frontend URL from environment
+    let frontend_url = env::var("FRONTEND_URL")
+        .unwrap_or_else(|_| "http://localhost:2470".to_string());
+    info!("Allowing CORS for frontend URL: {}", frontend_url);
+
     info!("Server starting on port {}", port);
 
     // Create and start HTTP server
     HttpServer::new(move || {
         // Configure CORS
         let cors = Cors::default()
-            .allow_any_origin()
-            .allow_any_method()
-            .allow_any_header();
+            .allowed_origin(&frontend_url)
+            .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
+            .allowed_headers(vec![
+                actix_web::http::header::AUTHORIZATION,
+                actix_web::http::header::ACCEPT,
+                actix_web::http::header::CONTENT_TYPE,
+            ])
+            .max_age(3600);
 
         App::new()
             .wrap(cors)

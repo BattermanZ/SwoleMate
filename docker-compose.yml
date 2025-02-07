@@ -2,42 +2,30 @@ version: '3.8'
 
 services:
   client:
-    image: swolemate-client:v0.5.0
-    container_name: swolemate-client
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=${VITE_API_URL:-http://localhost:2469}
     ports:
-      - "2470:2470"  # Frontend port
-    environment:
-      - PUID=1035
-      - PGID=100
-    networks:
-      - cinelink_default
-    restart: unless-stopped
+      - "2470:2470"
     depends_on:
       - server
-        
+
   server:
-    image: swolemate-server:v0.5.0
-    container_name: swolemate-server
-    expose:
-      - "2469"  # Backend port
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "2469:2469"
     volumes:
-      - ./logs:/app/logs:rw
-      - ./database:/app/database:rw
-      - ./server.env:/app/server.env:ro
+      - ./server/server.env:/app/server.env:ro
+      - ./server/database:/app/database
+      - ./server/logs:/app/logs
     environment:
-      - TZ=Europe/Amsterdam
       - DATABASE_URL=sqlite:/app/database/swolemate.db
       - RUST_LOG=debug
       - SERVER_PORT=2469
-      - RUST_BACKTRACE=1
-    user: "${PUID}:${PGID}"
-    networks:
-      - cinelink_default
-    restart: unless-stopped
-
-networks:
-  cinelink_default:
-    external: true
 
 volumes:
   database:
