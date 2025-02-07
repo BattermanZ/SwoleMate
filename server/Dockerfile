@@ -51,7 +51,7 @@ RUN apt-get update && \
 COPY --from=builder /usr/src/app/target/release/swolemate-server ./
 
 # Create mount points
-RUN mkdir -p database logs
+RUN mkdir -p database logs backups
 
 EXPOSE 2469
 CMD ["./swolemate-server"] 
