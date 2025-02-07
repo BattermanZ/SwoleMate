@@ -6,14 +6,16 @@ use std::env;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
-use chrono::Local;
+use chrono::{Local, Timelike, Datelike, Weekday};
 use std::fs::File;
+use tokio::time::{sleep, Duration};
 
 mod models;
 mod routes;
 mod db;
 mod errors;
 mod middleware;
+mod backup;
 
 fn find_env_file() -> Option<String> {
     let current_dir = std::env::current_dir().ok()?;
@@ -42,6 +44,44 @@ fn find_env_file() -> Option<String> {
         }
     }
     None
+}
+
+async fn schedule_backups() {
+    info!("Starting automatic backup scheduler");
+    loop {
+        let now = Local::now();
+        let next_monday = if now.weekday() == Weekday::Mon && now.hour() < 1 {
+            now
+        } else {
+            let days_until_monday = (Weekday::Mon as i32 - now.weekday() as i32 + 7) % 7;
+            now + chrono::Duration::days(days_until_monday as i64)
+        };
+
+        let next_backup = next_monday
+            .with_hour(1)
+            .unwrap()
+            .with_minute(0)
+            .unwrap()
+            .with_second(0)
+            .unwrap();
+
+        if next_backup <= now {
+            let next_week = next_backup + chrono::Duration::days(7);
+            sleep(Duration::from_secs(
+                (next_week - now).num_seconds() as u64
+            )).await;
+        } else {
+            sleep(Duration::from_secs(
+                (next_backup - now).num_seconds() as u64
+            )).await;
+        }
+
+        info!("Creating automatic backup");
+        match backup::create_backup(backup::BackupType::Auto).await {
+            Ok(backup_info) => info!("Automatic backup created: {}", backup_info.filename),
+            Err(e) => error!("Failed to create automatic backup: {}", e),
+        }
+    }
 }
 
 #[actix_web::main]
@@ -131,6 +171,24 @@ async fn main() -> std::io::Result<()> {
     if !db_file.exists() {
         File::create(db_file)?;
         info!("Created new database file at: {}", db_file.display());
+        
+        // Read and execute the schema file
+        let schema = fs::read_to_string("database/migrations/20240207_initial_schema.sql")
+            .expect("Failed to read schema file");
+        
+        // Create a temporary connection to run the schema
+        let temp_pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&database_url)
+            .await
+            .expect("Failed to create temporary database connection");
+            
+        sqlx::query(&schema)
+            .execute(&temp_pool)
+            .await
+            .expect("Failed to create database schema");
+            
+        info!("Database schema created successfully");
     }
 
     // Setup database connection pool
@@ -143,23 +201,26 @@ async fn main() -> std::io::Result<()> {
             panic!("Database connection failed");
         });
 
-    // Enable foreign key support
-    sqlx::query!("PRAGMA foreign_keys = ON;")
-        .execute(&pool)
-        .await
-        .unwrap_or_else(|e| {
-            error!("Failed to enable foreign keys: {}", e);
-            panic!("Failed to enable foreign keys");
-        });
-
-    // Run database migrations
-    match sqlx::migrate!("./database/migrations").run(&pool).await {
-        Ok(_) => info!("Database migrations completed successfully"),
-        Err(e) => {
-            error!("Failed to run database migrations: {}", e);
-            panic!("Migration failed");
-        }
+    // Enable foreign key support and optimize performance
+    for pragma in [
+        "PRAGMA foreign_keys = ON",
+        "PRAGMA journal_mode = WAL",
+        "PRAGMA synchronous = NORMAL",
+        "PRAGMA mmap_size = 30000000000",
+        "PRAGMA auto_vacuum = INCREMENTAL",
+        "PRAGMA page_size = 4096",
+        "PRAGMA cache_size = -8000",
+    ] {
+        sqlx::query(pragma)
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|e| {
+                error!("Failed to set pragma {}: {}", pragma, e);
+                panic!("Failed to set database pragma");
+            });
     }
+
+    info!("Database configuration completed successfully");
 
     // Create database instance
     let database = db::Database::new(pool.clone());
@@ -176,6 +237,9 @@ async fn main() -> std::io::Result<()> {
     info!("Allowing CORS for frontend URL: {}", frontend_url);
 
     info!("Server starting on port {}", port);
+
+    // Start the backup scheduler in a separate task
+    tokio::spawn(schedule_backups());
 
     // Create and start HTTP server
     HttpServer::new(move || {

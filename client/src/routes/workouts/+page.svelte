@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { createWorkout, createExercise, createSet, getWorkouts } from '$lib/api';
+	import { createWorkout, createExercise, createSet, getWorkouts, cancelWorkout } from '$lib/api';
 	import type { Workout, Exercise, Set } from '$lib/types';
+	import { logger } from '$lib/logger';
 
 	export let data: { workouts: Workout[] };
 	let workouts = data.workouts;
@@ -114,6 +115,30 @@
 		}
 	}
 
+	async function handleDeleteWorkout(workoutId: number | undefined) {
+		if (!workoutId) {
+			error = 'Invalid workout ID';
+			return;
+		}
+
+		if (!confirm('Are you sure you want to delete this workout? This action cannot be undone.')) {
+			return;
+		}
+
+		try {
+			loading = true;
+			error = null;
+			await cancelWorkout(workoutId);
+			logger.info('workout', 'Workout deleted', { workoutId });
+			await refreshWorkouts();
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to delete workout';
+			logger.error('workout', 'Failed to delete workout', { error });
+		} finally {
+			loading = false;
+		}
+	}
+
 	function formatDateRelative(dateString: string): string {
 		const date = new Date(dateString);
 		const now = new Date();
@@ -178,7 +203,7 @@
 		@apply text-base opacity-90 mb-4;
 	}
 	.workout-actions {
-		@apply flex justify-end mt-2;
+		@apply flex justify-end gap-2 mt-2;
 	}
 	.view-details-btn {
 		@apply btn variant-filled-primary;
@@ -234,6 +259,14 @@
 					{/if}
 
 					<div class="workout-actions">
+						<button 
+							class="btn variant-filled-error"
+							on:click={() => handleDeleteWorkout(workout.id)}
+							disabled={loading}
+						>
+							<span class="text-xl mr-2">🗑️</span>
+							Delete
+						</button>
 						<a href="/workouts/{workout.id}" class="view-details-btn">
 							View Details →
 						</a>

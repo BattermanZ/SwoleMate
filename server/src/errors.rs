@@ -2,11 +2,15 @@ use actix_web::{HttpResponse, ResponseError};
 use log::error;
 use serde_json::json;
 use thiserror::Error;
+use sqlx;
 
 #[derive(Error, Debug)]
 pub enum AppError {
     #[error("Database error: {0}")]
     DatabaseError(#[from] sqlx::Error),
+
+    #[error("Internal error: {0}")]
+    InternalError(String),
 
     #[error("Not found: {0}")]
     NotFound(String),
@@ -20,6 +24,7 @@ impl ResponseError for AppError {
         // Log the error with structured context
         let error_type = match self {
             AppError::DatabaseError(_) => "database_error",
+            AppError::InternalError(_) => "internal_error",
             AppError::NotFound(_) => "not_found",
             AppError::BadRequest(_) => "bad_request",
         };
@@ -38,23 +43,22 @@ impl ResponseError for AppError {
         match self {
             AppError::DatabaseError(e) => {
                 HttpResponse::InternalServerError().json(json!({
-                    "error": "Database error occurred",
-                    "message": e.to_string(),
-                    "error_type": "database_error"
+                    "error": format!("Database error: {}", e)
                 }))
             }
-            AppError::NotFound(msg) => {
-                HttpResponse::NotFound().json(json!({
-                    "error": "Not found",
-                    "message": msg,
-                    "error_type": "not_found"
+            AppError::InternalError(msg) => {
+                HttpResponse::InternalServerError().json(json!({
+                    "error": msg
                 }))
             }
             AppError::BadRequest(msg) => {
                 HttpResponse::BadRequest().json(json!({
-                    "error": "Bad request",
-                    "message": msg,
-                    "error_type": "bad_request"
+                    "error": msg
+                }))
+            }
+            AppError::NotFound(msg) => {
+                HttpResponse::NotFound().json(json!({
+                    "error": msg
                 }))
             }
         }

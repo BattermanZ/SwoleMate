@@ -120,4 +120,45 @@ export async function cancelWorkout(id: number): Promise<void> {
         },
     });
     return handleResponse(response);
+}
+
+export interface BackupInfo {
+    filename: string;
+    created_at: string;
+    backup_type: 'Auto' | 'Manual';
+}
+
+export async function getBackups(): Promise<BackupInfo[]> {
+    const response = await fetch(`${API_BASE}/api/backups`);
+    return handleResponse(response);
+}
+
+export async function createBackup(): Promise<BackupInfo> {
+    const response = await fetch(`${API_BASE}/api/backups`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+    });
+    return handleResponse(response);
+}
+
+export async function restoreBackup(filename: string): Promise<void> {
+    const response = await fetch(`${API_BASE}/api/backups/${encodeURIComponent(filename)}/restore`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+    });
+    return handleResponse(response);
+}
+
+export async function deleteBackup(filename: string): Promise<void> {
+    const response = await fetch(`${API_BASE}/api/backups/${encodeURIComponent(filename)}`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+    });
+    return handleResponse(response);
 } 

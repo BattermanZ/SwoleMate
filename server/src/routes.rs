@@ -8,6 +8,7 @@ use std::io::Write;
 use log::error;
 use crate::models;
 use urlencoding;
+use crate::backup::{self, BackupType};
 
 #[derive(Debug, Deserialize)]
 pub struct CreateSetRequest {
@@ -230,6 +231,67 @@ pub async fn cancel_workout(
     })))
 }
 
+#[get("/api/backups")]
+pub async fn list_backups() -> Result<HttpResponse, AppError> {
+    let backups = backup::list_backups().await.map_err(|e| {
+        error!("Failed to list backups: {}", e);
+        AppError::InternalError(e.to_string())
+    })?;
+    Ok(HttpResponse::Ok().json(backups))
+}
+
+#[post("/api/backups")]
+pub async fn create_manual_backup() -> Result<HttpResponse, AppError> {
+    let backup_info = backup::create_backup(BackupType::Manual).await.map_err(|e| {
+        error!("Failed to create backup: {}", e);
+        AppError::InternalError(e.to_string())
+    })?;
+    Ok(HttpResponse::Created().json(backup_info))
+}
+
+#[post("/api/backups/{filename}/restore")]
+pub async fn restore_backup(
+    filename: web::Path<String>,
+    db: web::Data<Database>,
+) -> Result<HttpResponse, AppError> {
+    // Close the current pool
+    let current_pool = db.get_pool();
+    current_pool.close().await;
+    
+    // Perform the restore
+    backup::restore_backup(&filename).await.map_err(|e| {
+        error!("Failed to restore backup: {}", e);
+        AppError::InternalError(e.to_string())
+    })?;
+
+    // Create a new connection pool
+    let new_pool = sqlx::SqlitePool::connect(&std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "sqlite:database/swolemate.db".to_string()))
+        .await
+        .map_err(|e| {
+            error!("Failed to reconnect to database: {}", e);
+            AppError::DatabaseError(e)
+        })?;
+
+    // Update the database instance with the new pool
+    db.update_pool(new_pool);
+
+    Ok(HttpResponse::Ok().json(json!({
+        "message": "Backup restored successfully"
+    })))
+}
+
+#[delete("/api/backups/{filename}")]
+pub async fn delete_backup(filename: web::Path<String>) -> Result<HttpResponse, AppError> {
+    backup::delete_backup(&filename).await.map_err(|e| {
+        error!("Failed to delete backup: {}", e);
+        AppError::InternalError(e.to_string())
+    })?;
+    Ok(HttpResponse::Ok().json(json!({
+        "message": "Backup deleted successfully"
+    })))
+}
+
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(health_check)
         .service(create_workout)
@@ -244,5 +306,9 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(get_exercise_types)
         .service(get_last_exercise_data)
         .service(cancel_exercise)
-        .service(cancel_workout);
+        .service(cancel_workout)
+        .service(list_backups)
+        .service(create_manual_backup)
+        .service(restore_backup)
+        .service(delete_backup);
 } 

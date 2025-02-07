@@ -48,3 +48,6 @@ pnpm-debug.log*
 .svelte-kit
 /package 
 server/Cargo.lock
+
+# backups
+backups/

@@ -2,21 +2,35 @@ use sqlx::{Pool, Sqlite};
 use crate::{models::*, errors::AppError};
 use log::{debug, error, info};
 use chrono::{DateTime, Utc};
+use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
 pub struct Database {
-    pool: Pool<Sqlite>,
+    pool: Arc<Mutex<Pool<Sqlite>>>,
 }
 
 impl Database {
     pub fn new(pool: Pool<Sqlite>) -> Self {
         info!(target: "database", "Database connection pool initialized");
-        Self { pool }
+        Self { 
+            pool: Arc::new(Mutex::new(pool))
+        }
+    }
+
+    pub fn get_pool(&self) -> Pool<Sqlite> {
+        self.pool.lock().unwrap().clone()
+    }
+
+    pub fn update_pool(&self, new_pool: Pool<Sqlite>) {
+        let mut pool = self.pool.lock().unwrap();
+        *pool = new_pool;
+        info!(target: "database", "Database connection pool updated");
     }
 
     pub async fn create_workout(&self, req: &CreateWorkoutRequest) -> Result<i64, AppError> {
         debug!(target: "database", "Creating new workout for date: {}", req.date);
         
+        let pool = self.get_pool();
         let result = sqlx::query!(
             r#"
             INSERT INTO workouts (date, start_time, end_time, notes)
@@ -28,7 +42,7 @@ impl Database {
             req.start_time, // Initially set end_time to start_time
             req.notes,
         )
-        .fetch_one(&self.pool)
+        .fetch_one(&pool)
         .await
         .map_err(|e| {
             error!(target: "database", "Failed to create workout: {}", e);
@@ -42,6 +56,7 @@ impl Database {
     pub async fn update_workout_end_time(&self, id: i64, end_time: DateTime<Utc>, notes: Option<String>, feedback: Option<String>) -> Result<(), AppError> {
         debug!(target: "database", "Updating workout #{} end time to {} with feedback", id, end_time);
         
+        let pool = self.get_pool();
         sqlx::query!(
             r#"
             UPDATE workouts
@@ -53,7 +68,7 @@ impl Database {
             feedback,
             id,
         )
-        .execute(&self.pool)
+        .execute(&pool)
         .await
         .map_err(|e| {
             error!(target: "database", "Failed to update workout end time: {}", e);
@@ -68,6 +83,7 @@ impl Database {
         debug!(target: "database", "Creating exercise '{}' for workout #{}", 
             exercise.exercise_type, exercise.workout_id);
         
+        let pool = self.get_pool();
         let result = sqlx::query!(
             r#"
             INSERT INTO exercises (workout_id, exercise_type, start_time, end_time, notes)
@@ -80,7 +96,7 @@ impl Database {
             exercise.end_time,
             exercise.notes,
         )
-        .fetch_one(&self.pool)
+        .fetch_one(&pool)
         .await
         .map_err(|e| {
             error!(target: "database", "Failed to create exercise: {}", e);
@@ -94,6 +110,7 @@ impl Database {
     pub async fn update_exercise_end_time(&self, id: i64, end_time: DateTime<Utc>, notes: Option<String>) -> Result<(), AppError> {
         debug!(target: "database", "Updating exercise #{} end time to {} with notes", id, end_time);
         
+        let pool = self.get_pool();
         sqlx::query!(
             r#"
             UPDATE exercises
@@ -104,7 +121,7 @@ impl Database {
             notes,
             id,
         )
-        .execute(&self.pool)
+        .execute(&pool)
         .await
         .map_err(|e| {
             error!(target: "database", "Failed to update exercise end time: {}", e);
@@ -119,6 +136,7 @@ impl Database {
         debug!(target: "database", "Creating set for exercise #{}: {}x{}kg", 
             set.exercise_id, set.reps, set.weight);
         
+        let pool = self.get_pool();
         let result = sqlx::query!(
             r#"
             INSERT INTO sets (exercise_id, reps, weight, notes)
@@ -130,7 +148,7 @@ impl Database {
             set.weight,
             set.notes,
         )
-        .fetch_one(&self.pool)
+        .fetch_one(&pool)
         .await
         .map_err(|e| {
             error!(target: "database", "Failed to create set: {}", e);
@@ -144,6 +162,7 @@ impl Database {
     pub async fn get_workout(&self, id: i64) -> Result<Workout, AppError> {
         debug!(target: "database", "Fetching workout #{}", id);
         
+        let pool = self.get_pool();
         let result = sqlx::query!(
             r#"
             SELECT 
@@ -158,7 +177,7 @@ impl Database {
             "#,
             id
         )
-        .fetch_optional(&self.pool)
+        .fetch_optional(&pool)
         .await
         .map_err(|e| {
             error!(target: "database", "Failed to fetch workout: {}", e);
@@ -179,6 +198,7 @@ impl Database {
     pub async fn get_exercises_for_workout(&self, workout_id: i64) -> Result<Vec<Exercise>, AppError> {
         debug!(target: "database", "Fetching exercises for workout #{}", workout_id);
         
+        let pool = self.get_pool();
         let rows = sqlx::query!(
             r#"
             SELECT 
@@ -193,7 +213,7 @@ impl Database {
             "#,
             workout_id
         )
-        .fetch_all(&self.pool)
+        .fetch_all(&pool)
         .await
         .map_err(|e| {
             error!(target: "database", "Failed to fetch exercises: {}", e);
@@ -216,6 +236,7 @@ impl Database {
     pub async fn get_sets_for_exercise(&self, exercise_id: i64) -> Result<Vec<Set>, AppError> {
         debug!(target: "database", "Fetching sets for exercise #{}", exercise_id);
         
+        let pool = self.get_pool();
         let sets = sqlx::query_as!(
             Set,
             r#"
@@ -225,7 +246,7 @@ impl Database {
             "#,
             exercise_id
         )
-        .fetch_all(&self.pool)
+        .fetch_all(&pool)
         .await
         .map_err(|e| {
             error!(target: "database", "Failed to fetch sets: {}", e);
@@ -239,6 +260,7 @@ impl Database {
     pub async fn get_workouts(&self) -> Result<Vec<Workout>, AppError> {
         debug!(target: "database", "Fetching all workouts");
         
+        let pool = self.get_pool();
         let rows = sqlx::query!(
             r#"
             SELECT 
@@ -252,7 +274,7 @@ impl Database {
             ORDER BY date DESC
             "#
         )
-        .fetch_all(&self.pool)
+        .fetch_all(&pool)
         .await
         .map_err(|e| {
             error!(target: "database", "Failed to fetch workouts: {}", e);
@@ -275,6 +297,7 @@ impl Database {
     pub async fn get_unique_exercise_types(&self) -> Result<Vec<String>, AppError> {
         debug!(target: "database", "Fetching unique exercise types");
         
+        let pool = self.get_pool();
         let rows = sqlx::query!(
             r#"
             SELECT DISTINCT exercise_type
@@ -282,7 +305,7 @@ impl Database {
             ORDER BY exercise_type ASC
             "#
         )
-        .fetch_all(&self.pool)
+        .fetch_all(&pool)
         .await
         .map_err(|e| {
             error!(target: "database", "Failed to fetch exercise types: {}", e);
@@ -301,6 +324,7 @@ impl Database {
     pub async fn get_last_exercise_data(&self, exercise_type: &str) -> Result<Option<(Exercise, Vec<Set>)>, AppError> {
         debug!(target: "database", "Fetching last data for exercise type: {}", exercise_type);
         
+        let pool = self.get_pool();
         let exercise = sqlx::query_as!(
             Exercise,
             r#"
@@ -318,7 +342,7 @@ impl Database {
             "#,
             exercise_type
         )
-        .fetch_optional(&self.pool)
+        .fetch_optional(&pool)
         .await
         .map_err(|e| {
             error!(target: "database", "Failed to fetch last exercise data: {}", e);
@@ -336,6 +360,7 @@ impl Database {
     pub async fn delete_exercise(&self, id: i64) -> Result<(), AppError> {
         debug!(target: "database", "Deleting exercise #{}", id);
         
+        let pool = self.get_pool();
         // With CASCADE DELETE, we only need to delete the exercise
         // and all related sets will be automatically deleted
         sqlx::query!(
@@ -345,7 +370,7 @@ impl Database {
             "#,
             id,
         )
-        .execute(&self.pool)
+        .execute(&pool)
         .await
         .map_err(|e| {
             error!(target: "database", "Failed to delete exercise: {}", e);
@@ -359,6 +384,7 @@ impl Database {
     pub async fn delete_workout(&self, id: i64) -> Result<(), AppError> {
         debug!(target: "database", "Deleting workout #{}", id);
         
+        let pool = self.get_pool();
         // With CASCADE DELETE, we only need to delete the workout
         // and all related exercises and sets will be automatically deleted
         sqlx::query!(
@@ -368,7 +394,7 @@ impl Database {
             "#,
             id,
         )
-        .execute(&self.pool)
+        .execute(&pool)
         .await
         .map_err(|e| {
             error!(target: "database", "Failed to delete workout: {}", e);
