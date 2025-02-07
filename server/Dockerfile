@@ -50,6 +50,9 @@ RUN apt-get update && \
 # Copy only the binary
 COPY --from=builder /usr/src/app/target/release/swolemate-server ./
 
+# Copy database migrations
+COPY database/migrations database/migrations/
+
 # Create mount points
 RUN mkdir -p database logs backups
 

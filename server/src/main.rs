@@ -90,6 +90,21 @@ async fn main() -> std::io::Result<()> {
     let logs_dir = Path::new("logs");
     if !logs_dir.exists() {
         fs::create_dir(logs_dir)?;
+        info!("Created logs directory at: {}", logs_dir.display());
+    }
+
+    // Create backups directory if it doesn't exist
+    let backups_dir = Path::new("backups");
+    if !backups_dir.exists() {
+        fs::create_dir(backups_dir)?;
+        info!("Created backups directory at: {}", backups_dir.display());
+    }
+
+    // Create database directory if it doesn't exist
+    let db_path = Path::new("database");
+    if !db_path.exists() {
+        fs::create_dir_all(db_path)?;
+        info!("Created database directory at: {}", db_path.display());
     }
 
     // Setup file logging
@@ -159,29 +174,32 @@ async fn main() -> std::io::Result<()> {
     info!("Using database: {}", database_url);
 
     // Ensure database directory exists and create if needed
-    let db_path = Path::new("database");
-    if !db_path.exists() {
-        fs::create_dir_all(db_path)?;
-        info!("Created database directory at: {}", db_path.display());
-    }
-
-    // Extract SQLite file path from URL and create if needed
     let db_file = database_url.trim_start_matches("sqlite:");
     let db_file = Path::new(db_file);
     if !db_file.exists() {
         File::create(db_file)?;
         info!("Created new database file at: {}", db_file.display());
+    }
         
+    // Create a temporary connection to check schema
+    let temp_pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect(&database_url)
+        .await
+        .expect("Failed to create temporary database connection");
+        
+    // Check if tables exist
+    let tables_exist = sqlx::query("SELECT name FROM sqlite_master WHERE type='table' AND name='workouts'")
+        .fetch_optional(&temp_pool)
+        .await
+        .expect("Failed to check if tables exist")
+        .is_some();
+        
+    if !tables_exist {
+        info!("Tables don't exist, creating schema...");
         // Read and execute the schema file
         let schema = fs::read_to_string("database/migrations/20240207_initial_schema.sql")
             .expect("Failed to read schema file");
-        
-        // Create a temporary connection to run the schema
-        let temp_pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect(&database_url)
-            .await
-            .expect("Failed to create temporary database connection");
             
         sqlx::query(&schema)
             .execute(&temp_pool)
@@ -189,6 +207,8 @@ async fn main() -> std::io::Result<()> {
             .expect("Failed to create database schema");
             
         info!("Database schema created successfully");
+    } else {
+        info!("Database schema already exists");
     }
 
     // Setup database connection pool

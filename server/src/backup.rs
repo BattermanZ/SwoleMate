@@ -9,9 +9,18 @@ use std::io::{Read, Write};
 use zip::{ZipWriter, write::FileOptions};
 
 fn get_backup_dir() -> PathBuf {
-    std::env::current_dir()
+    let dir = std::env::current_dir()
         .expect("Failed to get current directory")
-        .join("backups")
+        .join("backups");
+    
+    // Ensure the directory exists
+    if !dir.exists() {
+        fs::create_dir_all(&dir)
+            .expect("Failed to create backups directory");
+        info!("Created backups directory at: {}", dir.display());
+    }
+    
+    dir
 }
 
 fn get_database_path() -> PathBuf {
@@ -134,6 +143,8 @@ pub async fn restore_backup(filename: &str) -> Result<(), std::io::Error> {
 pub async fn list_backups() -> Result<Vec<BackupInfo>, std::io::Error> {
     let backup_dir = get_backup_dir();
     if !backup_dir.exists() {
+        fs::create_dir_all(&backup_dir)?;
+        info!("Created backups directory at: {}", backup_dir.display());
         return Ok(Vec::new());
     }
 

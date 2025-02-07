@@ -20,6 +20,7 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./database:/app/database
+      - ./backups:/app/backups
       - ./server.env:/app/server.env
     networks:
       - cinelink_default
