@@ -17,17 +17,29 @@ mod errors;
 mod middleware;
 
 fn find_env_file() -> Option<String> {
+    let current_dir = std::env::current_dir().ok()?;
     let env_paths = [
-        "server.env",
-        "../server.env",
-        "../../server.env",
+        current_dir.join("server.env"),
+        current_dir.join("../server.env"),
+        current_dir.join("../../server.env"),
     ];
 
     for path in env_paths.iter() {
-        // Try to actually open the file to verify it exists and is readable
-        if let Ok(_) = File::open(path) {
-            info!("Found and verified server.env at: {}", path);
-            return Some(path.to_string());
+        // Try to actually open and read the file to verify it exists and is readable
+        if let Ok(contents) = std::fs::read_to_string(path) {
+            info!("Found and verified server.env at: {}", path.display());
+            // Manually parse and set environment variables
+            for line in contents.lines() {
+                if line.starts_with('#') || line.is_empty() {
+                    continue;
+                }
+                if let Some((key, value)) = line.split_once('=') {
+                    let key = key.trim();
+                    let value = value.trim().trim_matches('"');
+                    std::env::set_var(key, value);
+                }
+            }
+            return Some(path.to_string_lossy().into_owned());
         }
     }
     None
@@ -84,24 +96,14 @@ async fn main() -> std::io::Result<()> {
     
     match find_env_file() {
         Some(env_path) => {
-            // Set the environment variable for dotenv
-            env::set_var("DOTENV_PATH", &env_path);
-            match dotenv() {
-                Ok(_) => {
-                    info!("Environment loaded successfully from {}", env_path);
-                    // Verify some key environment variables were loaded
-                    info!("Verifying environment variables...");
-                    if let Ok(db_url) = env::var("DATABASE_URL") {
-                        info!("DATABASE_URL is set to: {}", db_url);
-                    }
-                    if let Ok(port) = env::var("SERVER_PORT") {
-                        info!("SERVER_PORT is set to: {}", port);
-                    }
-                },
-                Err(e) => {
-                    error!("Failed to load {}: {}", env_path, e);
-                    error!("Using default configuration");
-                }
+            info!("Environment loaded successfully from {}", env_path);
+            // Verify some key environment variables were loaded
+            info!("Verifying environment variables...");
+            if let Ok(db_url) = env::var("DATABASE_URL") {
+                info!("DATABASE_URL is set to: {}", db_url);
+            }
+            if let Ok(port) = env::var("SERVER_PORT") {
+                info!("SERVER_PORT is set to: {}", port);
             }
         }
         None => {
