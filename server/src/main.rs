@@ -124,6 +124,104 @@ CREATE INDEX IF NOT EXISTS idx_exercises_workout_id_composite ON exercises(worko
 CREATE INDEX IF NOT EXISTS idx_sets_exercise_id_composite ON sets(exercise_id, id);
 "#;
 
+// Define schema updates for future versions
+const SCHEMA_UPDATES: &[(&str, &str)] = &[
+    // ("2", "ALTER TABLE workouts ADD COLUMN new_column TEXT;"),
+    // Add more version updates here as needed
+];
+
+const SCHEMA_VERSION_TABLE: &str = r#"
+CREATE TABLE IF NOT EXISTS schema_version (
+    version INTEGER PRIMARY KEY,
+    applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+"#;
+
+async fn setup_schema(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<(), sqlx::Error> {
+    // Create schema_version table
+    sqlx::query(SCHEMA_VERSION_TABLE)
+        .execute(pool)
+        .await?;
+
+    // Check if this is a pre-v1 database by looking for schema_version
+    let has_version_table = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='schema_version'"#
+    )
+    .fetch_one(pool)
+    .await? > 0;
+
+    // For pre-v1 databases or new databases, we need to verify the table structure
+    let needs_schema_update = if !has_version_table {
+        true
+    } else {
+        // Check if version 1 is recorded
+        let version_exists = sqlx::query_scalar!(
+            r#"SELECT COUNT(*) FROM schema_version WHERE version = 1"#
+        )
+        .fetch_one(pool)
+        .await? == 0;
+        version_exists
+    };
+
+    if needs_schema_update {
+        // For pre-v1 databases, we need to verify each table's structure
+        info!("Checking database structure for potential updates...");
+
+        // Backup existing data if tables exist
+        let has_workouts = sqlx::query_scalar!(
+            r#"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='workouts'"#
+        )
+        .fetch_one(pool)
+        .await? > 0;
+
+        if has_workouts {
+            info!("Found existing workout data, creating backup before schema update");
+            backup::create_backup(backup::BackupType::Auto).await
+                .map_err(|e| sqlx::Error::Protocol(format!("Failed to create backup: {}", e)))?;
+        }
+
+        // Apply initial schema
+        info!("Applying initial schema...");
+        sqlx::query(INITIAL_SCHEMA)
+            .execute(pool)
+            .await?;
+
+        // Insert version 1 record
+        sqlx::query("INSERT OR IGNORE INTO schema_version (version) VALUES (1)")
+            .execute(pool)
+            .await?;
+        info!("Initial schema (version 1) applied successfully");
+    }
+
+    // Apply any pending updates
+    for (version, update_sql) in SCHEMA_UPDATES {
+        let version: i64 = version.parse().unwrap();
+        let version_exists = sqlx::query_scalar!(
+            r#"SELECT COUNT(*) FROM schema_version WHERE version = ?"#,
+            version
+        )
+        .fetch_one(pool)
+        .await? > 0;
+
+        if !version_exists {
+            info!("Applying schema update version {}", version);
+            sqlx::query(update_sql)
+                .execute(pool)
+                .await?;
+            
+            sqlx::query("INSERT INTO schema_version (version) VALUES (?)")
+                .bind(version)
+                .execute(pool)
+                .await?;
+            
+            info!("Successfully applied schema update version {}", version);
+        }
+    }
+
+    info!("Database schema is up to date");
+    Ok(())
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     // Create logs directory if it doesn't exist
@@ -228,25 +326,13 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Failed to create temporary database connection");
         
-    // Check if tables exist
-    let tables_exist = sqlx::query("SELECT name FROM sqlite_master WHERE type='table' AND name='workouts'")
-        .fetch_optional(&temp_pool)
-        .await
-        .expect("Failed to check if tables exist")
-        .is_some();
-        
-    if !tables_exist {
-        info!("Tables don't exist, creating schema...");
-        
-        sqlx::query(INITIAL_SCHEMA)
-            .execute(&temp_pool)
-            .await
-            .expect("Failed to create database schema");
-            
-        info!("Database schema created successfully");
-    } else {
-        info!("Database schema already exists");
+    // Setup and update schema
+    if let Err(e) = setup_schema(&temp_pool).await {
+        error!("Failed to setup/update database schema: {}", e);
+        panic!("Database schema setup failed");
     }
+
+    info!("Database schema is up to date");
 
     // Setup database connection pool
     let pool = SqlitePoolOptions::new()
