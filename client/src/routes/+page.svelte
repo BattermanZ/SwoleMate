@@ -7,6 +7,61 @@
 	import { logger } from '$lib/logger';
 	import { onMount } from 'svelte';
 
+	// Workout session persistence
+	function saveCurrentWorkout(workoutId: number | null) {
+		if (workoutId) {
+			localStorage.setItem('currentWorkoutId', workoutId.toString());
+		} else {
+			localStorage.removeItem('currentWorkoutId');
+		}
+	}
+
+	async function loadCurrentWorkout() {
+		const savedWorkoutId = localStorage.getItem('currentWorkoutId');
+		if (savedWorkoutId) {
+			try {
+				const workoutId = parseInt(savedWorkoutId);
+				const details = await getWorkout(workoutId);
+				currentWorkout = details.workout;
+				
+				// Map the exercises to our client format
+				exercises = details.exercises.map(e => ({
+					id: e.exercise.id,
+					name: e.exercise.exercise_type,
+					sets: e.sets.map(s => ({
+						id: s.id,
+						reps: s.reps,
+						weight: s.weight,
+						isEditing: false,
+						isConfirmed: true
+					})),
+					showSetForm: false,
+					notes: e.exercise.notes,
+					isEditingNotes: e.exercise.end_time === e.exercise.start_time,
+					end_time: e.exercise.end_time,
+					isFinished: e.exercise.end_time !== e.exercise.start_time
+				}));
+
+				// Set the current exercise to the last unfinished one
+				const lastUnfinished = exercises.find(e => !e.isFinished);
+				if (lastUnfinished) {
+					currentExercise = {
+						id: lastUnfinished.id,
+						workout_id: workoutId,
+						exercise_type: lastUnfinished.name,
+						start_time: details.exercises.find(e => e.exercise.id === lastUnfinished.id)?.exercise.start_time || new Date().toISOString(),
+						end_time: lastUnfinished.end_time || new Date().toISOString(),
+						notes: lastUnfinished.notes
+					};
+				}
+			} catch (e) {
+				logger.error('workout', 'Failed to load saved workout', { error: e });
+				// If we fail to load the workout, clear the saved ID
+				saveCurrentWorkout(null);
+			}
+		}
+	}
+
 	let currentWorkout: Workout | null = null;
 	let currentExercise: Exercise | null = null;
 	let exercises: Array<{
@@ -57,7 +112,13 @@
 
 	onMount(async () => {
 		try {
+			// Load exercise types first
 			exerciseTypes = await getExerciseTypes();
+			
+			// Try to load current workout
+			await loadCurrentWorkout();
+			
+			// Load recent workouts
 			const workouts = (await getWorkouts()).slice(0, 3);
 			
 			// Fetch complete data for each workout
@@ -120,6 +181,8 @@
 				end_time: now, // Will be updated when workout ends
 				notes: "Today's workout"
 			};
+			// Save the workout ID
+			saveCurrentWorkout(result.id);
 			logger.info('workout', 'Workout session started', { workoutId: result.id });
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to start workout';
@@ -136,6 +199,24 @@
 		try {
 			loading = true;
 			error = null;
+
+			// If there's a current exercise, end it
+			if (currentExercise?.id) {
+				const now = new Date().toISOString();
+				const currentExerciseIndex = exercises.findIndex(e => e.id === currentExercise?.id);
+				if (currentExerciseIndex !== -1) {
+					const exerciseNotes = exercises[currentExerciseIndex].notes;
+					await endExercise(currentExercise.id, { 
+						end_time: now,
+						notes: exerciseNotes  // Preserve the notes when ending the exercise
+					});
+					logger.info('workout', 'Previous exercise ended', { 
+						exerciseId: currentExercise.id,
+						endTime: now,
+						notes: exerciseNotes
+					});
+				}
+			}
 
 			// Get last exercise data
 			const lastData = await getLastExerciseData(newExerciseName);
@@ -170,12 +251,12 @@
 				showSetForm: true,
 				isEditingNotes: true,
 				notes: undefined,
-				isFinished: false,
 				lastExerciseData: lastData ? {
 					date: lastData.exercise.start_time,
 					notes: lastData.exercise.notes,
 					sets: lastData.sets.map(s => ({ reps: s.reps, weight: s.weight }))
-				} : undefined
+				} : undefined,
+				isFinished: false
 			}];
 			newExerciseName = '';
 			showExerciseForm = false;
@@ -183,40 +264,6 @@
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to add exercise';
 			logger.error('workout', 'Failed to add exercise', { error });
-		} finally {
-			loading = false;
-		}
-	}
-
-	async function finishExercise(exerciseIndex: number) {
-		const exercise = exercises[exerciseIndex];
-		if (!exercise.id) return;
-
-		try {
-			loading = true;
-			error = null;
-			const now = new Date().toISOString();
-			
-			await endExercise(exercise.id, { 
-				end_time: now,
-				notes: exercise.notes
-			});
-			
-			exercises[exerciseIndex].isFinished = true;
-			exercises = [...exercises];
-			
-			if (currentExercise?.id === exercise.id) {
-				currentExercise = null;
-			}
-			
-			logger.info('workout', 'Exercise finished', { 
-				exerciseId: exercise.id,
-				endTime: now,
-				notes: exercise.notes
-			});
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to finish exercise';
-			logger.error('workout', 'Failed to finish exercise', { error });
 		} finally {
 			loading = false;
 		}
@@ -285,7 +332,7 @@
 
 		try {
 			const updateRequest: UpdateExerciseRequest = {
-				end_time: exercise.isFinished ? (exercise.end_time || new Date().toISOString()) : new Date().toISOString(),
+				end_time: exercise.end_time || new Date().toISOString(),
 				notes: exercise.notes
 			};
 			await endExercise(exercise.id, updateRequest);
@@ -332,41 +379,31 @@
 			loading = true;
 			error = null;
 			const now = new Date().toISOString();
-
-			// End all unfinished exercises
-			const unfinishedExercises = exercises.filter(e => !e.isFinished && e.id);
-			for (const exercise of unfinishedExercises) {
-				await endExercise(exercise.id!, { 
-					end_time: now,
-					notes: exercise.notes
-				});
-				logger.info('workout', 'Unfinished exercise ended', { 
-					exerciseId: exercise.id,
-					endTime: now,
-					notes: exercise.notes
-				});
-			}
-
-			// End workout with feedback
-			await endWorkout(currentWorkout.id, { 
+			const workoutId = currentWorkout.id; // Store the ID before clearing
+			
+			await endWorkout(currentWorkout.id, {
 				end_time: now,
-				notes: sessionNotes,
-				feedback: sessionFeedback
-			});
-			logger.info('workout', 'Ending workout session', { 
-				workoutId: currentWorkout.id,
-				endTime: now,
+				notes: sessionNotes || undefined,
 				feedback: sessionFeedback
 			});
 
-			// Reset state
+			// Clear the saved workout
+			saveCurrentWorkout(null);
+			
 			currentWorkout = null;
 			currentExercise = null;
 			exercises = [];
-			showExerciseForm = false;
 			showFeedbackModal = false;
 			sessionNotes = '';
 			sessionFeedback = null;
+
+			logger.info('workout', 'Workout completed', { 
+				workoutId, // Use the stored ID
+				feedback: sessionFeedback
+			});
+
+			// Refresh recent workouts to show the completed one
+			await refreshRecentWorkouts();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to end workout';
 			logger.error('workout', 'Failed to end workout', { error });
@@ -463,6 +500,10 @@
 			error = null;
 			const workoutId = currentWorkout.id;
 			await cancelWorkout(workoutId);
+			
+			// Clear the saved workout
+			saveCurrentWorkout(null);
+			
 			currentWorkout = null;
 			currentExercise = null;
 			exercises = [];
@@ -614,22 +655,12 @@
 								<div class="flex flex-col gap-3 sm:gap-5">
 									<div class="flex justify-between items-center">
 										<span class="text-lg sm:text-xl font-bold">{exercise.name}</span>
-										<div class="flex gap-2">
-											{#if !exercise.isFinished}
-												<button 
-													class="btn btn-sm variant-filled-success"
-													on:click={() => finishExercise(exerciseIndex)}
-												>
-													<span class="text-sm">✅</span>
-												</button>
-											{/if}
-											<button 
-												class="btn btn-sm variant-soft-error"
-												on:click={() => cancelExerciseAndRefresh(exerciseIndex)}
-											>
-												<span class="text-sm">❌</span>
-											</button>
-										</div>
+										<button 
+											class="btn btn-sm variant-soft-error"
+											on:click={() => cancelExerciseAndRefresh(exerciseIndex)}
+										>
+											<span class="text-sm">❌</span>
+										</button>
 									</div>
 									{#if exercise.lastExerciseData}
 										<div class="last-exercise-info">
