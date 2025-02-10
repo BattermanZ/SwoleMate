@@ -315,11 +315,37 @@
                     <h3 class="h3">Workout Frequency</h3>
                     <p class="text-4xl font-bold">{workoutStats.workout_frequency.average_per_week}</p>
                     <p class="text-sm">workouts per week</p>
+                    {#if workoutStats.workout_frequency.trend !== undefined}
+                        <div class="mt-2 flex items-center gap-1">
+                            {#if workoutStats.workout_frequency.trend > 0}
+                                <span class="text-green-500">↑</span>
+                                <span class="text-sm text-green-500">+{workoutStats.workout_frequency.trend} last 4 weeks</span>
+                            {:else if workoutStats.workout_frequency.trend < 0}
+                                <span class="text-red-500">↓</span>
+                                <span class="text-sm text-red-500">{workoutStats.workout_frequency.trend} last 4 weeks</span>
+                            {:else}
+                                <span class="text-sm">No change in last 4 weeks</span>
+                            {/if}
+                        </div>
+                    {/if}
                 </div>
                 <div class="card variant-soft p-4">
                     <h3 class="h3">Average Duration</h3>
                     <p class="text-4xl font-bold">{Math.round(workoutStats.average_duration_minutes)}</p>
                     <p class="text-sm">minutes</p>
+                    {#if workoutStats.duration_trend !== undefined}
+                        <div class="mt-2 flex items-center gap-1">
+                            {#if workoutStats.duration_trend > 0}
+                                <span class="text-green-500">↑</span>
+                                <span class="text-sm text-green-500">+{Math.round(workoutStats.duration_trend)} min last 4 weeks</span>
+                            {:else if workoutStats.duration_trend < 0}
+                                <span class="text-red-500">↓</span>
+                                <span class="text-sm text-red-500">{Math.round(workoutStats.duration_trend)} min last 4 weeks</span>
+                            {:else}
+                                <span class="text-sm">No change in last 4 weeks</span>
+                            {/if}
+                        </div>
+                    {/if}
                 </div>
                 <div class="card variant-soft p-4">
                     <h3 class="h3">Total Workouts</h3>

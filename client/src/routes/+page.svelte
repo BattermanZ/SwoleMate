@@ -31,6 +31,7 @@
 				weight: number;
 			}>;
 		};
+		isFinished: boolean;
 	}> = [];
 	let loading = false;
 	let error: string | null = null;
@@ -136,24 +137,6 @@
 			loading = true;
 			error = null;
 
-			// If there's a current exercise, end it
-			if (currentExercise?.id) {
-				const now = new Date().toISOString();
-				const currentExerciseIndex = exercises.findIndex(e => e.id === currentExercise?.id);
-				if (currentExerciseIndex !== -1) {
-					const exerciseNotes = exercises[currentExerciseIndex].notes;
-					await endExercise(currentExercise.id, { 
-						end_time: now,
-						notes: exerciseNotes  // Preserve the notes when ending the exercise
-					});
-					logger.info('workout', 'Previous exercise ended', { 
-						exerciseId: currentExercise.id,
-						endTime: now,
-						notes: exerciseNotes
-					});
-				}
-			}
-
 			// Get last exercise data
 			const lastData = await getLastExerciseData(newExerciseName);
 
@@ -187,6 +170,7 @@
 				showSetForm: true,
 				isEditingNotes: true,
 				notes: undefined,
+				isFinished: false,
 				lastExerciseData: lastData ? {
 					date: lastData.exercise.start_time,
 					notes: lastData.exercise.notes,
@@ -199,6 +183,40 @@
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to add exercise';
 			logger.error('workout', 'Failed to add exercise', { error });
+		} finally {
+			loading = false;
+		}
+	}
+
+	async function finishExercise(exerciseIndex: number) {
+		const exercise = exercises[exerciseIndex];
+		if (!exercise.id) return;
+
+		try {
+			loading = true;
+			error = null;
+			const now = new Date().toISOString();
+			
+			await endExercise(exercise.id, { 
+				end_time: now,
+				notes: exercise.notes
+			});
+			
+			exercises[exerciseIndex].isFinished = true;
+			exercises = [...exercises];
+			
+			if (currentExercise?.id === exercise.id) {
+				currentExercise = null;
+			}
+			
+			logger.info('workout', 'Exercise finished', { 
+				exerciseId: exercise.id,
+				endTime: now,
+				notes: exercise.notes
+			});
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to finish exercise';
+			logger.error('workout', 'Failed to finish exercise', { error });
 		} finally {
 			loading = false;
 		}
@@ -267,7 +285,7 @@
 
 		try {
 			const updateRequest: UpdateExerciseRequest = {
-				end_time: exercise.end_time || new Date().toISOString(),
+				end_time: exercise.isFinished ? (exercise.end_time || new Date().toISOString()) : exercise.start_time,
 				notes: exercise.notes
 			};
 			await endExercise(exercise.id, updateRequest);
@@ -315,21 +333,18 @@
 			error = null;
 			const now = new Date().toISOString();
 
-			// End current exercise if exists, preserving its notes
-			if (currentExercise?.id) {
-				const currentExerciseIndex = exercises.findIndex(e => e.id === currentExercise?.id);
-				if (currentExerciseIndex !== -1) {
-					const exerciseNotes = exercises[currentExerciseIndex].notes;
-					await endExercise(currentExercise.id, { 
-						end_time: now,
-						notes: exerciseNotes  // Preserve the notes when ending the exercise
-					});
-					logger.info('workout', 'Final exercise ended', { 
-						exerciseId: currentExercise.id,
-						endTime: now,
-						notes: exerciseNotes
-					});
-				}
+			// End all unfinished exercises
+			const unfinishedExercises = exercises.filter(e => !e.isFinished && e.id);
+			for (const exercise of unfinishedExercises) {
+				await endExercise(exercise.id!, { 
+					end_time: now,
+					notes: exercise.notes
+				});
+				logger.info('workout', 'Unfinished exercise ended', { 
+					exerciseId: exercise.id,
+					endTime: now,
+					notes: exercise.notes
+				});
 			}
 
 			// End workout with feedback
@@ -599,12 +614,22 @@
 								<div class="flex flex-col gap-3 sm:gap-5">
 									<div class="flex justify-between items-center">
 										<span class="text-lg sm:text-xl font-bold">{exercise.name}</span>
-										<button 
-											class="btn btn-sm variant-soft-error"
-											on:click={() => cancelExerciseAndRefresh(exerciseIndex)}
-										>
-											<span class="text-sm">❌</span>
-										</button>
+										<div class="flex gap-2">
+											{#if !exercise.isFinished}
+												<button 
+													class="btn btn-sm variant-filled-success"
+													on:click={() => finishExercise(exerciseIndex)}
+												>
+													<span class="text-sm">✅</span>
+												</button>
+											{/if}
+											<button 
+												class="btn btn-sm variant-soft-error"
+												on:click={() => cancelExerciseAndRefresh(exerciseIndex)}
+											>
+												<span class="text-sm">❌</span>
+											</button>
+										</div>
 									</div>
 									{#if exercise.lastExerciseData}
 										<div class="last-exercise-info">

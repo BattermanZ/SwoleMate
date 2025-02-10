@@ -454,6 +454,7 @@ impl Database {
                     strftime('%H', start_time) as hour,
                     ROUND((julianday(end_time) - julianday(start_time)) * 24 * 60) as duration,
                     date(start_time) as workout_date,
+                    strftime('%Y-%W', start_time) as week,
                     feedback
                 FROM workouts
             ),
@@ -472,9 +473,42 @@ impl Database {
                 LIMIT 3
             ),
             weekly_counts AS (
-                SELECT COUNT(*) as workouts_per_week
+                SELECT week, COUNT(*) as workouts_per_week
                 FROM workout_times
-                GROUP BY strftime('%Y-%W', workout_date)
+                GROUP BY week
+            ),
+            avg_weekly AS (
+                SELECT ROUND(AVG(workouts_per_week), 1) as avg_workouts_per_week
+                FROM weekly_counts
+            ),
+            last_four_complete_weeks AS (
+                SELECT DISTINCT week
+                FROM workout_times
+                WHERE week < strftime('%Y-%W', 'now')
+                ORDER BY week DESC
+                LIMIT 4
+            ),
+            recent_weekly_avg AS (
+                SELECT COALESCE(
+                    ROUND(CAST(COUNT(*) AS FLOAT) / 
+                        NULLIF((
+                            SELECT COUNT(DISTINCT week) 
+                            FROM workout_times 
+                            WHERE week IN (SELECT week FROM last_four_complete_weeks)
+                        ), 0), 
+                    1),
+                    0
+                ) as recent_avg
+                FROM workout_times
+                WHERE week IN (SELECT week FROM last_four_complete_weeks)
+            ),
+            recent_duration_avg AS (
+                SELECT COALESCE(
+                    ROUND(AVG(duration), 1),
+                    0
+                ) as recent_avg
+                FROM workout_times
+                WHERE week IN (SELECT week FROM last_four_complete_weeks)
             ),
             duration_ranges AS (
                 SELECT 
@@ -496,13 +530,35 @@ impl Database {
             )
             SELECT 
                 COUNT(*) as total_workouts,
-                AVG(duration) as avg_duration,
+                ROUND(AVG(duration), 1) as avg_duration,
                 (SELECT good_workouts FROM feedback_counts) as good_workouts,
                 (SELECT neutral_workouts FROM feedback_counts) as neutral_workouts,
                 (SELECT bad_workouts FROM feedback_counts) as bad_workouts,
                 (SELECT GROUP_CONCAT(hour || ':' || count) FROM popular_hours) as popular_hours,
-                (SELECT ROUND(AVG(workouts_per_week), 1) FROM weekly_counts) as avg_workouts_per_week,
-                (SELECT GROUP_CONCAT(duration_range || ':' || count) FROM duration_ranges) as duration_distribution
+                (SELECT avg_workouts_per_week FROM avg_weekly) as avg_workouts_per_week,
+                (SELECT GROUP_CONCAT(duration_range || ':' || count) FROM duration_ranges) as duration_distribution,
+                COALESCE(
+                    (
+                        SELECT ROUND(
+                            recent_avg - avg_workouts_per_week,
+                            1
+                        )
+                        FROM recent_weekly_avg, avg_weekly
+                        WHERE recent_avg IS NOT NULL
+                    ),
+                    0
+                ) as frequency_trend,
+                COALESCE(
+                    (
+                        SELECT ROUND(
+                            recent_avg - AVG(duration),
+                            1
+                        )
+                        FROM recent_duration_avg, workout_times
+                        WHERE recent_avg IS NOT NULL
+                    ),
+                    0
+                ) as duration_trend
             FROM workout_times
             "#
         )
@@ -522,8 +578,10 @@ impl Database {
                 "bad": stats.bad_workouts
             },
             "workout_frequency": {
-                "average_per_week": stats.avg_workouts_per_week
+                "average_per_week": stats.avg_workouts_per_week,
+                "trend": stats.frequency_trend
             },
+            "duration_trend": stats.duration_trend,
             "popular_hours": stats.popular_hours.map(|h| {
                 h.split(',')
                     .filter_map(|pair| {

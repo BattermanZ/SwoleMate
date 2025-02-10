@@ -72,7 +72,9 @@ export interface WorkoutStats {
     };
     workout_frequency: {
         average_per_week: number;
+        trend?: number;  // Change from last 4 weeks
     };
+    duration_trend?: number;  // Change from last 4 weeks
     popular_hours: Array<{
         hour: string;
         count: number;
