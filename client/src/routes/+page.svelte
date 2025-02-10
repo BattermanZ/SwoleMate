@@ -285,7 +285,7 @@
 
 		try {
 			const updateRequest: UpdateExerciseRequest = {
-				end_time: exercise.isFinished ? (exercise.end_time || new Date().toISOString()) : exercise.start_time,
+				end_time: exercise.isFinished ? (exercise.end_time || new Date().toISOString()) : new Date().toISOString(),
 				notes: exercise.notes
 			};
 			await endExercise(exercise.id, updateRequest);
