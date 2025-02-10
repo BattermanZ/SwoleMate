@@ -139,11 +139,19 @@
 			// If there's a current exercise, end it
 			if (currentExercise?.id) {
 				const now = new Date().toISOString();
-				await endExercise(currentExercise.id, { end_time: now });
-				logger.info('workout', 'Previous exercise ended', { 
-					exerciseId: currentExercise.id,
-					endTime: now
-				});
+				const currentExerciseIndex = exercises.findIndex(e => e.id === currentExercise?.id);
+				if (currentExerciseIndex !== -1) {
+					const exerciseNotes = exercises[currentExerciseIndex].notes;
+					await endExercise(currentExercise.id, { 
+						end_time: now,
+						notes: exerciseNotes  // Preserve the notes when ending the exercise
+					});
+					logger.info('workout', 'Previous exercise ended', { 
+						exerciseId: currentExercise.id,
+						endTime: now,
+						notes: exerciseNotes
+					});
+				}
 			}
 
 			// Get last exercise data
