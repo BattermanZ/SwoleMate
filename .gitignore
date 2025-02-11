@@ -50,4 +50,4 @@ pnpm-debug.log*
 server/Cargo.lock
 
 # backups
-backups/
+server/backups/
