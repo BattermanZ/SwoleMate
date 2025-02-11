@@ -100,6 +100,8 @@ pub async fn create_backup(backup_type: BackupType) -> Result<BackupInfo, std::i
 pub async fn restore_backup(filename: &str) -> Result<(), std::io::Error> {
     let backup_path = get_backup_dir().join(filename);
     let db_path = get_database_path();
+    let wal_path = db_path.with_extension("db-wal");
+    let shm_path = db_path.with_extension("db-shm");
 
     // Verify backup exists
     if !backup_path.exists() {
@@ -109,32 +111,80 @@ pub async fn restore_backup(filename: &str) -> Result<(), std::io::Error> {
         ));
     }
 
-    // Create a temporary backup of the current database
-    let temp_backup = format!("database/swolemate_temp_{}.db", Utc::now().timestamp());
-    tokio_fs::copy(&db_path, &temp_backup).await?;
+    // Create a temporary backup of the current database and its WAL files
+    let timestamp = Utc::now().timestamp();
+    let temp_dir = std::env::current_dir()?.join("database").join("temp");
+    if !temp_dir.exists() {
+        fs::create_dir_all(&temp_dir)?;
+    }
+
+    let temp_backup = temp_dir.join(format!("swolemate_temp_{}.db", timestamp));
+    let temp_wal = temp_dir.join(format!("swolemate_temp_{}.db-wal", timestamp));
+    let temp_shm = temp_dir.join(format!("swolemate_temp_{}.db-shm", timestamp));
+    let temp_new_db = temp_dir.join(format!("swolemate_new_{}.db", timestamp));
+
+    // Backup current files if they exist
+    if db_path.exists() {
+        tokio_fs::copy(&db_path, &temp_backup).await?;
+    }
+    if wal_path.exists() {
+        tokio_fs::copy(&wal_path, &temp_wal).await?;
+    }
+    if shm_path.exists() {
+        tokio_fs::copy(&shm_path, &temp_shm).await?;
+    }
 
     // Extract and restore the backup
     let file = fs::File::open(&backup_path)?;
     let mut archive = zip::ZipArchive::new(file)?;
 
-    // Extract database file
+    // Extract database file to a temporary location first
     let mut db_file = archive.by_name("database.db")?;
     let mut db_content = Vec::new();
     db_file.read_to_end(&mut db_content)?;
 
-    // Write the database file
-    match fs::write(&db_path, db_content) {
+    // Write to temporary file first
+    fs::write(&temp_new_db, db_content)?;
+
+    // Remove existing WAL and SHM files to ensure clean state
+    if wal_path.exists() {
+        tokio_fs::remove_file(&wal_path).await?;
+    }
+    if shm_path.exists() {
+        tokio_fs::remove_file(&shm_path).await?;
+    }
+
+    // Now safely move the new database file into place
+    match fs::rename(&temp_new_db, &db_path) {
         Ok(_) => {
-            // If successful, remove the temporary backup
-            tokio_fs::remove_file(&temp_backup).await?;
+            // If successful, clean up all temporary files
+            let _ = tokio_fs::remove_file(&temp_backup).await;
+            let _ = tokio_fs::remove_file(&temp_wal).await;
+            let _ = tokio_fs::remove_file(&temp_shm).await;
+            let _ = tokio_fs::remove_dir(&temp_dir).await;
             info!("Successfully restored backup: {}", filename);
             Ok(())
         }
         Err(e) => {
-            // If failed, try to restore the temporary backup
-            tokio_fs::copy(&temp_backup, &db_path).await?;
-            tokio_fs::remove_file(&temp_backup).await?;
-            error!("Failed to restore backup: {}", e);
+            error!("Failed to move new database file: {}", e);
+            // If failed, try to restore the temporary backup and WAL files
+            if temp_backup.exists() {
+                let _ = tokio_fs::copy(&temp_backup, &db_path).await;
+            }
+            if temp_wal.exists() {
+                let _ = tokio_fs::copy(&temp_wal, &wal_path).await;
+            }
+            if temp_shm.exists() {
+                let _ = tokio_fs::copy(&temp_shm, &shm_path).await;
+            }
+
+            // Clean up temporary files
+            let _ = tokio_fs::remove_file(&temp_backup).await;
+            let _ = tokio_fs::remove_file(&temp_wal).await;
+            let _ = tokio_fs::remove_file(&temp_shm).await;
+            let _ = tokio_fs::remove_file(&temp_new_db).await;
+            let _ = tokio_fs::remove_dir(&temp_dir).await;
+
             Err(e)
         }
     }

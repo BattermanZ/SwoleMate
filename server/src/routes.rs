@@ -259,9 +259,12 @@ pub async fn restore_backup(
     filename: web::Path<String>,
     db: web::Data<Database>,
 ) -> Result<HttpResponse, AppError> {
-    // Close the current pool
+    // Close all existing connections in the pool
     let current_pool = db.get_pool();
     current_pool.close().await;
+    
+    // Wait for all connections to be dropped
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     
     // Perform the restore
     backup::restore_backup(&filename).await.map_err(|e| {
@@ -269,21 +272,68 @@ pub async fn restore_backup(
         AppError::InternalError(e.to_string())
     })?;
 
-    // Create a new connection pool
-    let new_pool = sqlx::SqlitePool::connect(&std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "sqlite:database/swolemate.db".to_string()))
-        .await
-        .map_err(|e| {
-            error!("Failed to reconnect to database: {}", e);
-            AppError::DatabaseError(e)
-        })?;
+    // Wait for filesystem operations to complete
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
-    // Update the database instance with the new pool
-    db.update_pool(new_pool);
+    // Create a new connection pool with WAL mode disabled temporarily
+    let db_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "sqlite:database/swolemate.db".to_string());
+    
+    // Try to connect multiple times with increasing delays
+    let mut retry_count = 0;
+    let max_retries = 3;
+    let mut last_error = None;
 
-    Ok(HttpResponse::Ok().json(json!({
-        "message": "Backup restored successfully"
-    })))
+    while retry_count < max_retries {
+        match sqlx::SqlitePool::connect(&db_url).await {
+            Ok(new_pool) => {
+                // Disable WAL mode temporarily to ensure database consistency
+                if let Err(e) = sqlx::query("PRAGMA journal_mode = DELETE")
+                    .execute(&new_pool)
+                    .await
+                {
+                    error!("Failed to disable WAL mode: {}", e);
+                    new_pool.close().await;
+                    retry_count += 1;
+                    tokio::time::sleep(std::time::Duration::from_millis(100 * (retry_count as u64))).await;
+                    continue;
+                }
+
+                // Re-enable WAL mode and other optimizations
+                for pragma in [
+                    "PRAGMA journal_mode = WAL",
+                    "PRAGMA synchronous = NORMAL",
+                    "PRAGMA foreign_keys = ON",
+                    "PRAGMA busy_timeout = 5000",
+                ] {
+                    if let Err(e) = sqlx::query(pragma)
+                        .execute(&new_pool)
+                        .await
+                    {
+                        error!("Failed to set pragma {}: {}", pragma, e);
+                        new_pool.close().await;
+                        retry_count += 1;
+                        tokio::time::sleep(std::time::Duration::from_millis(100 * (retry_count as u64))).await;
+                        continue;
+                    }
+                }
+
+                // Update the database instance with the new pool
+                db.update_pool(new_pool);
+                return Ok(HttpResponse::Ok().json(json!({
+                    "message": "Backup restored successfully"
+                })));
+            }
+            Err(e) => {
+                last_error = Some(e);
+                retry_count += 1;
+                tokio::time::sleep(std::time::Duration::from_millis(100 * (retry_count as u64))).await;
+            }
+        }
+    }
+
+    // If we get here, all retries failed
+    Err(AppError::DatabaseError(last_error.unwrap()))
 }
 
 #[delete("/api/backups/{filename}")]
