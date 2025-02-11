@@ -1,12 +1,15 @@
 use chrono::{DateTime, Utc};
 use log::{error, info};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use tokio::fs as tokio_fs;
 use serde::{Serialize, Deserialize};
 use std::fmt;
-use std::io::{Read, Write};
-use zip::{ZipWriter, write::FileOptions};
+use std::io::Read;
+use flate2::Compression;
+use flate2::write::GzEncoder;
+use flate2::read::GzDecoder;
+use tar::{Archive, Builder};
 
 fn get_backup_dir() -> PathBuf {
     let dir = std::env::current_dir()
@@ -60,7 +63,7 @@ pub async fn create_backup(backup_type: BackupType) -> Result<BackupInfo, std::i
 
     let now = Utc::now();
     let filename = format!(
-        "swolemate_backup_{}_{}_{}.zip",
+        "swolemate_backup_{}_{}_{}.tar.gz",
         now.format("%Y%m%d_%H%M%S"),
         backup_type,
         now.timestamp()
@@ -73,22 +76,30 @@ pub async fn create_backup(backup_type: BackupType) -> Result<BackupInfo, std::i
         backup_type,
     };
 
-    // Create zip file
+    // Create tar.gz file
     let file = fs::File::create(&backup_path)?;
-    let mut zip = ZipWriter::new(file);
+    let encoder = GzEncoder::new(file, Compression::default());
+    let mut archive = Builder::new(encoder);
 
-    // Add database file to zip
-    let db_content = fs::read(get_database_path())?;
-    zip.start_file("database.db", FileOptions::default().compression_method(zip::CompressionMethod::Deflated))?;
-    zip.write_all(&db_content)?;
+    // Add database file to archive
+    let db_path = get_database_path();
+    let db_content = fs::read(&db_path)?;
+    let mut header = tar::Header::new_gnu();
+    header.set_size(db_content.len() as u64);
+    header.set_mode(0o644);
+    header.set_cksum();
+    archive.append_data(&mut header, "database.db", &db_content[..])?;
 
-    // Add metadata to zip
+    // Add metadata to archive
     let metadata = serde_json::to_string_pretty(&backup_info)?;
-    zip.start_file("metadata.json", FileOptions::default().compression_method(zip::CompressionMethod::Deflated))?;
-    zip.write_all(metadata.as_bytes())?;
+    let mut header = tar::Header::new_gnu();
+    header.set_size(metadata.len() as u64);
+    header.set_mode(0o644);
+    header.set_cksum();
+    archive.append_data(&mut header, "metadata.json", metadata.as_bytes())?;
 
-    // Finish zip file
-    zip.finish()?;
+    // Finish the archive
+    archive.finish()?;
 
     // Clean up old backups
     cleanup_old_backups().await?;
@@ -136,15 +147,18 @@ pub async fn restore_backup(filename: &str) -> Result<(), std::io::Error> {
 
     // Extract and restore the backup
     let file = fs::File::open(&backup_path)?;
-    let mut archive = zip::ZipArchive::new(file)?;
+    let decoder = GzDecoder::new(file);
+    let mut archive = Archive::new(decoder);
 
-    // Extract database file to a temporary location first
-    let mut db_file = archive.by_name("database.db")?;
-    let mut db_content = Vec::new();
-    db_file.read_to_end(&mut db_content)?;
-
-    // Write to temporary file first
-    fs::write(&temp_new_db, db_content)?;
+    // Extract database file to temporary location first
+    for entry in archive.entries()? {
+        let mut entry = entry?;
+        let path = entry.path()?;
+        if path.to_string_lossy() == "database.db" {
+            entry.unpack(&temp_new_db)?;
+            break;
+        }
+    }
 
     // Remove existing WAL and SHM files to ensure clean state
     if wal_path.exists() {
@@ -203,14 +217,23 @@ pub async fn list_backups() -> Result<Vec<BackupInfo>, std::io::Error> {
 
     while let Some(entry) = entries.next_entry().await? {
         if let Some(filename) = entry.file_name().to_str() {
-            if filename.ends_with(".zip") {
+            if filename.ends_with(".tar.gz") {
                 if let Ok(file) = fs::File::open(entry.path()) {
-                    if let Ok(mut archive) = zip::ZipArchive::new(file) {
-                        if let Ok(mut metadata_file) = archive.by_name("metadata.json") {
-                            let mut metadata_content = String::new();
-                            if metadata_file.read_to_string(&mut metadata_content).is_ok() {
-                                if let Ok(backup_info) = serde_json::from_str(&metadata_content) {
-                                    backups.push(backup_info);
+                    let decoder = GzDecoder::new(file);
+                    let mut archive = Archive::new(decoder);
+                    if let Ok(entries) = archive.entries() {
+                        for entry_result in entries {
+                            if let Ok(mut entry) = entry_result {
+                                if let Ok(path) = entry.path() {
+                                    if path.to_string_lossy() == "metadata.json" {
+                                        let mut metadata_content = String::new();
+                                        if entry.read_to_string(&mut metadata_content).is_ok() {
+                                            if let Ok(backup_info) = serde_json::from_str(&metadata_content) {
+                                                backups.push(backup_info);
+                                            }
+                                        }
+                                        break;
+                                    }
                                 }
                             }
                         }
