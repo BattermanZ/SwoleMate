@@ -5,6 +5,9 @@ import type {
     CreateSetRequest 
 } from './types';
 import { config } from './config';
+import { saveToCache, getFromCache, isOnline as clientOnlineCheck } from './offlineCache';
+
+const isBrowser = typeof window !== 'undefined';
 
 const API_BASE = config.apiUrl;
 
@@ -21,6 +24,35 @@ async function handleResponse<T>(response: Response): Promise<T> {
         throw new Error(error.message || `HTTP error! status: ${response.status}`);
     }
     return response.json();
+}
+
+async function fetchWithCache<T>(url: string, cacheKey: string): Promise<T> {
+    if (!isBrowser) {
+        const response = await fetch(url);
+        return handleResponse<T>(response);
+    }
+
+    if (clientOnlineCheck()) {
+        try {
+            const response = await fetch(url);
+            const data = await handleResponse<T>(response);
+            saveToCache(cacheKey, data);
+            return data;
+        } catch (error) {
+            const cached = getFromCache<T>(cacheKey);
+            if (cached) {
+                return cached;
+            }
+            throw error;
+        }
+    }
+
+    const cached = getFromCache<T>(cacheKey);
+    if (cached) {
+        return cached;
+    }
+
+    throw new Error('Offline and no cached data available');
 }
 
 export async function createWorkout(workout: CreateWorkoutRequest): Promise<{ id: number }> {
@@ -46,8 +78,8 @@ export async function endWorkout(id: number, endTime: UpdateWorkoutRequest): Pro
 }
 
 export async function getWorkout(id: number): Promise<{ workout: Workout; exercises: Array<{ exercise: Exercise; sets: Set[] }> }> {
-    const response = await fetch(`${API_BASE}/api/workouts/${id}`);
-    return handleResponse(response);
+    const url = `${API_BASE}/api/workouts/${id}`;
+    return fetchWithCache(url, `workout:${id}`);
 }
 
 export async function createExercise(workoutId: number, exercise: CreateExerciseRequest): Promise<{ id: number }> {
@@ -85,18 +117,18 @@ export async function createSet(exerciseId: number, set: CreateSetRequest): Prom
 }
 
 export async function getWorkouts(): Promise<Workout[]> {
-    const response = await fetch(`${API_BASE}/api/workouts`);
-    return handleResponse(response);
+    const url = `${API_BASE}/api/workouts`;
+    return fetchWithCache(url, 'workouts');
 }
 
 export async function getExerciseTypes(): Promise<string[]> {
-    const response = await fetch(`${API_BASE}/api/exercises/types`);
-    return handleResponse(response);
+    const url = `${API_BASE}/api/exercises/types`;
+    return fetchWithCache(url, 'exercise-types');
 }
 
 export async function getLastExerciseData(exerciseType: string): Promise<{ exercise: Exercise; sets: Set[] } | null> {
-    const response = await fetch(`${API_BASE}/api/exercises/last/${encodeURIComponent(exerciseType)}`);
-    const data = await handleResponse<[Exercise, Set[]]>(response);
+    const url = `${API_BASE}/api/exercises/last/${encodeURIComponent(exerciseType)}`;
+    const data = await fetchWithCache<[Exercise, Set[]] | null>(url, `last-exercise:${exerciseType.toLowerCase()}`);
     if (!data) return null;
     const [exercise, sets] = data;
     return { exercise, sets };
@@ -129,8 +161,8 @@ export interface BackupInfo {
 }
 
 export async function getBackups(): Promise<BackupInfo[]> {
-    const response = await fetch(`${API_BASE}/api/backups`);
-    return handleResponse(response);
+    const url = `${API_BASE}/api/backups`;
+    return fetchWithCache(url, 'backups');
 }
 
 export async function createBackup(): Promise<BackupInfo> {
@@ -164,16 +196,16 @@ export async function deleteBackup(filename: string): Promise<void> {
 }
 
 export async function getWorkoutStats(): Promise<WorkoutStats> {
-    const response = await fetch(`${API_BASE}/api/progress/workout-stats`);
-    return handleResponse(response);
+    const url = `${API_BASE}/api/progress/workout-stats`;
+    return fetchWithCache(url, 'workout-stats');
 }
 
 export async function getExerciseProgress(exerciseType: string): Promise<ExerciseProgress[]> {
-    const response = await fetch(`${API_BASE}/api/progress/exercise/${encodeURIComponent(exerciseType)}`);
-    return handleResponse(response);
+    const url = `${API_BASE}/api/progress/exercise/${encodeURIComponent(exerciseType)}`;
+    return fetchWithCache(url, `exercise-progress:${exerciseType.toLowerCase()}`);
 }
 
 export async function getVolumeStats(exerciseType: string): Promise<VolumeStats> {
-    const response = await fetch(`${API_BASE}/api/progress/volume?exercise_type=${encodeURIComponent(exerciseType)}`);
-    return handleResponse(response);
-} 
+    const url = `${API_BASE}/api/progress/volume?exercise_type=${encodeURIComponent(exerciseType)}`;
+    return fetchWithCache(url, `volume-stats:${exerciseType.toLowerCase()}`);
+}

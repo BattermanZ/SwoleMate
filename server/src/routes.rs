@@ -7,7 +7,6 @@ use std::path::Path;
 use std::io::Write;
 use log::error;
 use crate::models;
-use urlencoding;
 use crate::backup::{self, BackupType};
 
 #[derive(Debug, Deserialize)]

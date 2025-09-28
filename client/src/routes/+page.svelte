@@ -6,6 +6,7 @@
 	import { ProgressRadial, TabGroup, Tab, SlideToggle, RadioGroup, RadioItem, Autocomplete } from '@skeletonlabs/skeleton';
 	import { logger } from '$lib/logger';
 	import { onMount } from 'svelte';
+	import { online } from '$lib/stores/network';
 
 	// Workout session persistence
 	function saveCurrentWorkout(workoutId: number | null) {
@@ -164,6 +165,10 @@
 	}
 
 	async function startWorkout() {
+		if (!$online) {
+			error = 'Offline mode: start a workout once you are back online.';
+			return;
+		}
 		try {
 			loading = true;
 			error = null;
@@ -195,6 +200,10 @@
 	async function addExercise() {
 		if (!currentWorkout?.id) return;
 		if (!newExerciseName.trim()) return;
+		if (!$online) {
+			error = 'Offline mode: add exercises once connectivity is restored.';
+			return;
+		}
 
 		try {
 			loading = true;
@@ -292,6 +301,10 @@
 		const exercise = exercises[exerciseIndex];
 		const set = exercise.sets[setIndex];
 		if (!exercise.id || !set) return;
+		if (!$online) {
+			error = 'Offline mode: confirm sets when back online.';
+			return;
+		}
 
 		try {
 			loading = true;
@@ -329,6 +342,10 @@
 	async function updateExerciseNotes(exerciseIndex: number) {
 		const exercise = exercises[exerciseIndex];
 		if (!exercise.id) return;
+		if (!$online) {
+			error = 'Offline mode: update notes once you are online.';
+			return;
+		}
 
 		try {
 			const updateRequest: UpdateExerciseRequest = {
@@ -374,6 +391,10 @@
 
 	async function submitWorkoutFeedback() {
 		if (!currentWorkout?.id || !sessionFeedback) return;
+		if (!$online) {
+			error = 'Offline mode: finish the workout when connection is restored.';
+			return;
+		}
 
 		try {
 			loading = true;
@@ -474,6 +495,10 @@
 	async function cancelExerciseAndRefresh(exerciseIndex: number) {
 		const exercise = exercises[exerciseIndex];
 		if (!exercise.id) return;
+		if (!$online) {
+			error = 'Offline mode: exercise changes will sync once online. Please retry later.';
+			return;
+		}
 
 		try {
 			loading = true;
@@ -494,6 +519,10 @@
 
 	async function cancelWorkoutSession() {
 		if (!currentWorkout?.id) return;
+		if (!$online) {
+			error = 'Offline mode: cancel workout when back online.';
+			return;
+		}
 
 		try {
 			loading = true;

@@ -2,7 +2,6 @@ use actix_web::{HttpResponse, ResponseError};
 use log::error;
 use serde_json::json;
 use thiserror::Error;
-use sqlx;
 
 #[derive(Error, Debug)]
 pub enum AppError {

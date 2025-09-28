@@ -4,6 +4,7 @@
 	import { getDrawerStore } from '@skeletonlabs/skeleton';
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
+	import { online } from '$lib/stores/network';
 
 	// Initialize all Skeleton stores
 	initializeStores();
@@ -114,6 +115,11 @@
 	</svelte:fragment>
 
 	<main class="container mx-auto p-4 flex-1 flex flex-col app-content h-full">
+		{#if !$online}
+			<div class="offline-banner">
+				<span>Offline mode: showing cached data. Some actions are disabled.</span>
+			</div>
+		{/if}
 		<slot />
 	</main>
 </AppShell>
@@ -145,5 +151,9 @@
 		flex-direction: column;
 		min-height: 100vh;
 		min-height: -webkit-fill-available;
+	}
+
+	.offline-banner {
+		@apply bg-warning-500 text-surface-50 px-4 py-2 rounded-md mb-4;
 	}
 </style>

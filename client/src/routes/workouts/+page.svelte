@@ -3,6 +3,7 @@
 	import { createWorkout, createExercise, createSet, getWorkouts, cancelWorkout } from '$lib/api';
 	import type { Workout, Exercise, Set } from '$lib/types';
 	import { logger } from '$lib/logger';
+	import { online } from '$lib/stores/network';
 
 	export let data: { workouts: Workout[] };
 	let workouts = data.workouts;
@@ -45,6 +46,10 @@
 	}
 
 	async function handleCreateWorkout() {
+		if (!$online) {
+			error = 'Offline mode: new workouts can be created once you are online again.';
+			return;
+		}
 		try {
 			loading = true;
 			error = null;
@@ -70,6 +75,10 @@
 
 	async function handleCreateExercise() {
 		if (!currentWorkoutId) return;
+		if (!$online) {
+			error = 'Offline mode: add exercises when connection is restored.';
+			return;
+		}
 		try {
 			loading = true;
 			error = null;
@@ -96,6 +105,10 @@
 
 	async function handleCreateSet() {
 		if (!currentExerciseId) return;
+		if (!$online) {
+			error = 'Offline mode: sets can be added once you are online again.';
+			return;
+		}
 		try {
 			loading = true;
 			error = null;
@@ -118,6 +131,10 @@
 	async function handleDeleteWorkout(workoutId: number | undefined) {
 		if (!workoutId) {
 			error = 'Invalid workout ID';
+			return;
+		}
+		if (!$online) {
+			error = 'Offline mode: delete workouts when you are back online.';
 			return;
 		}
 

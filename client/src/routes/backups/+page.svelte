@@ -3,6 +3,7 @@
 	import { getBackups, createBackup, restoreBackup, deleteBackup } from '$lib/api';
 	import type { BackupInfo } from '$lib/api';
 	import { logger } from '$lib/logger';
+	import { online } from '$lib/stores/network';
 
 	export let data: { backups: BackupInfo[] };
 	let backups = data.backups;
@@ -24,6 +25,10 @@
 	}
 
 	async function handleCreateBackup() {
+		if (!$online) {
+			error = 'Offline mode: backups can only be created when online.';
+			return;
+		}
 		try {
 			loading = true;
 			error = null;
@@ -43,6 +48,11 @@
 			return;
 		}
 
+		if (!$online) {
+			error = 'Offline mode: restore backups when online.';
+			return;
+		}
+
 		try {
 			loading = true;
 			error = null;
@@ -59,6 +69,11 @@
 
 	async function handleDelete(filename: string) {
 		if (!confirm('Are you sure you want to delete this backup? This cannot be undone.')) {
+			return;
+		}
+
+		if (!$online) {
+			error = 'Offline mode: delete backups when online.';
 			return;
 		}
 		

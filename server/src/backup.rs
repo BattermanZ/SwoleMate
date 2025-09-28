@@ -222,18 +222,16 @@ pub async fn list_backups() -> Result<Vec<BackupInfo>, std::io::Error> {
                     let decoder = GzDecoder::new(file);
                     let mut archive = Archive::new(decoder);
                     if let Ok(entries) = archive.entries() {
-                        for entry_result in entries {
-                            if let Ok(mut entry) = entry_result {
-                                if let Ok(path) = entry.path() {
-                                    if path.to_string_lossy() == "metadata.json" {
-                                        let mut metadata_content = String::new();
-                                        if entry.read_to_string(&mut metadata_content).is_ok() {
-                                            if let Ok(backup_info) = serde_json::from_str(&metadata_content) {
-                                                backups.push(backup_info);
-                                            }
+                        for mut entry in entries.flatten() {
+                            if let Ok(path) = entry.path() {
+                                if path.to_string_lossy() == "metadata.json" {
+                                    let mut metadata_content = String::new();
+                                    if entry.read_to_string(&mut metadata_content).is_ok() {
+                                        if let Ok(backup_info) = serde_json::from_str(&metadata_content) {
+                                            backups.push(backup_info);
                                         }
-                                        break;
                                     }
+                                    break;
                                 }
                             }
                         }
