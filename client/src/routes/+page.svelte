@@ -1,12 +1,14 @@
 <!-- YOU CAN DELETE EVERYTHING IN THIS PAGE -->
 
 <script lang="ts">
-	import { createWorkout, createExercise, createSet, endWorkout, endExercise, getExerciseTypes, getWorkouts, getWorkout, getLastExerciseData, cancelExercise, cancelWorkout } from '$lib/api';
+	import { createWorkout, createExercise, createSet, endWorkout, endExercise, getExerciseTypes, getWorkouts, getWorkout, getLastExerciseData, cancelExercise, cancelWorkout, syncOfflineMutations } from '$lib/api';
 	import type { Workout, Exercise, UpdateExerciseRequest, Set as WorkoutSet } from '$lib/types';
 	import { ProgressRadial, TabGroup, Tab, SlideToggle, RadioGroup, RadioItem, Autocomplete } from '@skeletonlabs/skeleton';
 	import { logger } from '$lib/logger';
 	import { onMount } from 'svelte';
 	import { online } from '$lib/stores/network';
+	import { loadWorkoutState, saveWorkoutState, clearWorkoutState } from '$lib/workoutState';
+	import type { StoredWorkoutState } from '$lib/workoutState';
 
 	// Workout session persistence
 	function saveCurrentWorkout(workoutId: number | null) {
@@ -17,11 +19,106 @@
 		}
 	}
 
+	function persistWorkoutState() {
+		if (!currentWorkout) {
+			clearWorkoutState();
+			return;
+		}
+
+		const storedExercises = exercises.map((ex) => {
+			const exerciseRecord: Exercise = {
+				id: ex.id,
+				workout_id: currentWorkout?.id ?? currentExercise?.workout_id ?? -1,
+				exercise_type: ex.name,
+				start_time: ex.start_time || new Date().toISOString(),
+				end_time: ex.end_time || ex.start_time || new Date().toISOString(),
+				notes: ex.notes
+			};
+
+			const setRecords: WorkoutSet[] = ex.sets.map((set) => ({
+				id: set.id,
+				exercise_id: ex.id ?? currentExercise?.id ?? -1,
+				reps: set.reps,
+				weight: set.weight,
+				notes: undefined
+			}));
+
+			return {
+				exercise: exerciseRecord,
+				sets: setRecords
+			};
+		});
+
+		saveWorkoutState({
+			workout: currentWorkout,
+			exercises: storedExercises,
+			activeExerciseId: currentExercise?.id ?? null,
+			sessionNotes,
+			sessionFeedback
+		});
+	}
+
+	function applyStoredState(state: StoredWorkoutState) {
+		if (!state.workout) {
+			return;
+		}
+
+		currentWorkout = state.workout;
+		exercises = state.exercises.map(({ exercise, sets }) => {
+			const isFinished = exercise.end_time !== exercise.start_time;
+
+			if (state.activeExerciseId && exercise.id === state.activeExerciseId) {
+				currentExercise = exercise;
+			}
+
+			return {
+				id: exercise.id ?? undefined,
+				name: exercise.exercise_type,
+				sets: sets.map((set) => ({
+					id: set.id,
+					reps: set.reps,
+					weight: set.weight,
+					isEditing: false,
+					isConfirmed: true
+				})),
+				showSetForm: !isFinished,
+				notes: exercise.notes,
+				isEditingNotes: false,
+				end_time: exercise.end_time,
+				start_time: exercise.start_time,
+				lastExerciseData: undefined,
+				isFinished
+			};
+		});
+
+		if (!currentExercise) {
+			const unfinished = state.exercises.find(({ exercise }) => exercise.end_time === exercise.start_time);
+			if (unfinished) {
+				currentExercise = unfinished.exercise;
+			}
+		}
+
+		sessionNotes = state.sessionNotes;
+		sessionFeedback = state.sessionFeedback;
+
+		if (currentExercise && currentWorkout) {
+			currentExercise = {
+				...currentExercise,
+				workout_id: currentWorkout.id ?? currentExercise.workout_id
+			};
+		}
+	}
+
 	async function loadCurrentWorkout() {
 		const savedWorkoutId = localStorage.getItem('currentWorkoutId');
+		const storedState = loadWorkoutState();
 		if (savedWorkoutId) {
 			try {
 				const workoutId = parseInt(savedWorkoutId);
+				if (workoutId < 0 && storedState) {
+					applyStoredState(storedState);
+					return;
+				}
 				const details = await getWorkout(workoutId);
 				currentWorkout = details.workout;
 				
@@ -40,6 +137,7 @@
 					notes: e.exercise.notes,
 					isEditingNotes: e.exercise.end_time === e.exercise.start_time,
 					end_time: e.exercise.end_time,
+					start_time: e.exercise.start_time,
 					isFinished: e.exercise.end_time !== e.exercise.start_time
 				}));
 
@@ -55,11 +153,17 @@
 						notes: lastUnfinished.notes
 					};
 				}
+				persistWorkoutState();
 			} catch (e) {
 				logger.error('workout', 'Failed to load saved workout', { error: e });
 				// If we fail to load the workout, clear the saved ID
 				saveCurrentWorkout(null);
+				if (storedState) {
+					applyStoredState(storedState);
+				}
 			}
+		} else if (storedState) {
+			applyStoredState(storedState);
 		}
 	}
 
@@ -79,6 +183,7 @@
 		notes?: string;
 		isEditingNotes: boolean;
 		end_time?: string;
+		start_time?: string;
 		lastExerciseData?: {
 			date: string;
 			notes?: string;
@@ -99,7 +204,6 @@
 	let exerciseTypes: string[] = [];
 	let filteredExerciseTypes: string[] = [];
 	let inputValue = '';
-	let recentWorkouts: Workout[] = [];
 	let recentWorkoutsWithExercises: Array<{
 		workout: Workout;
 		exercises: Array<{
@@ -111,30 +215,44 @@
 	const FEEDBACK_OPTIONS = ['😊', '😐', '😞'] as const;
 	type FeedbackEmoji = typeof FEEDBACK_OPTIONS[number];
 
-	onMount(async () => {
-		try {
-			// Load exercise types first
-			exerciseTypes = await getExerciseTypes();
-			
-			// Try to load current workout
-			await loadCurrentWorkout();
-			
-			// Load recent workouts
-			const workouts = (await getWorkouts()).slice(0, 3);
-			
-			// Fetch complete data for each workout
-			recentWorkoutsWithExercises = await Promise.all(
-				workouts.map(async (workout) => {
-					const details = await getWorkout(workout.id!);
-					return {
-						workout: details.workout,
-						exercises: details.exercises
-					};
-				})
-			);
-		} catch (e) {
-			logger.error('workout', 'Failed to fetch initial data', { error: e });
-		}
+	onMount(() => {
+		let previousOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+
+		const initialize = async () => {
+			try {
+				await syncOfflineMutations();
+				exerciseTypes = await getExerciseTypes();
+				await loadCurrentWorkout();
+
+				const workouts = (await getWorkouts()).slice(0, 3);
+				recentWorkoutsWithExercises = await Promise.all(
+					workouts.map(async (workout) => {
+						const details = await getWorkout(workout.id!);
+						return {
+							workout: details.workout,
+							exercises: details.exercises
+						};
+					})
+				);
+			} catch (e) {
+				logger.error('workout', 'Failed to fetch initial data', { error: e });
+			}
+		};
+
+		initialize();
+
+		const unsubscribe = online.subscribe(async (value) => {
+			if (value && !previousOnline) {
+				await syncOfflineMutations();
+				await loadCurrentWorkout();
+				await refreshRecentWorkouts();
+			}
+			previousOnline = value;
+		});
+
+		return () => {
+			unsubscribe();
+		};
 	});
 
 	function filterExerciseTypes(input: string) {
@@ -165,10 +283,6 @@
 	}
 
 	async function startWorkout() {
-		if (!$online) {
-			error = 'Offline mode: start a workout once you are back online.';
-			return;
-		}
 		try {
 			loading = true;
 			error = null;
@@ -183,11 +297,13 @@
 				id: result.id,
 				date: now,
 				start_time: now,
-				end_time: now, // Will be updated when workout ends
+				end_time: now,
 				notes: "Today's workout"
 			};
-			// Save the workout ID
+			exercises = [];
+			currentExercise = null;
 			saveCurrentWorkout(result.id);
+			persistWorkoutState();
 			logger.info('workout', 'Workout session started', { workoutId: result.id });
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to start workout';
@@ -200,10 +316,6 @@
 	async function addExercise() {
 		if (!currentWorkout?.id) return;
 		if (!newExerciseName.trim()) return;
-		if (!$online) {
-			error = 'Offline mode: add exercises once connectivity is restored.';
-			return;
-		}
 
 		try {
 			loading = true;
@@ -215,11 +327,11 @@
 				const currentExerciseIndex = exercises.findIndex(e => e.id === currentExercise?.id);
 				if (currentExerciseIndex !== -1) {
 					const exerciseNotes = exercises[currentExerciseIndex].notes;
-					await endExercise(currentExercise.id, { 
+					await endExercise(currentExercise.id, {
 						end_time: now,
-						notes: exerciseNotes  // Preserve the notes when ending the exercise
+						notes: exerciseNotes
 					});
-					logger.info('workout', 'Previous exercise ended', { 
+					logger.info('workout', 'Previous exercise ended', {
 						exerciseId: currentExercise.id,
 						endTime: now,
 						notes: exerciseNotes
@@ -228,11 +340,16 @@
 			}
 
 			// Get last exercise data
-			const lastData = await getLastExerciseData(newExerciseName);
+			let lastData = null;
+			try {
+				lastData = await getLastExerciseData(newExerciseName);
+			} catch (err) {
+				logger.warn('workout', 'Unable to load last exercise data', { error: err });
+			}
 
 			// Start new exercise
 			const now = new Date().toISOString();
-			logger.info('workout', 'Adding new exercise', { 
+			logger.info('workout', 'Adding new exercise', {
 				workoutId: currentWorkout.id,
 				exerciseName: newExerciseName
 			});
@@ -240,7 +357,7 @@
 			const result = await createExercise(currentWorkout.id, {
 				exercise_type: newExerciseName,
 				start_time: now,
-				notes: undefined // Explicitly set to undefined since we'll edit notes later
+				notes: undefined
 			});
 
 			const newExercise = {
@@ -260,6 +377,7 @@
 				showSetForm: true,
 				isEditingNotes: true,
 				notes: undefined,
+				start_time: now,
 				lastExerciseData: lastData ? {
 					date: lastData.exercise.start_time,
 					notes: lastData.exercise.notes,
@@ -269,6 +387,7 @@
 			}];
 			newExerciseName = '';
 			showExerciseForm = false;
+			persistWorkoutState();
 			logger.info('workout', 'Exercise added successfully', { exerciseId: result.id });
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to add exercise';
@@ -301,10 +420,6 @@
 		const exercise = exercises[exerciseIndex];
 		const set = exercise.sets[setIndex];
 		if (!exercise.id || !set) return;
-		if (!$online) {
-			error = 'Offline mode: confirm sets when back online.';
-			return;
-		}
 
 		try {
 			loading = true;
@@ -326,6 +441,7 @@
 				isConfirmed: true
 			};
 			exercises = [...exercises];
+			persistWorkoutState();
 
 			logger.info('workout', 'Set confirmed successfully', { setId: result.id });
 
@@ -342,10 +458,6 @@
 	async function updateExerciseNotes(exerciseIndex: number) {
 		const exercise = exercises[exerciseIndex];
 		if (!exercise.id) return;
-		if (!$online) {
-			error = 'Offline mode: update notes once you are online.';
-			return;
-		}
 
 		try {
 			const updateRequest: UpdateExerciseRequest = {
@@ -355,6 +467,7 @@
 			await endExercise(exercise.id, updateRequest);
 			exercises[exerciseIndex].isEditingNotes = false;
 			exercises = [...exercises];
+			persistWorkoutState();
 			logger.info('workout', 'Exercise notes updated', { exerciseId: exercise.id, notes: exercise.notes });
 
 			// Refresh recent workouts to show updated notes
@@ -382,6 +495,7 @@
 		}];
 		exercises = [...exercises];
 		logger.debug('workout', 'New set form added', { exerciseId: exercise.id });
+		persistWorkoutState();
 	}
 
 	async function endWorkoutSession() {
@@ -391,10 +505,6 @@
 
 	async function submitWorkoutFeedback() {
 		if (!currentWorkout?.id || !sessionFeedback) return;
-		if (!$online) {
-			error = 'Offline mode: finish the workout when connection is restored.';
-			return;
-		}
 
 		try {
 			loading = true;
@@ -410,6 +520,7 @@
 
 			// Clear the saved workout
 			saveCurrentWorkout(null);
+			clearWorkoutState();
 			
 			currentWorkout = null;
 			currentExercise = null;
@@ -495,10 +606,6 @@
 	async function cancelExerciseAndRefresh(exerciseIndex: number) {
 		const exercise = exercises[exerciseIndex];
 		if (!exercise.id) return;
-		if (!$online) {
-			error = 'Offline mode: exercise changes will sync once online. Please retry later.';
-			return;
-		}
 
 		try {
 			loading = true;
@@ -508,6 +615,7 @@
 			if (currentExercise?.id === exercise.id) {
 				currentExercise = null;
 			}
+			persistWorkoutState();
 			logger.info('workout', 'Exercise canceled', { exerciseId: exercise.id });
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to cancel exercise';
@@ -519,10 +627,6 @@
 
 	async function cancelWorkoutSession() {
 		if (!currentWorkout?.id) return;
-		if (!$online) {
-			error = 'Offline mode: cancel workout when back online.';
-			return;
-		}
 
 		try {
 			loading = true;
@@ -532,6 +636,7 @@
 			
 			// Clear the saved workout
 			saveCurrentWorkout(null);
+			clearWorkoutState();
 			
 			currentWorkout = null;
 			currentExercise = null;
@@ -543,6 +648,12 @@
 		} finally {
 			loading = false;
 		}
+	}
+
+	$: {
+		if (!currentWorkout) return;
+		void [exercises, currentExercise, sessionNotes, sessionFeedback];
+		persistWorkoutState();
 	}
 </script>
 
@@ -719,21 +830,23 @@
 													<div class="card variant-ghost p-2 flex gap-2 items-center w-full sm:w-auto">
 														<span class="text-xs opacity-75">{setIndex + 1}</span>
 														<div class="input-container">
-															<input
-																type="number"
-																inputmode="numeric"
-																pattern="[0-9]*"
-																class="input w-16 text-center"
-																bind:value={set.reps}
+														<input
+															type="number"
+															inputmode="numeric"
+															pattern="[0-9]*"
+															class="input w-16 text-center"
+															bind:value={set.reps}
+															on:input={persistWorkoutState}
 																min="0"
 															/>
 															<span class="text-base">×</span>
-															<input
-																type="number"
-																inputmode="numeric"
-																pattern="[0-9]*"
-																class="input w-16 text-center"
-																bind:value={set.weight}
+														<input
+															type="number"
+															inputmode="numeric"
+															pattern="[0-9]*"
+															class="input w-16 text-center"
+															bind:value={set.weight}
+															on:input={persistWorkoutState}
 																min="0"
 																step="0.5"
 															/>
@@ -772,6 +885,7 @@
 													class="input flex-grow"
 													placeholder="Exercise notes..."
 													bind:value={exercise.notes}
+													on:input={persistWorkoutState}
 												/>
 												<button 
 													class="btn variant-filled-success btn-sm round-btn"
@@ -924,7 +1038,10 @@
 					{#each FEEDBACK_OPTIONS as emoji}
 						<button
 							class="card {sessionFeedback === emoji ? 'variant-filled-primary' : 'variant-soft'} p-4 text-4xl hover:scale-110 transition-transform"
-							on:click={() => sessionFeedback = emoji}
+							on:click={() => {
+								sessionFeedback = emoji;
+								persistWorkoutState();
+							}}
 						>
 							{emoji}
 						</button>
@@ -936,6 +1053,7 @@
 					rows="3"
 					placeholder="Add notes about your session..."
 					bind:value={sessionNotes}
+					on:input={persistWorkoutState}
 				></textarea>
 
 				<footer class="flex justify-end gap-2">
