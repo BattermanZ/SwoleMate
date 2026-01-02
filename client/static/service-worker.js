@@ -1,5 +1,5 @@
-// Cache name
-const CACHE_NAME = 'swolemate-cache-v1';
+// Cache name (bump to invalidate old cached bundles)
+const CACHE_NAME = 'swolemate-cache-v2';
 
 // Assets to cache
 const ASSETS_TO_CACHE = ['/', '/manifest.json', '/favicon.png', '/pwa-192.png', '/pwa-512.png'];
@@ -42,6 +42,19 @@ self.addEventListener('activate', (event) => {
 // Fetch event with network-first strategy for API calls and cache-first for assets
 self.addEventListener('fetch', (event) => {
 	const url = new URL(event.request.url);
+
+	// Don't interfere with cross-origin requests (e.g. API hosted on a different domain/port).
+	if (url.origin !== self.location.origin) return;
+
+	// Always go to the network first for navigations so new deployments aren't stuck on a stale cache.
+	if (event.request.mode === 'navigate') {
+		event.respondWith(
+			fetch(event.request).catch(() => {
+				return caches.match('/');
+			})
+		);
+		return;
+	}
 
 	// Network-first strategy for API calls
 	if (url.pathname.startsWith('/api/')) {

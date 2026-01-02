@@ -47,6 +47,18 @@
 	// Add service worker registration
 	onMount(() => {
 		if ('serviceWorker' in navigator) {
+			// Service workers can easily serve stale bundles during development.
+			// Keep it enabled only for production builds.
+			if (import.meta.env.DEV) {
+				navigator.serviceWorker.getRegistrations().then((registrations) => {
+					for (const registration of registrations) {
+						registration.unregister();
+					}
+				});
+				caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key))));
+				return;
+			}
+
 			navigator.serviceWorker
 				.register('/service-worker.js', { scope: '/' })
 				.then((registration) => {

@@ -1,6 +1,6 @@
 // Default values
 const defaults = {
-	devApiUrl: 'http://localhost:2469',
+	devApiUrl: '',
 	prodApiUrl: ''
 };
 
@@ -13,8 +13,8 @@ export const config = {
 
 // Validate configuration
 function validateConfig() {
-	if (import.meta.env.DEV && !import.meta.env.VITE_API_URL) {
-		console.warn('API URL not configured. Using default:', defaults.devApiUrl);
+	if (import.meta.env.DEV && import.meta.env.VITE_API_URL === undefined) {
+		console.warn('API URL not configured. Using same-origin /api via Vite proxy.');
 	}
 }
 

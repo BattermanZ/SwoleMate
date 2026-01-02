@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   client:
     image: swolemate-client:v0.5.1
