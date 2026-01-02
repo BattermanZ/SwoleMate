@@ -1,9 +1,9 @@
-use sqlx::{Pool, Sqlite};
-use crate::{models::*, errors::AppError};
-use log::{debug, error, info};
+use crate::{errors::AppError, models::*};
 use chrono::{DateTime, Utc};
-use std::sync::{Arc, Mutex};
+use log::{debug, error, info};
 use serde_json::json;
+use sqlx::{Pool, Sqlite};
+use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
 pub struct Database {
@@ -13,8 +13,8 @@ pub struct Database {
 impl Database {
     pub fn new(pool: Pool<Sqlite>) -> Self {
         info!(target: "database", "Database connection pool initialized");
-        Self { 
-            pool: Arc::new(Mutex::new(pool))
+        Self {
+            pool: Arc::new(Mutex::new(pool)),
         }
     }
 
@@ -30,7 +30,7 @@ impl Database {
 
     pub async fn create_workout(&self, req: &CreateWorkoutRequest) -> Result<i64, AppError> {
         debug!(target: "database", "Creating new workout for date: {}", req.date);
-        
+
         let pool = self.get_pool();
         let result = sqlx::query!(
             r#"
@@ -54,9 +54,15 @@ impl Database {
         Ok(result.id)
     }
 
-    pub async fn update_workout_end_time(&self, id: i64, end_time: DateTime<Utc>, notes: Option<String>, feedback: Option<String>) -> Result<(), AppError> {
+    pub async fn update_workout_end_time(
+        &self,
+        id: i64,
+        end_time: DateTime<Utc>,
+        notes: Option<String>,
+        feedback: Option<String>,
+    ) -> Result<(), AppError> {
         debug!(target: "database", "Updating workout #{} end time to {} with feedback", id, end_time);
-        
+
         let pool = self.get_pool();
         sqlx::query!(
             r#"
@@ -83,7 +89,7 @@ impl Database {
     pub async fn create_exercise(&self, exercise: &Exercise) -> Result<i64, AppError> {
         debug!(target: "database", "Creating exercise '{}' for workout #{}", 
             exercise.exercise_type, exercise.workout_id);
-        
+
         let pool = self.get_pool();
         let result = sqlx::query!(
             r#"
@@ -108,9 +114,14 @@ impl Database {
         Ok(result.id)
     }
 
-    pub async fn update_exercise_end_time(&self, id: i64, end_time: DateTime<Utc>, notes: Option<String>) -> Result<(), AppError> {
+    pub async fn update_exercise_end_time(
+        &self,
+        id: i64,
+        end_time: DateTime<Utc>,
+        notes: Option<String>,
+    ) -> Result<(), AppError> {
         debug!(target: "database", "Updating exercise #{} end time to {} with notes", id, end_time);
-        
+
         let pool = self.get_pool();
         sqlx::query!(
             r#"
@@ -136,7 +147,7 @@ impl Database {
     pub async fn create_set(&self, set: &Set) -> Result<i64, AppError> {
         debug!(target: "database", "Creating set for exercise #{}: {}x{}kg", 
             set.exercise_id, set.reps, set.weight);
-        
+
         let pool = self.get_pool();
         let result = sqlx::query!(
             r#"
@@ -162,7 +173,7 @@ impl Database {
 
     pub async fn get_workout(&self, id: i64) -> Result<Workout, AppError> {
         debug!(target: "database", "Fetching workout #{}", id);
-        
+
         let pool = self.get_pool();
         let result = sqlx::query!(
             r#"
@@ -196,9 +207,12 @@ impl Database {
         })
     }
 
-    pub async fn get_exercises_for_workout(&self, workout_id: i64) -> Result<Vec<Exercise>, AppError> {
+    pub async fn get_exercises_for_workout(
+        &self,
+        workout_id: i64,
+    ) -> Result<Vec<Exercise>, AppError> {
         debug!(target: "database", "Fetching exercises for workout #{}", workout_id);
-        
+
         let pool = self.get_pool();
         let rows = sqlx::query!(
             r#"
@@ -221,14 +235,17 @@ impl Database {
             AppError::DatabaseError(e)
         })?;
 
-        let exercises: Vec<Exercise> = rows.into_iter().map(|row| Exercise {
-            id: Some(row.id.expect("Exercise ID should not be null")),
-            workout_id: row.workout_id,
-            exercise_type: row.exercise_type,
-            start_time: row.start_time,
-            end_time: row.end_time,
-            notes: row.notes,
-        }).collect();
+        let exercises: Vec<Exercise> = rows
+            .into_iter()
+            .map(|row| Exercise {
+                id: Some(row.id.expect("Exercise ID should not be null")),
+                workout_id: row.workout_id,
+                exercise_type: row.exercise_type,
+                start_time: row.start_time,
+                end_time: row.end_time,
+                notes: row.notes,
+            })
+            .collect();
 
         debug!(target: "database", "Found {} exercises for workout #{}", exercises.len(), workout_id);
         Ok(exercises)
@@ -236,7 +253,7 @@ impl Database {
 
     pub async fn get_sets_for_exercise(&self, exercise_id: i64) -> Result<Vec<Set>, AppError> {
         debug!(target: "database", "Fetching sets for exercise #{}", exercise_id);
-        
+
         let pool = self.get_pool();
         let sets = sqlx::query_as!(
             Set,
@@ -260,7 +277,7 @@ impl Database {
 
     pub async fn get_workouts(&self) -> Result<Vec<Workout>, AppError> {
         debug!(target: "database", "Fetching all workouts");
-        
+
         let pool = self.get_pool();
         let rows = sqlx::query!(
             r#"
@@ -282,14 +299,17 @@ impl Database {
             AppError::DatabaseError(e)
         })?;
 
-        let workouts: Vec<Workout> = rows.into_iter().map(|row| Workout {
-            id: Some(row.id),
-            date: row.date,
-            start_time: row.start_time,
-            end_time: row.end_time,
-            notes: row.notes,
-            feedback: row.feedback,
-        }).collect();
+        let workouts: Vec<Workout> = rows
+            .into_iter()
+            .map(|row| Workout {
+                id: Some(row.id),
+                date: row.date,
+                start_time: row.start_time,
+                end_time: row.end_time,
+                notes: row.notes,
+                feedback: row.feedback,
+            })
+            .collect();
 
         info!(target: "database", "Retrieved {} workouts", workouts.len());
         Ok(workouts)
@@ -297,7 +317,7 @@ impl Database {
 
     pub async fn get_unique_exercise_types(&self) -> Result<Vec<String>, AppError> {
         debug!(target: "database", "Fetching unique exercise types");
-        
+
         let pool = self.get_pool();
         let rows = sqlx::query!(
             r#"
@@ -314,17 +334,18 @@ impl Database {
         })?;
 
         let row_count = rows.len();
-        let exercise_types = rows.into_iter()
-            .map(|row| row.exercise_type)
-            .collect();
+        let exercise_types = rows.into_iter().map(|row| row.exercise_type).collect();
 
         debug!(target: "database", "Found {} unique exercise types", row_count);
         Ok(exercise_types)
     }
 
-    pub async fn get_last_exercise_data(&self, exercise_type: &str) -> Result<Option<(Exercise, Vec<Set>)>, AppError> {
+    pub async fn get_last_exercise_data(
+        &self,
+        exercise_type: &str,
+    ) -> Result<Option<(Exercise, Vec<Set>)>, AppError> {
         debug!(target: "database", "Fetching last data for exercise type: {}", exercise_type);
-        
+
         let pool = self.get_pool();
         let exercise = sqlx::query_as!(
             Exercise,
@@ -360,7 +381,7 @@ impl Database {
 
     pub async fn delete_exercise(&self, id: i64) -> Result<(), AppError> {
         debug!(target: "database", "Deleting exercise #{}", id);
-        
+
         let pool = self.get_pool();
         // With CASCADE DELETE, we only need to delete the exercise
         // and all related sets will be automatically deleted
@@ -384,7 +405,7 @@ impl Database {
 
     pub async fn delete_workout(&self, id: i64) -> Result<(), AppError> {
         debug!(target: "database", "Deleting workout #{}", id);
-        
+
         let pool = self.get_pool();
         // With CASCADE DELETE, we only need to delete the workout
         // and all related exercises and sets will be automatically deleted
@@ -406,9 +427,12 @@ impl Database {
         Ok(())
     }
 
-    pub async fn get_exercise_progress(&self, exercise_type: &str) -> Result<Vec<(Exercise, Vec<Set>)>, AppError> {
+    pub async fn get_exercise_progress(
+        &self,
+        exercise_type: &str,
+    ) -> Result<Vec<(Exercise, Vec<Set>)>, AppError> {
         debug!(target: "database", "Fetching progress data for exercise type: {}", exercise_type);
-        
+
         let pool = self.get_pool();
         let exercises = sqlx::query_as!(
             Exercise,
@@ -445,7 +469,7 @@ impl Database {
 
     pub async fn get_workout_stats(&self) -> Result<serde_json::Value, AppError> {
         debug!(target: "database", "Calculating workout statistics");
-        
+
         let pool = self.get_pool();
         let stats = sqlx::query!(
             r#"
@@ -615,9 +639,12 @@ impl Database {
         }))
     }
 
-    pub async fn get_volume_stats(&self, exercise_type: &str) -> Result<serde_json::Value, AppError> {
+    pub async fn get_volume_stats(
+        &self,
+        exercise_type: &str,
+    ) -> Result<serde_json::Value, AppError> {
         debug!(target: "database", "Calculating volume statistics for {}", exercise_type);
-        
+
         let pool = self.get_pool();
         let weekly_volume = sqlx::query!(
             r#"
@@ -764,4 +791,4 @@ impl Database {
             }
         }))
     }
-} 
+}

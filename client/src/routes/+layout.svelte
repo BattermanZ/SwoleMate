@@ -47,11 +47,12 @@
 	// Add service worker registration
 	onMount(() => {
 		if ('serviceWorker' in navigator) {
-			navigator.serviceWorker.register('./service-worker.js', { scope: '/' })
-				.then(registration => {
+			navigator.serviceWorker
+				.register('/service-worker.js', { scope: '/' })
+				.then((registration) => {
 					console.log('ServiceWorker registration successful:', registration.scope);
 				})
-				.catch(err => {
+				.catch((err) => {
 					console.error('ServiceWorker registration failed:', err);
 				});
 		}
@@ -59,13 +60,17 @@
 </script>
 
 <Drawer position="right">
-	<nav class="p-4 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] px-[env(safe-area-inset-right)]">
+	<nav
+		class="p-4 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] px-[env(safe-area-inset-right)]"
+	>
 		<ul class="list-nav flex flex-col space-y-4">
 			{#each navItems as item}
 				<li>
-					<a 
-						href={item.href} 
-						class="btn {$page.url.pathname === item.href ? 'variant-filled-primary' : 'variant-ghost-primary'}"
+					<a
+						href={item.href}
+						class="btn {$page.url.pathname === item.href
+							? 'variant-filled-primary'
+							: 'variant-ghost-primary'}"
 						on:click={() => drawerStore.set({ open: false })}
 					>
 						<span class="text-xl">{item.icon}</span>
@@ -91,9 +96,11 @@
 					<ul class="list-nav flex space-x-4">
 						{#each navItems as item}
 							<li>
-								<a 
-									href={item.href} 
-									class="btn btn-sm {$page.url.pathname === item.href ? 'variant-filled-primary' : 'variant-ghost-primary'}"
+								<a
+									href={item.href}
+									class="btn btn-sm {$page.url.pathname === item.href
+										? 'variant-filled-primary'
+										: 'variant-ghost-primary'}"
 								>
 									<span>{item.icon}</span>
 									<span>{item.label}</span>
@@ -118,8 +125,9 @@
 	</main>
 </AppShell>
 
-<style>
-	:global(html), :global(body) {
+<style lang="postcss">
+	:global(html),
+	:global(body) {
 		@apply h-full overflow-auto;
 		height: 100vh;
 		/* Fix for iOS height */

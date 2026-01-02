@@ -1,23 +1,38 @@
 <script lang="ts">
 	import { TabGroup, Tab } from '@skeletonlabs/skeleton';
-	import { getContext, setContext } from 'svelte';
 	import { writable } from 'svelte/store';
 	import { getWorkouts } from '$lib/api';
+	import { browser } from '$app/environment';
+
+	function getStoredString(key: string, fallback: string): string {
+		if (!browser) return fallback;
+		return localStorage.getItem(key) ?? fallback;
+	}
+
+	function getStoredNumber(key: string, fallback: number): number {
+		if (!browser) return fallback;
+		const raw = localStorage.getItem(key);
+		if (raw === null) return fallback;
+		const parsed = Number(raw);
+		return Number.isFinite(parsed) ? parsed : fallback;
+	}
 
 	// Settings stores
-	const unitPreference = writable(localStorage.getItem('unitPreference') || 'kg');
-	const restTimer = writable(Number(localStorage.getItem('restTimer')) || 90);
-	const autoEndTimeout = writable(Number(localStorage.getItem('autoEndTimeout')) || 300);
-	const viewDensity = writable(localStorage.getItem('viewDensity') || 'comfortable');
-	const accentColor = writable(localStorage.getItem('accentColor') || '#652B26');
+	const unitPreference = writable(getStoredString('unitPreference', 'kg'));
+	const restTimer = writable(getStoredNumber('restTimer', 90));
+	const autoEndTimeout = writable(getStoredNumber('autoEndTimeout', 300));
+	const viewDensity = writable(getStoredString('viewDensity', 'comfortable'));
+	const accentColor = writable(getStoredString('accentColor', '#652B26'));
 
 	// Save settings to localStorage when they change
 	$: {
-		localStorage.setItem('unitPreference', $unitPreference);
-		localStorage.setItem('restTimer', $restTimer.toString());
-		localStorage.setItem('autoEndTimeout', $autoEndTimeout.toString());
-		localStorage.setItem('viewDensity', $viewDensity);
-		localStorage.setItem('accentColor', $accentColor);
+		if (browser) {
+			localStorage.setItem('unitPreference', $unitPreference);
+			localStorage.setItem('restTimer', $restTimer.toString());
+			localStorage.setItem('autoEndTimeout', $autoEndTimeout.toString());
+			localStorage.setItem('viewDensity', $viewDensity);
+			localStorage.setItem('accentColor', $accentColor);
+		}
 	}
 
 	let tabSet = 0;
@@ -72,24 +87,12 @@
 
 						<label class="label">
 							<span>Rest Timer Duration (seconds)</span>
-							<input 
-								type="number" 
-								class="input" 
-								bind:value={$restTimer}
-								min="0"
-								max="300"
-							/>
+							<input type="number" class="input" bind:value={$restTimer} min="0" max="300" />
 						</label>
 
 						<label class="label">
 							<span>Auto-end Workout Timeout (minutes)</span>
-							<input 
-								type="number" 
-								class="input" 
-								bind:value={$autoEndTimeout}
-								min="0"
-								max="60"
-							/>
+							<input type="number" class="input" bind:value={$autoEndTimeout} min="0" max="60" />
 						</label>
 					</div>
 				</div>
@@ -106,11 +109,7 @@
 
 						<label class="label">
 							<span>Accent Color</span>
-							<input 
-								type="color" 
-								class="input" 
-								bind:value={$accentColor}
-							/>
+							<input type="color" class="input" bind:value={$accentColor} />
 						</label>
 					</div>
 				</div>
@@ -171,7 +170,8 @@
 	.label > span:first-child {
 		@apply font-bold;
 	}
-	.select, .input {
+	.select,
+	.input {
 		@apply w-full;
 	}
-</style> 
+</style>

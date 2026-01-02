@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Handle build-time variables
 ARG VITE_API_URL
-ENV VITE_API_URL="http://192.168.31.49:2470"
+ENV VITE_API_URL=${VITE_API_URL}
 
 # Install dependencies
 COPY package*.json ./

@@ -1,21 +1,21 @@
 use actix_cors::Cors;
 use actix_web::{middleware::Logger, App, HttpServer};
+use chrono::{Datelike, Local, Timelike, Weekday};
 use log::{error, info, LevelFilter};
 use sqlx::sqlite::SqlitePoolOptions;
 use std::env;
 use std::fs;
+use std::fs::File;
 use std::io::Write;
 use std::path::Path;
-use chrono::{Local, Timelike, Datelike, Weekday};
-use std::fs::File;
 use tokio::time::{sleep, Duration};
 
-mod models;
-mod routes;
+mod backup;
 mod db;
 mod errors;
 mod middleware;
-mod backup;
+mod models;
+mod routes;
 
 fn find_env_file() -> Option<String> {
     let current_dir = std::env::current_dir().ok()?;
@@ -67,13 +67,9 @@ async fn schedule_backups() {
 
         if next_backup <= now {
             let next_week = next_backup + chrono::Duration::days(7);
-            sleep(Duration::from_secs(
-                (next_week - now).num_seconds() as u64
-            )).await;
+            sleep(Duration::from_secs((next_week - now).num_seconds() as u64)).await;
         } else {
-            sleep(Duration::from_secs(
-                (next_backup - now).num_seconds() as u64
-            )).await;
+            sleep(Duration::from_secs((next_backup - now).num_seconds() as u64)).await;
         }
 
         info!("Creating automatic backup");
@@ -139,27 +135,26 @@ CREATE TABLE IF NOT EXISTS schema_version (
 
 async fn setup_schema(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<(), sqlx::Error> {
     // Create schema_version table
-    sqlx::query(SCHEMA_VERSION_TABLE)
-        .execute(pool)
-        .await?;
+    sqlx::query(SCHEMA_VERSION_TABLE).execute(pool).await?;
 
     // Check if this is a pre-v1 database by looking for schema_version
     let has_version_table = sqlx::query_scalar!(
         r#"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='schema_version'"#
     )
     .fetch_one(pool)
-    .await? > 0;
+    .await?
+        > 0;
 
     // For pre-v1 databases or new databases, we need to verify the table structure
     let needs_schema_update = if !has_version_table {
         true
     } else {
         // Check if version 1 is recorded
-        let version_exists = sqlx::query_scalar!(
-            r#"SELECT COUNT(*) FROM schema_version WHERE version = 1"#
-        )
-        .fetch_one(pool)
-        .await? == 0;
+        let version_exists =
+            sqlx::query_scalar!(r#"SELECT COUNT(*) FROM schema_version WHERE version = 1"#)
+                .fetch_one(pool)
+                .await?
+                == 0;
         version_exists
     };
 
@@ -172,19 +167,19 @@ async fn setup_schema(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<(), sqlx::Error
             r#"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='workouts'"#
         )
         .fetch_one(pool)
-        .await? > 0;
+        .await?
+            > 0;
 
         if has_workouts {
             info!("Found existing workout data, creating backup before schema update");
-            backup::create_backup(backup::BackupType::Auto).await
+            backup::create_backup(backup::BackupType::Auto)
+                .await
                 .map_err(|e| sqlx::Error::Protocol(format!("Failed to create backup: {}", e)))?;
         }
 
         // Apply initial schema
         info!("Applying initial schema...");
-        sqlx::query(INITIAL_SCHEMA)
-            .execute(pool)
-            .await?;
+        sqlx::query(INITIAL_SCHEMA).execute(pool).await?;
 
         // Insert version 1 record
         sqlx::query("INSERT OR IGNORE INTO schema_version (version) VALUES (1)")
@@ -201,19 +196,18 @@ async fn setup_schema(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<(), sqlx::Error
             version
         )
         .fetch_one(pool)
-        .await? > 0;
+        .await?
+            > 0;
 
         if !version_exists {
             info!("Applying schema update version {}", version);
-            sqlx::query(update_sql)
-                .execute(pool)
-                .await?;
-            
+            sqlx::query(update_sql).execute(pool).await?;
+
             sqlx::query("INSERT INTO schema_version (version) VALUES (?)")
                 .bind(version)
                 .execute(pool)
                 .await?;
-            
+
             info!("Successfully applied schema update version {}", version);
         }
     }
@@ -284,8 +278,11 @@ async fn main() -> std::io::Result<()> {
 
     // Load environment variables
     info!("Looking for server.env file...");
-    info!("Current working directory: {}", std::env::current_dir()?.display());
-    
+    info!(
+        "Current working directory: {}",
+        std::env::current_dir()?.display()
+    );
+
     match find_env_file() {
         Some(env_path) => {
             info!("Environment loaded successfully from {}", env_path);
@@ -303,12 +300,12 @@ async fn main() -> std::io::Result<()> {
             error!("Using default configuration");
         }
     }
-    
+
     info!("Starting SwoleMate server...");
 
     // Get database URL from environment
-    let database_url = env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "sqlite:database/swolemate.db".to_string());
+    let database_url =
+        env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:database/swolemate.db".to_string());
     info!("Using database: {}", database_url);
 
     // Ensure database directory exists and create if needed
@@ -318,14 +315,14 @@ async fn main() -> std::io::Result<()> {
         File::create(db_file)?;
         info!("Created new database file at: {}", db_file.display());
     }
-        
+
     // Create a temporary connection to check schema
     let temp_pool = SqlitePoolOptions::new()
         .max_connections(1)
         .connect(&database_url)
         .await
         .expect("Failed to create temporary database connection");
-        
+
     // Setup and update schema
     if let Err(e) = setup_schema(&temp_pool).await {
         error!("Failed to setup/update database schema: {}", e);
@@ -375,8 +372,8 @@ async fn main() -> std::io::Result<()> {
         .expect("SERVER_PORT must be a valid port number");
 
     // Get frontend URL from environment
-    let frontend_url = env::var("FRONTEND_URL")
-        .unwrap_or_else(|_| "http://localhost:2470".to_string());
+    let frontend_url =
+        env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:2470".to_string());
     info!("Allowing CORS for frontend URL: {}", frontend_url);
 
     info!("Server starting on port {}", port);
@@ -399,9 +396,7 @@ async fn main() -> std::io::Result<()> {
 
         App::new()
             .wrap(cors)
-            .wrap(Logger::new(
-                "[%t] %s %r - %D ms - %a - %{User-Agent}i"
-            ))
+            .wrap(Logger::new("[%t] %s %r - %D ms - %a - %{User-Agent}i"))
             .wrap(middleware::RequestLogger)
             .app_data(actix_web::web::Data::new(database.clone()))
             .configure(routes::config)
@@ -409,4 +404,4 @@ async fn main() -> std::io::Result<()> {
     .bind(("0.0.0.0", port))?
     .run()
     .await
-} 
+}

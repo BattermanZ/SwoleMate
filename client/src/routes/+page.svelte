@@ -1,9 +1,21 @@
 <!-- YOU CAN DELETE EVERYTHING IN THIS PAGE -->
 
 <script lang="ts">
-	import { createWorkout, createExercise, createSet, endWorkout, endExercise, getExerciseTypes, getWorkouts, getWorkout, getLastExerciseData, cancelExercise, cancelWorkout } from '$lib/api';
+	import {
+		createWorkout,
+		createExercise,
+		createSet,
+		endWorkout,
+		endExercise,
+		getExerciseTypes,
+		getWorkouts,
+		getWorkout,
+		getLastExerciseData,
+		cancelExercise,
+		cancelWorkout
+	} from '$lib/api';
 	import type { Workout, Exercise, UpdateExerciseRequest, Set as WorkoutSet } from '$lib/types';
-	import { ProgressRadial, TabGroup, Tab, SlideToggle, RadioGroup, RadioItem, Autocomplete } from '@skeletonlabs/skeleton';
+	import { ProgressRadial } from '@skeletonlabs/skeleton';
 	import { logger } from '$lib/logger';
 	import { onMount } from 'svelte';
 
@@ -23,12 +35,12 @@
 				const workoutId = parseInt(savedWorkoutId);
 				const details = await getWorkout(workoutId);
 				currentWorkout = details.workout;
-				
+
 				// Map the exercises to our client format
-				exercises = details.exercises.map(e => ({
+				exercises = details.exercises.map((e) => ({
 					id: e.exercise.id,
 					name: e.exercise.exercise_type,
-					sets: e.sets.map(s => ({
+					sets: e.sets.map((s) => ({
 						id: s.id,
 						reps: s.reps,
 						weight: s.weight,
@@ -43,13 +55,15 @@
 				}));
 
 				// Set the current exercise to the last unfinished one
-				const lastUnfinished = exercises.find(e => !e.isFinished);
+				const lastUnfinished = exercises.find((e) => !e.isFinished);
 				if (lastUnfinished) {
 					currentExercise = {
 						id: lastUnfinished.id,
 						workout_id: workoutId,
 						exercise_type: lastUnfinished.name,
-						start_time: details.exercises.find(e => e.exercise.id === lastUnfinished.id)?.exercise.start_time || new Date().toISOString(),
+						start_time:
+							details.exercises.find((e) => e.exercise.id === lastUnfinished.id)?.exercise
+								.start_time || new Date().toISOString(),
 						end_time: lastUnfinished.end_time || new Date().toISOString(),
 						notes: lastUnfinished.notes
 					};
@@ -97,8 +111,6 @@
 	let sessionFeedback: '😊' | '😐' | '😞' | null = null;
 	let exerciseTypes: string[] = [];
 	let filteredExerciseTypes: string[] = [];
-	let inputValue = '';
-	let recentWorkouts: Workout[] = [];
 	let recentWorkoutsWithExercises: Array<{
 		workout: Workout;
 		exercises: Array<{
@@ -108,19 +120,18 @@
 	}> = [];
 
 	const FEEDBACK_OPTIONS = ['😊', '😐', '😞'] as const;
-	type FeedbackEmoji = typeof FEEDBACK_OPTIONS[number];
 
 	onMount(async () => {
 		try {
 			// Load exercise types first
 			exerciseTypes = await getExerciseTypes();
-			
+
 			// Try to load current workout
 			await loadCurrentWorkout();
-			
+
 			// Load recent workouts
 			const workouts = (await getWorkouts()).slice(0, 3);
-			
+
 			// Fetch complete data for each workout
 			recentWorkoutsWithExercises = await Promise.all(
 				workouts.map(async (workout) => {
@@ -138,7 +149,7 @@
 
 	function filterExerciseTypes(input: string) {
 		const searchTerm = input.toLowerCase().trim();
-		
+
 		// Show all types if input is empty
 		if (!searchTerm) {
 			filteredExerciseTypes = exerciseTypes.slice(0, 10); // Show top 10 by default
@@ -147,7 +158,7 @@
 
 		// Filter and sort by relevance
 		filteredExerciseTypes = exerciseTypes
-			.filter(type => type.toLowerCase().includes(searchTerm))
+			.filter((type) => type.toLowerCase().includes(searchTerm))
 			.sort((a, b) => {
 				// Exact matches first
 				const aStartsWith = a.toLowerCase().startsWith(searchTerm);
@@ -157,10 +168,6 @@
 				return a.localeCompare(b);
 			})
 			.slice(0, 10); // Limit to top 10 matches
-	}
-
-	function handleSelect(event: CustomEvent<string>) {
-		newExerciseName = event.detail;
 	}
 
 	async function startWorkout() {
@@ -203,14 +210,14 @@
 			// If there's a current exercise, end it
 			if (currentExercise?.id) {
 				const now = new Date().toISOString();
-				const currentExerciseIndex = exercises.findIndex(e => e.id === currentExercise?.id);
+				const currentExerciseIndex = exercises.findIndex((e) => e.id === currentExercise?.id);
 				if (currentExerciseIndex !== -1) {
 					const exerciseNotes = exercises[currentExerciseIndex].notes;
-					await endExercise(currentExercise.id, { 
+					await endExercise(currentExercise.id, {
 						end_time: now,
-						notes: exerciseNotes  // Preserve the notes when ending the exercise
+						notes: exerciseNotes // Preserve the notes when ending the exercise
 					});
-					logger.info('workout', 'Previous exercise ended', { 
+					logger.info('workout', 'Previous exercise ended', {
 						exerciseId: currentExercise.id,
 						endTime: now,
 						notes: exerciseNotes
@@ -223,7 +230,7 @@
 
 			// Start new exercise
 			const now = new Date().toISOString();
-			logger.info('workout', 'Adding new exercise', { 
+			logger.info('workout', 'Adding new exercise', {
 				workoutId: currentWorkout.id,
 				exerciseName: newExerciseName
 			});
@@ -244,20 +251,25 @@
 			};
 
 			currentExercise = newExercise;
-			exercises = [...exercises, {
-				id: result.id,
-				name: newExerciseName,
-				sets: [],
-				showSetForm: true,
-				isEditingNotes: true,
-				notes: undefined,
-				lastExerciseData: lastData ? {
-					date: lastData.exercise.start_time,
-					notes: lastData.exercise.notes,
-					sets: lastData.sets.map(s => ({ reps: s.reps, weight: s.weight }))
-				} : undefined,
-				isFinished: false
-			}];
+			exercises = [
+				...exercises,
+				{
+					id: result.id,
+					name: newExerciseName,
+					sets: [],
+					showSetForm: true,
+					isEditingNotes: true,
+					notes: undefined,
+					lastExerciseData: lastData
+						? {
+								date: lastData.exercise.start_time,
+								notes: lastData.exercise.notes,
+								sets: lastData.sets.map((s) => ({ reps: s.reps, weight: s.weight }))
+							}
+						: undefined,
+					isFinished: false
+				}
+			];
 			newExerciseName = '';
 			showExerciseForm = false;
 			logger.info('workout', 'Exercise added successfully', { exerciseId: result.id });
@@ -272,7 +284,7 @@
 	async function refreshRecentWorkouts() {
 		try {
 			const workouts = (await getWorkouts()).slice(0, 3);
-			
+
 			// Fetch complete data for each workout
 			recentWorkoutsWithExercises = await Promise.all(
 				workouts.map(async (workout) => {
@@ -296,7 +308,7 @@
 		try {
 			loading = true;
 			error = null;
-			logger.info('workout', 'Confirming set', { 
+			logger.info('workout', 'Confirming set', {
 				exerciseId: exercise.id,
 				reps: set.reps,
 				weight: set.weight
@@ -338,7 +350,10 @@
 			await endExercise(exercise.id, updateRequest);
 			exercises[exerciseIndex].isEditingNotes = false;
 			exercises = [...exercises];
-			logger.info('workout', 'Exercise notes updated', { exerciseId: exercise.id, notes: exercise.notes });
+			logger.info('workout', 'Exercise notes updated', {
+				exerciseId: exercise.id,
+				notes: exercise.notes
+			});
 
 			// Refresh recent workouts to show updated notes
 			await refreshRecentWorkouts();
@@ -357,12 +372,15 @@
 		const defaultReps = lastSet ? lastSet.reps : 12;
 		const defaultWeight = lastSet ? lastSet.weight : 0;
 
-		exercises[exerciseIndex].sets = [...exercise.sets, {
-			reps: defaultReps,
-			weight: defaultWeight,
-			isEditing: true,
-			isConfirmed: false
-		}];
+		exercises[exerciseIndex].sets = [
+			...exercise.sets,
+			{
+				reps: defaultReps,
+				weight: defaultWeight,
+				isEditing: true,
+				isConfirmed: false
+			}
+		];
 		exercises = [...exercises];
 		logger.debug('workout', 'New set form added', { exerciseId: exercise.id });
 	}
@@ -380,7 +398,7 @@
 			error = null;
 			const now = new Date().toISOString();
 			const workoutId = currentWorkout.id; // Store the ID before clearing
-			
+
 			await endWorkout(currentWorkout.id, {
 				end_time: now,
 				notes: sessionNotes || undefined,
@@ -389,7 +407,7 @@
 
 			// Clear the saved workout
 			saveCurrentWorkout(null);
-			
+
 			currentWorkout = null;
 			currentExercise = null;
 			exercises = [];
@@ -397,7 +415,7 @@
 			sessionNotes = '';
 			sessionFeedback = null;
 
-			logger.info('workout', 'Workout completed', { 
+			logger.info('workout', 'Workout completed', {
 				workoutId, // Use the stored ID
 				feedback: sessionFeedback
 			});
@@ -412,10 +430,6 @@
 		}
 	}
 
-	function formatDate(dateString: string): string {
-		return new Date(dateString).toLocaleDateString();
-	}
-
 	function formatTime(dateString: string): string {
 		return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 	}
@@ -424,7 +438,20 @@
 		const date = new Date(dateString);
 		const now = new Date();
 		const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-		const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+		const months = [
+			'January',
+			'February',
+			'March',
+			'April',
+			'May',
+			'June',
+			'July',
+			'August',
+			'September',
+			'October',
+			'November',
+			'December'
+		];
 
 		// Function to add ordinal suffix
 		const getOrdinal = (n: number) => {
@@ -458,16 +485,16 @@
 
 	function compressSets(sets: Array<{ reps: number; weight: number }>) {
 		const compressed: Array<{ count: number; reps: number; weight: number }> = [];
-		
-		sets.forEach(set => {
-			const existing = compressed.find(c => c.reps === set.reps && c.weight === set.weight);
+
+		sets.forEach((set) => {
+			const existing = compressed.find((c) => c.reps === set.reps && c.weight === set.weight);
 			if (existing) {
 				existing.count++;
 			} else {
 				compressed.push({ count: 1, reps: set.reps, weight: set.weight });
 			}
 		});
-		
+
 		return compressed;
 	}
 
@@ -500,10 +527,10 @@
 			error = null;
 			const workoutId = currentWorkout.id;
 			await cancelWorkout(workoutId);
-			
+
 			// Clear the saved workout
 			saveCurrentWorkout(null);
-			
+
 			currentWorkout = null;
 			currentExercise = null;
 			exercises = [];
@@ -517,14 +544,378 @@
 	}
 </script>
 
-<style>
+<div class="content-container">
+	<header class="text-center space-y-2 sm:space-y-4 mb-4 sm:mb-6">
+		<div class="card variant-filled-tertiary p-3 sm:p-4">
+			<h1 class="h1 text-xl sm:text-2xl mb-2 sm:mb-4">Today's Workout</h1>
+			{#if !currentWorkout}
+				<div class="p-1 sm:p-2">
+					<button
+						class="btn variant-filled-primary w-full md:w-auto {loading ? 'opacity-50' : ''}"
+						on:click={startWorkout}
+						disabled={loading}
+					>
+						{#if loading}
+							<ProgressRadial
+								width="w-6"
+								stroke={150}
+								meter="stroke-primary-500"
+								track="stroke-primary-500/30"
+							/>
+						{:else}
+							<span class="text-xl sm:text-2xl mr-2">💪</span> Start New Session
+						{/if}
+					</button>
+				</div>
+			{/if}
+		</div>
+	</header>
+
+	{#if error}
+		<div class="alert variant-filled-error mb-4">
+			<span class="text-xl sm:text-2xl">⚠️</span>
+			<span>{error}</span>
+		</div>
+	{/if}
+
+	<div class="grid gap-4 sm:gap-6">
+		{#if currentWorkout}
+			<div class="workout-container">
+				<div class="card variant-filled-surface p-2 sm:p-4 space-y-3 sm:space-y-5">
+					<header class="flex flex-col sm:flex-row justify-between items-center gap-2 mb-2 sm:mb-4">
+						<h2 class="h2 text-lg sm:text-2xl">Current Session</h2>
+						<div class="flex gap-2 w-full sm:w-auto">
+							<button
+								class="btn btn-sm variant-soft-error flex-1 sm:flex-initial"
+								on:click={cancelWorkoutSession}
+							>
+								<span class="text-sm sm:text-lg mr-1 sm:mr-2">❌</span>
+								<span class="text-sm sm:text-base">Cancel</span>
+							</button>
+							<button
+								class="btn btn-sm variant-filled-error flex-1 sm:flex-initial"
+								on:click={endWorkoutSession}
+							>
+								<span class="text-sm sm:text-lg mr-1 sm:mr-2">🏁</span>
+								<span class="text-sm sm:text-base">End</span>
+							</button>
+						</div>
+					</header>
+					<div class="space-y-5">
+						{#each exercises as exercise, exerciseIndex}
+							<div class="card variant-soft p-3 sm:p-5 exercise-card">
+								<div class="flex flex-col gap-3 sm:gap-5">
+									<div class="flex justify-between items-center">
+										<span class="text-lg sm:text-xl font-bold">{exercise.name}</span>
+										<button
+											class="btn btn-sm variant-soft-error"
+											on:click={() => cancelExerciseAndRefresh(exerciseIndex)}
+										>
+											<span class="text-sm">❌</span>
+										</button>
+									</div>
+									{#if exercise.lastExerciseData}
+										<div class="last-exercise-info">
+											<span class="opacity-75 whitespace-nowrap text-sm"
+												>Last time ({formatDateRelative(exercise.lastExerciseData.date)}):</span
+											>
+											<div class="last-sets">
+												{#each compressSets(exercise.lastExerciseData.sets) as set}
+													{#if set.count > 1}
+														<span class="badge variant-filled-secondary text-xs">
+															{set.count}×<span class="badge variant-filled-primary"
+																>{set.reps}×{set.weight}kg</span
+															>
+														</span>
+													{:else}
+														<span class="badge variant-filled-primary text-xs"
+															>{set.reps}×{set.weight}kg</span
+														>
+													{/if}
+												{/each}
+											</div>
+											{#if exercise.lastExerciseData.notes}
+												<div class="w-full mt-1 text-sm">
+													<span class="opacity-75">Notes:</span>
+													{exercise.lastExerciseData.notes}
+												</div>
+											{/if}
+										</div>
+									{/if}
+									<div class="flex flex-col gap-3 sm:gap-4">
+										<div class="flex flex-wrap gap-2 items-center">
+											{#each exercise.sets as set, setIndex}
+												{#if set.isEditing}
+													<div
+														class="card variant-ghost p-2 flex gap-2 items-center w-full sm:w-auto"
+													>
+														<span class="text-xs opacity-75">{setIndex + 1}</span>
+														<div class="input-container">
+															<input
+																type="number"
+																inputmode="numeric"
+																pattern="[0-9]*"
+																class="input w-16 text-center"
+																bind:value={set.reps}
+																min="0"
+															/>
+															<span class="text-base">×</span>
+															<input
+																type="number"
+																inputmode="numeric"
+																pattern="[0-9]*"
+																class="input w-16 text-center"
+																bind:value={set.weight}
+																min="0"
+																step="0.5"
+															/>
+															<span class="text-base">kg</span>
+														</div>
+														<button
+															class="btn variant-filled-success btn-sm round-btn ml-auto"
+															on:click={() => confirmSet(exerciseIndex, setIndex)}
+															disabled={loading}
+														>
+															✓
+														</button>
+													</div>
+												{:else}
+													<div class="chip variant-filled text-sm">
+														{set.reps}×{set.weight}kg
+													</div>
+												{/if}
+											{/each}
+											{#if !exercise.sets.some((s) => s.isEditing)}
+												<button
+													class="btn variant-filled-secondary round-btn btn-sm"
+													on:click={() => addSet(exerciseIndex)}
+												>
+													+
+												</button>
+											{/if}
+										</div>
+									</div>
+
+									{#if exercise.isEditingNotes}
+										<div class="card variant-ghost p-2">
+											<div class="flex gap-2 items-center">
+												<input
+													type="text"
+													class="input flex-grow"
+													placeholder="Exercise notes..."
+													bind:value={exercise.notes}
+												/>
+												<button
+													class="btn variant-filled-success btn-sm round-btn"
+													on:click={() => updateExerciseNotes(exerciseIndex)}
+												>
+													✓
+												</button>
+											</div>
+										</div>
+									{:else if exercise.notes}
+										<div class="card variant-ghost p-2">
+											<div class="flex gap-2 items-center">
+												<span class="flex-grow text-sm">{exercise.notes}</span>
+												<button
+													class="btn variant-filled btn-sm round-btn"
+													on:click={() => (exercises[exerciseIndex].isEditingNotes = true)}
+												>
+													✎
+												</button>
+											</div>
+										</div>
+									{/if}
+								</div>
+							</div>
+						{/each}
+					</div>
+
+					{#if showExerciseForm}
+						<div class="card variant-ghost p-4">
+							<form on:submit|preventDefault={addExercise} class="flex flex-col sm:flex-row gap-3">
+								<div class="relative flex-grow">
+									<input
+										type="text"
+										class="input w-full"
+										placeholder="Exercise name"
+										bind:value={newExerciseName}
+										on:input={(e) => filterExerciseTypes(e.currentTarget.value)}
+										required
+										autocomplete="off"
+									/>
+									{#if filteredExerciseTypes.length > 0}
+										<div
+											class="absolute w-full mt-1 max-h-48 overflow-y-auto z-50 card variant-filled-surface shadow-xl"
+										>
+											{#each filteredExerciseTypes as type}
+												<button
+													class="block w-full text-left px-4 py-3 hover:variant-soft-primary transition-colors"
+													on:click|preventDefault={() => {
+														newExerciseName = type;
+														filteredExerciseTypes = [];
+													}}
+												>
+													{type}
+												</button>
+											{/each}
+										</div>
+									{/if}
+								</div>
+								<div class="flex gap-2">
+									<button type="submit" class="btn variant-filled-primary flex-1 sm:flex-none">
+										<span class="text-lg mr-2">✨</span> Add
+									</button>
+									<button
+										type="button"
+										class="btn variant-soft flex-1 sm:flex-none"
+										on:click={() => {
+											showExerciseForm = false;
+											filteredExerciseTypes = [];
+										}}
+									>
+										Cancel
+									</button>
+								</div>
+							</form>
+						</div>
+					{:else}
+						<button
+							class="btn variant-filled w-full"
+							on:click={() => {
+								showExerciseForm = true;
+								filterExerciseTypes('');
+							}}
+						>
+							<span class="text-lg mr-2">{currentExercise ? '➡️' : '+'}</span>
+							{currentExercise ? 'Next Exercise' : 'Add Exercise'}
+						</button>
+					{/if}
+				</div>
+			</div>
+		{/if}
+
+		{#if recentWorkoutsWithExercises.length > 0}
+			<div class="card variant-ghost p-4 space-y-4">
+				<h2 class="h2 text-center">Recent Workouts</h2>
+				<div class="grid gap-4">
+					{#each recentWorkoutsWithExercises as { workout, exercises }}
+						<div class="card variant-soft p-4 space-y-2">
+							<div class="flex justify-between items-center">
+								<div>
+									<h3 class="h3">{formatDateRelative(workout.date)}</h3>
+									<p class="opacity-80">
+										{formatTime(workout.start_time)} - {formatTime(workout.end_time)}
+									</p>
+								</div>
+								<div class="flex items-center gap-2">
+									{#if workout.feedback}
+										<span class="text-2xl">{workout.feedback}</span>
+									{/if}
+									<a href="/workouts/{workout.id}" class="btn btn-sm variant-soft">View Details →</a
+									>
+								</div>
+							</div>
+
+							{#if workout.notes}
+								<p class="opacity-70">{workout.notes}</p>
+							{/if}
+
+							<div class="exercise-list">
+								{#each exercises as { exercise, sets }}
+									<div class="exercise-row">
+										<div class="flex-1">
+											<span class="exercise-name">{exercise.exercise_type}</span>
+											{#if exercise.notes}
+												<p class="text-sm opacity-90 mt-0.5">{exercise.notes}</p>
+											{/if}
+										</div>
+										<div class="sets-list">
+											{#each compressSets(sets) as set}
+												{#if set.count > 1}
+													<span class="badge variant-filled-secondary">
+														{set.count}×<span class="badge variant-filled-primary"
+															>{set.reps}×{set.weight}kg</span
+														>
+													</span>
+												{:else}
+													<span class="badge variant-filled-primary">{set.reps}×{set.weight}kg</span
+													>
+												{/if}
+											{/each}
+										</div>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/each}
+				</div>
+			</div>
+		{/if}
+	</div>
+
+	<!-- Feedback Modal -->
+	{#if showFeedbackModal}
+		<div class="modal-backdrop fixed inset-0 bg-black/50 flex items-center justify-center">
+			<div class="modal card variant-filled-surface p-4 w-full max-w-lg mx-4 space-y-4">
+				<header class="text-center">
+					<h3 class="h3">How was your workout?</h3>
+				</header>
+
+				<div class="flex justify-center gap-4">
+					{#each FEEDBACK_OPTIONS as emoji}
+						<button
+							class="card {sessionFeedback === emoji
+								? 'variant-filled-primary'
+								: 'variant-soft'} p-4 text-4xl hover:scale-110 transition-transform"
+							on:click={() => (sessionFeedback = emoji)}
+						>
+							{emoji}
+						</button>
+					{/each}
+				</div>
+
+				<textarea
+					class="textarea"
+					rows="3"
+					placeholder="Add notes about your session..."
+					bind:value={sessionNotes}
+				></textarea>
+
+				<footer class="flex justify-end gap-2">
+					<button class="btn variant-soft" on:click={() => (showFeedbackModal = false)}>
+						Cancel
+					</button>
+					<button
+						class="btn variant-filled-primary"
+						on:click={submitWorkoutFeedback}
+						disabled={!sessionFeedback || loading}
+					>
+						{#if loading}
+							<ProgressRadial
+								width="w-6"
+								stroke={150}
+								meter="stroke-primary-500"
+								track="stroke-primary-500/30"
+							/>
+						{:else}
+							<span class="text-lg mr-2">✨</span> Submit
+						{/if}
+					</button>
+				</footer>
+			</div>
+		</div>
+	{/if}
+</div>
+
+<style lang="postcss">
 	/* Remove spinner arrows from number inputs */
-	input[type="number"]::-webkit-inner-spin-button,
-	input[type="number"]::-webkit-outer-spin-button {
+	input[type='number']::-webkit-inner-spin-button,
+	input[type='number']::-webkit-outer-spin-button {
 		-webkit-appearance: none;
 		margin: 0;
 	}
-	input[type="number"] {
+	input[type='number'] {
 		-moz-appearance: textfield;
 	}
 	.exercise-card {
@@ -589,8 +980,8 @@
 	}
 
 	/* Prevent zoom on input fields */
-	input[type="number"],
-	input[type="text"] {
+	input[type='number'],
+	input[type='text'] {
 		@apply text-base;
 		touch-action: manipulation;
 		font-size: 16px !important;
@@ -602,333 +993,3 @@
 		min-height: 2.5rem;
 	}
 </style>
-
-<div class="content-container">
-	<header class="text-center space-y-2 sm:space-y-4 mb-4 sm:mb-6">
-		<div class="card variant-filled-tertiary p-3 sm:p-4">
-			<h1 class="h1 text-xl sm:text-2xl mb-2 sm:mb-4">Today's Workout</h1>
-			{#if !currentWorkout}
-				<div class="p-1 sm:p-2">
-					<button 
-						class="btn variant-filled-primary w-full md:w-auto {loading ? 'opacity-50' : ''}" 
-						on:click={startWorkout} 
-						disabled={loading}
-					>
-						{#if loading}
-							<ProgressRadial width="w-6" stroke={150} meter="stroke-primary-500" track="stroke-primary-500/30"/>
-						{:else}
-							<span class="text-xl sm:text-2xl mr-2">💪</span> Start New Session
-						{/if}
-					</button>
-				</div>
-			{/if}
-		</div>
-	</header>
-
-	{#if error}
-		<div class="alert variant-filled-error mb-4">
-			<span class="text-xl sm:text-2xl">⚠️</span>
-			<span>{error}</span>
-		</div>
-	{/if}
-
-	<div class="grid gap-4 sm:gap-6">
-		{#if currentWorkout}
-			<div class="workout-container">
-				<div class="card variant-filled-surface p-2 sm:p-4 space-y-3 sm:space-y-5">
-					<header class="flex flex-col sm:flex-row justify-between items-center gap-2 mb-2 sm:mb-4">
-						<h2 class="h2 text-lg sm:text-2xl">Current Session</h2>
-						<div class="flex gap-2 w-full sm:w-auto">
-							<button class="btn btn-sm variant-soft-error flex-1 sm:flex-initial" on:click={cancelWorkoutSession}>
-								<span class="text-sm sm:text-lg mr-1 sm:mr-2">❌</span>
-								<span class="text-sm sm:text-base">Cancel</span>
-							</button>
-							<button class="btn btn-sm variant-filled-error flex-1 sm:flex-initial" on:click={endWorkoutSession}>
-								<span class="text-sm sm:text-lg mr-1 sm:mr-2">🏁</span>
-								<span class="text-sm sm:text-base">End</span>
-							</button>
-						</div>
-					</header>
-					<div class="space-y-5">
-						{#each exercises as exercise, exerciseIndex}
-							<div class="card variant-soft p-3 sm:p-5 exercise-card">
-								<div class="flex flex-col gap-3 sm:gap-5">
-									<div class="flex justify-between items-center">
-										<span class="text-lg sm:text-xl font-bold">{exercise.name}</span>
-										<button 
-											class="btn btn-sm variant-soft-error"
-											on:click={() => cancelExerciseAndRefresh(exerciseIndex)}
-										>
-											<span class="text-sm">❌</span>
-										</button>
-									</div>
-									{#if exercise.lastExerciseData}
-										<div class="last-exercise-info">
-											<span class="opacity-75 whitespace-nowrap text-sm">Last time ({formatDateRelative(exercise.lastExerciseData.date)}):</span>
-											<div class="last-sets">
-												{#each compressSets(exercise.lastExerciseData.sets) as set}
-													{#if set.count > 1}
-														<span class="badge variant-filled-secondary text-xs">
-															{set.count}×<span class="badge variant-filled-primary">{set.reps}×{set.weight}kg</span>
-														</span>
-													{:else}
-														<span class="badge variant-filled-primary text-xs">{set.reps}×{set.weight}kg</span>
-													{/if}
-												{/each}
-											</div>
-											{#if exercise.lastExerciseData.notes}
-												<div class="w-full mt-1 text-sm">
-													<span class="opacity-75">Notes:</span> {exercise.lastExerciseData.notes}
-												</div>
-											{/if}
-										</div>
-									{/if}
-									<div class="flex flex-col gap-3 sm:gap-4">
-										<div class="flex flex-wrap gap-2 items-center">
-											{#each exercise.sets as set, setIndex}
-												{#if set.isEditing}
-													<div class="card variant-ghost p-2 flex gap-2 items-center w-full sm:w-auto">
-														<span class="text-xs opacity-75">{setIndex + 1}</span>
-														<div class="input-container">
-															<input
-																type="number"
-																inputmode="numeric"
-																pattern="[0-9]*"
-																class="input w-16 text-center"
-																bind:value={set.reps}
-																min="0"
-															/>
-															<span class="text-base">×</span>
-															<input
-																type="number"
-																inputmode="numeric"
-																pattern="[0-9]*"
-																class="input w-16 text-center"
-																bind:value={set.weight}
-																min="0"
-																step="0.5"
-															/>
-															<span class="text-base">kg</span>
-														</div>
-														<button 
-															class="btn variant-filled-success btn-sm round-btn ml-auto"
-															on:click={() => confirmSet(exerciseIndex, setIndex)}
-															disabled={loading}
-														>
-															✓
-														</button>
-													</div>
-												{:else}
-													<div class="chip variant-filled text-sm">
-														{set.reps}×{set.weight}kg
-													</div>
-												{/if}
-											{/each}
-											{#if !exercise.sets.some(s => s.isEditing)}
-												<button 
-													class="btn variant-filled-secondary round-btn btn-sm" 
-													on:click={() => addSet(exerciseIndex)}
-												>
-													+
-												</button>
-											{/if}
-										</div>
-									</div>
-									
-									{#if exercise.isEditingNotes}
-										<div class="card variant-ghost p-2">
-											<div class="flex gap-2 items-center">
-												<input
-													type="text"
-													class="input flex-grow"
-													placeholder="Exercise notes..."
-													bind:value={exercise.notes}
-												/>
-												<button 
-													class="btn variant-filled-success btn-sm round-btn"
-													on:click={() => updateExerciseNotes(exerciseIndex)}
-												>
-													✓
-												</button>
-											</div>
-										</div>
-									{:else if exercise.notes}
-										<div class="card variant-ghost p-2">
-											<div class="flex gap-2 items-center">
-												<span class="flex-grow text-sm">{exercise.notes}</span>
-												<button 
-													class="btn variant-filled btn-sm round-btn"
-													on:click={() => exercises[exerciseIndex].isEditingNotes = true}
-												>
-													✎
-												</button>
-											</div>
-										</div>
-									{/if}
-								</div>
-							</div>
-						{/each}
-					</div>
-
-					{#if showExerciseForm}
-						<div class="card variant-ghost p-4">
-							<form on:submit|preventDefault={addExercise} class="flex flex-col sm:flex-row gap-3">
-								<div class="relative flex-grow">
-									<input
-										type="text"
-										class="input w-full"
-										placeholder="Exercise name"
-										bind:value={newExerciseName}
-										on:input={(e) => filterExerciseTypes(e.currentTarget.value)}
-										required
-										autocomplete="off"
-									/>
-									{#if filteredExerciseTypes.length > 0}
-										<div class="absolute w-full mt-1 max-h-48 overflow-y-auto z-50 card variant-filled-surface shadow-xl">
-											{#each filteredExerciseTypes as type}
-												<button
-													class="block w-full text-left px-4 py-3 hover:variant-soft-primary transition-colors"
-													on:click|preventDefault={() => {
-														newExerciseName = type;
-														filteredExerciseTypes = [];
-													}}
-												>
-													{type}
-												</button>
-											{/each}
-										</div>
-									{/if}
-								</div>
-								<div class="flex gap-2">
-									<button type="submit" class="btn variant-filled-primary flex-1 sm:flex-none">
-										<span class="text-lg mr-2">✨</span> Add
-									</button>
-									<button type="button" class="btn variant-soft flex-1 sm:flex-none" on:click={() => {
-										showExerciseForm = false;
-										filteredExerciseTypes = [];
-									}}>
-										Cancel
-									</button>
-								</div>
-							</form>
-						</div>
-					{:else}
-						<button 
-							class="btn variant-filled w-full" 
-							on:click={() => {
-								showExerciseForm = true;
-								filterExerciseTypes('');
-							}}
-						>
-							<span class="text-lg mr-2">{currentExercise ? '➡️' : '+'}</span>
-							{currentExercise ? 'Next Exercise' : 'Add Exercise'}
-						</button>
-					{/if}
-				</div>
-			</div>
-		{/if}
-
-		{#if recentWorkoutsWithExercises.length > 0}
-			<div class="card variant-ghost p-4 space-y-4">
-				<h2 class="h2 text-center">Recent Workouts</h2>
-				<div class="grid gap-4">
-					{#each recentWorkoutsWithExercises as {workout, exercises}}
-						<div class="card variant-soft p-4 space-y-2">
-							<div class="flex justify-between items-center">
-								<div>
-									<h3 class="h3">{formatDateRelative(workout.date)}</h3>
-									<p class="opacity-80">
-										{formatTime(workout.start_time)} - {formatTime(workout.end_time)}
-									</p>
-								</div>
-								<div class="flex items-center gap-2">
-									{#if workout.feedback}
-										<span class="text-2xl">{workout.feedback}</span>
-									{/if}
-									<a href="/workouts/{workout.id}" class="btn btn-sm variant-soft">View Details →</a>
-								</div>
-							</div>
-							
-							{#if workout.notes}
-								<p class="opacity-70">{workout.notes}</p>
-							{/if}
-
-							<div class="exercise-list">
-								{#each exercises as {exercise, sets}}
-									<div class="exercise-row">
-										<div class="flex-1">
-											<span class="exercise-name">{exercise.exercise_type}</span>
-											{#if exercise.notes}
-												<p class="text-sm opacity-90 mt-0.5">{exercise.notes}</p>
-											{/if}
-										</div>
-										<div class="sets-list">
-											{#each compressSets(sets) as set}
-												{#if set.count > 1}
-													<span class="badge variant-filled-secondary">
-														{set.count}×<span class="badge variant-filled-primary">{set.reps}×{set.weight}kg</span>
-													</span>
-												{:else}
-													<span class="badge variant-filled-primary">{set.reps}×{set.weight}kg</span>
-												{/if}
-											{/each}
-										</div>
-									</div>
-								{/each}
-							</div>
-						</div>
-					{/each}
-				</div>
-			</div>
-		{/if}
-	</div>
-
-	<!-- Feedback Modal -->
-	{#if showFeedbackModal}
-		<div class="modal-backdrop fixed inset-0 bg-black/50 flex items-center justify-center">
-			<div class="modal card variant-filled-surface p-4 w-full max-w-lg mx-4 space-y-4">
-				<header class="text-center">
-					<h3 class="h3">How was your workout?</h3>
-				</header>
-
-				<div class="flex justify-center gap-4">
-					{#each FEEDBACK_OPTIONS as emoji}
-						<button
-							class="card {sessionFeedback === emoji ? 'variant-filled-primary' : 'variant-soft'} p-4 text-4xl hover:scale-110 transition-transform"
-							on:click={() => sessionFeedback = emoji}
-						>
-							{emoji}
-						</button>
-					{/each}
-				</div>
-
-				<textarea
-					class="textarea"
-					rows="3"
-					placeholder="Add notes about your session..."
-					bind:value={sessionNotes}
-				></textarea>
-
-				<footer class="flex justify-end gap-2">
-					<button 
-						class="btn variant-soft"
-						on:click={() => showFeedbackModal = false}
-					>
-						Cancel
-					</button>
-					<button
-						class="btn variant-filled-primary"
-						on:click={submitWorkoutFeedback}
-						disabled={!sessionFeedback || loading}
-					>
-						{#if loading}
-							<ProgressRadial width="w-6" stroke={150} meter="stroke-primary-500" track="stroke-primary-500/30"/>
-						{:else}
-							<span class="text-lg mr-2">✨</span> Submit
-						{/if}
-					</button>
-				</footer>
-			</div>
-		</div>
-	{/if}
-</div>

@@ -64,7 +64,7 @@ where
         Box::pin(async move {
             let res = fut.await?;
             let duration = start.elapsed();
-            
+
             info!(
                 target: "request",
                 "Request completed - {{ \"request_id\": \"{}\", \"method\": \"{}\", \"path\": \"{}\", \"status\": {}, \"duration_ms\": {} }}",
@@ -78,4 +78,4 @@ where
             Ok(res)
         })
     }
-} 
+}

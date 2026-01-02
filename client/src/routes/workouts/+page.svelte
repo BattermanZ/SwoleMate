@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { createWorkout, createExercise, createSet, getWorkouts, cancelWorkout } from '$lib/api';
-	import type { Workout, Exercise, Set } from '$lib/types';
+	import { getWorkouts, cancelWorkout } from '$lib/api';
+	import type { Workout } from '$lib/types';
 	import { logger } from '$lib/logger';
 
 	export let data: { workouts: Workout[] };
@@ -9,107 +9,12 @@
 	let loading = false;
 	let error: string | null = null;
 
-	// Form states
-	let showWorkoutForm = false;
-	let showExerciseForm = false;
-	let showSetForm = false;
-	let currentWorkoutId: number | null = null;
-	let currentExerciseId: number | null = null;
-
-	// Form data
-	let newWorkout = {
-		date: new Date().toISOString().split('T')[0],
-		notes: ''
-	};
-
-	let newExercise = {
-		exercise_type: '',
-		notes: ''
-	};
-
-	let newSet = {
-		reps: 0,
-		weight: 0,
-		notes: ''
-	};
-
 	async function refreshWorkouts() {
 		try {
 			loading = true;
 			workouts = await getWorkouts();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load workouts';
-		} finally {
-			loading = false;
-		}
-	}
-
-	async function handleCreateWorkout() {
-		try {
-			loading = true;
-			error = null;
-			const result = await createWorkout({
-				date: new Date(newWorkout.date).toISOString(),
-				notes: newWorkout.notes || undefined
-			});
-			currentWorkoutId = result.id;
-			showWorkoutForm = false;
-			showExerciseForm = true;
-			// Reset form
-			newWorkout = {
-				date: new Date().toISOString().split('T')[0],
-				notes: ''
-			};
-			await refreshWorkouts();
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to create workout';
-		} finally {
-			loading = false;
-		}
-	}
-
-	async function handleCreateExercise() {
-		if (!currentWorkoutId) return;
-		try {
-			loading = true;
-			error = null;
-			const exerciseData = {
-				exercise_type: newExercise.exercise_type,
-				notes: newExercise.notes || undefined
-			};
-			const result = await createExercise(currentWorkoutId, exerciseData);
-			currentExerciseId = result.id;
-			showExerciseForm = false;
-			showSetForm = true;
-			// Reset form
-			newExercise = {
-				exercise_type: '',
-				notes: ''
-			};
-			await refreshWorkouts();
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to create exercise';
-		} finally {
-			loading = false;
-		}
-	}
-
-	async function handleCreateSet() {
-		if (!currentExerciseId) return;
-		try {
-			loading = true;
-			error = null;
-			await createSet(currentExerciseId, newSet);
-			showSetForm = false;
-			// Reset form
-			newSet = {
-				reps: 0,
-				weight: 0,
-				notes: ''
-			};
-			await refreshWorkouts();
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to create set';
 		} finally {
 			loading = false;
 		}
@@ -143,7 +48,20 @@
 		const date = new Date(dateString);
 		const now = new Date();
 		const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-		const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+		const months = [
+			'January',
+			'February',
+			'March',
+			'April',
+			'May',
+			'June',
+			'July',
+			'August',
+			'September',
+			'October',
+			'November',
+			'December'
+		];
 
 		// Function to add ordinal suffix
 		const getOrdinal = (n: number) => {
@@ -182,41 +100,6 @@
 	onMount(refreshWorkouts);
 </script>
 
-<style lang="postcss">
-	.workout-list {
-		@apply grid gap-4;
-	}
-	.workout-card {
-		@apply card p-4 transition-transform hover:scale-[1.01] bg-surface-900/50;
-		border: 1px solid #E9A737;
-	}
-	.workout-header {
-		@apply flex justify-between items-center mb-2;
-	}
-	.workout-date {
-		@apply text-2xl font-semibold;
-	}
-	.workout-time {
-		@apply text-base opacity-90;
-	}
-	.workout-notes {
-		@apply text-base opacity-90 mb-4;
-	}
-	.workout-actions {
-		@apply flex justify-end gap-2 mt-2;
-	}
-	.view-details-btn {
-		@apply btn variant-filled-primary;
-	}
-	:global(.dark) .workout-card {
-		@apply bg-surface-900/50;
-		border: 1px solid #E9A737;
-	}
-	:global(.dark) .view-details-btn {
-		@apply bg-primary-500/80 hover:bg-primary-500;
-	}
-</style>
-
 <div class="container mx-auto p-4 space-y-6">
 	<header class="text-center">
 		<h2 class="h2 mb-4">Workout History</h2>
@@ -253,13 +136,13 @@
 							{/if}
 						</div>
 					</div>
-					
+
 					{#if workout.notes}
 						<div class="workout-notes">{workout.notes}</div>
 					{/if}
 
 					<div class="workout-actions">
-						<button 
+						<button
 							class="btn variant-filled-error"
 							on:click={() => handleDeleteWorkout(workout.id)}
 							disabled={loading}
@@ -267,12 +150,45 @@
 							<span class="text-xl mr-2">🗑️</span>
 							Delete
 						</button>
-						<a href="/workouts/{workout.id}" class="view-details-btn">
-							View Details →
-						</a>
+						<a href="/workouts/{workout.id}" class="view-details-btn"> View Details → </a>
 					</div>
 				</div>
 			{/each}
 		{/if}
 	</div>
-</div> 
+</div>
+
+<style lang="postcss">
+	.workout-list {
+		@apply grid gap-4;
+	}
+	.workout-card {
+		@apply card p-4 transition-transform hover:scale-[1.01] bg-surface-900/50;
+		border: 1px solid #e9a737;
+	}
+	.workout-header {
+		@apply flex justify-between items-center mb-2;
+	}
+	.workout-date {
+		@apply text-2xl font-semibold;
+	}
+	.workout-time {
+		@apply text-base opacity-90;
+	}
+	.workout-notes {
+		@apply text-base opacity-90 mb-4;
+	}
+	.workout-actions {
+		@apply flex justify-end gap-2 mt-2;
+	}
+	.view-details-btn {
+		@apply btn variant-filled-primary;
+	}
+	:global(.dark) .workout-card {
+		@apply bg-surface-900/50;
+		border: 1px solid #e9a737;
+	}
+	:global(.dark) .view-details-btn {
+		@apply bg-primary-500/80 hover:bg-primary-500;
+	}
+</style>

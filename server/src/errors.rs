@@ -2,7 +2,6 @@ use actix_web::{HttpResponse, ResponseError};
 use log::error;
 use serde_json::json;
 use thiserror::Error;
-use sqlx;
 
 #[derive(Error, Debug)]
 pub enum AppError {
@@ -41,26 +40,18 @@ impl ResponseError for AppError {
         );
 
         match self {
-            AppError::DatabaseError(e) => {
-                HttpResponse::InternalServerError().json(json!({
-                    "error": format!("Database error: {}", e)
-                }))
-            }
-            AppError::InternalError(msg) => {
-                HttpResponse::InternalServerError().json(json!({
-                    "error": msg
-                }))
-            }
-            AppError::BadRequest(msg) => {
-                HttpResponse::BadRequest().json(json!({
-                    "error": msg
-                }))
-            }
-            AppError::NotFound(msg) => {
-                HttpResponse::NotFound().json(json!({
-                    "error": msg
-                }))
-            }
+            AppError::DatabaseError(e) => HttpResponse::InternalServerError().json(json!({
+                "error": format!("Database error: {}", e)
+            })),
+            AppError::InternalError(msg) => HttpResponse::InternalServerError().json(json!({
+                "error": msg
+            })),
+            AppError::BadRequest(msg) => HttpResponse::BadRequest().json(json!({
+                "error": msg
+            })),
+            AppError::NotFound(msg) => HttpResponse::NotFound().json(json!({
+                "error": msg
+            })),
         }
     }
-} 
+}

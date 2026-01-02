@@ -58,8 +58,8 @@ SwoleMate is a modern fitness tracking application that helps you monitor and vi
 
 ## Development
 
-- Frontend runs on `http://localhost:5173`
-- Backend API runs on `http://localhost:8080`
+- Frontend runs on `http://localhost:2470`
+- Backend API runs on `http://localhost:2469`
 
 ## Project Structure
 

@@ -39,7 +39,11 @@
 	}
 
 	async function handleRestore(filename: string) {
-		if (!confirm('Are you sure you want to restore this backup? This will replace your current database.')) {
+		if (
+			!confirm(
+				'Are you sure you want to restore this backup? This will replace your current database.'
+			)
+		) {
 			return;
 		}
 
@@ -61,12 +65,12 @@
 		if (!confirm('Are you sure you want to delete this backup? This cannot be undone.')) {
 			return;
 		}
-		
+
 		try {
 			loading = true;
 			error = null;
 			await deleteBackup(filename);
-			backups = backups.filter(b => b.filename !== filename);
+			backups = backups.filter((b) => b.filename !== filename);
 			logger.info('backups', 'Deleted backup successfully');
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to delete backup';
@@ -78,7 +82,20 @@
 
 	function formatDate(date: Date): string {
 		const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-		const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+		const months = [
+			'January',
+			'February',
+			'March',
+			'April',
+			'May',
+			'June',
+			'July',
+			'August',
+			'September',
+			'October',
+			'November',
+			'December'
+		];
 
 		const getOrdinal = (n: number) => {
 			const s = ['th', 'st', 'nd', 'rd'];
@@ -96,11 +113,7 @@
 	<header class="text-center space-y-4">
 		<h2 class="h2">Database Backups</h2>
 		<div class="flex justify-center">
-			<button
-				class="btn variant-filled-primary"
-				on:click={handleCreateBackup}
-				disabled={loading}
-			>
+			<button class="btn variant-filled-primary" on:click={handleCreateBackup} disabled={loading}>
 				<span class="text-xl mr-2">💾</span>
 				Create Manual Backup
 			</button>
@@ -134,7 +147,11 @@
 									</span>
 								</div>
 								<div class="mt-2">
-									<span class="badge {backup.backup_type === 'Auto' ? 'variant-filled-secondary' : 'variant-filled-primary'}">
+									<span
+										class="badge {backup.backup_type === 'Auto'
+											? 'variant-filled-secondary'
+											: 'variant-filled-primary'}"
+									>
 										{backup.backup_type}
 									</span>
 									<span class="text-sm ml-2 opacity-60">
@@ -143,7 +160,7 @@
 								</div>
 							</div>
 							<div class="flex gap-2 mt-4">
-								<button 
+								<button
 									class="btn variant-filled-warning flex-1"
 									on:click={() => handleRestore(backup.filename)}
 									disabled={loading}
@@ -151,7 +168,7 @@
 									<span class="text-xl mr-2">🔄</span>
 									Restore
 								</button>
-								<button 
+								<button
 									class="btn variant-filled-error flex-1"
 									on:click={() => handleDelete(backup.filename)}
 									disabled={loading}
@@ -166,4 +183,4 @@
 			</div>
 		{/if}
 	</div>
-</div> 
+</div>

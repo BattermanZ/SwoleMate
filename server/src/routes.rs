@@ -1,14 +1,13 @@
-use actix_web::{web, HttpResponse, get, post, put, delete};
-use serde_json::json;
-use crate::{models::*, errors::AppError, db::Database};
-use serde::Deserialize;
-use std::fs;
-use std::path::Path;
-use std::io::Write;
-use log::error;
-use crate::models;
-use urlencoding;
 use crate::backup::{self, BackupType};
+use crate::models;
+use crate::{db::Database, errors::AppError, models::*};
+use actix_web::{delete, get, post, put, web, HttpResponse};
+use log::error;
+use serde::Deserialize;
+use serde_json::json;
+use std::fs;
+use std::io::Write;
+use std::path::Path;
 
 #[derive(Debug, Deserialize)]
 pub struct CreateSetRequest {
@@ -61,7 +60,13 @@ pub async fn end_workout(
     id: web::Path<i64>,
     end_req: web::Json<UpdateWorkoutRequest>,
 ) -> Result<HttpResponse, AppError> {
-    db.update_workout_end_time(*id, end_req.end_time, end_req.notes.clone(), end_req.feedback.clone()).await?;
+    db.update_workout_end_time(
+        *id,
+        end_req.end_time,
+        end_req.notes.clone(),
+        end_req.feedback.clone(),
+    )
+    .await?;
     Ok(HttpResponse::Ok().json(json!({
         "message": "Workout ended successfully"
     })))
@@ -74,7 +79,7 @@ pub async fn get_workout(
 ) -> Result<HttpResponse, AppError> {
     let workout = db.get_workout(*id).await?;
     let exercises = db.get_exercises_for_workout(*id).await?;
-    
+
     let mut exercises_with_sets = Vec::new();
     for exercise in exercises {
         let sets = db.get_sets_for_exercise(exercise.id.unwrap()).await?;
@@ -91,9 +96,7 @@ pub async fn get_workout(
 }
 
 #[get("/api/workouts")]
-pub async fn get_workouts(
-    db: web::Data<Database>,
-) -> Result<HttpResponse, AppError> {
+pub async fn get_workouts(db: web::Data<Database>) -> Result<HttpResponse, AppError> {
     let workouts = db.get_workouts().await?;
     Ok(HttpResponse::Ok().json(workouts))
 }
@@ -112,7 +115,7 @@ pub async fn create_exercise(
         end_time: exercise_req.start_time, // Will be updated later
         notes: exercise_req.notes.clone(),
     };
-    
+
     let exercise_id = db.create_exercise(&exercise).await?;
     Ok(HttpResponse::Created().json(json!({
         "id": exercise_id,
@@ -126,7 +129,8 @@ pub async fn end_exercise(
     id: web::Path<i64>,
     end_req: web::Json<UpdateExerciseRequest>,
 ) -> Result<HttpResponse, AppError> {
-    db.update_exercise_end_time(*id, end_req.end_time, end_req.notes.clone()).await?;
+    db.update_exercise_end_time(*id, end_req.end_time, end_req.notes.clone())
+        .await?;
     Ok(HttpResponse::Ok().json(json!({
         "message": "Exercise ended successfully"
     })))
@@ -145,7 +149,7 @@ pub async fn create_set(
         weight: set_req.weight,
         notes: set_req.notes.clone(),
     };
-    
+
     let set_id = db.create_set(&set).await?;
     Ok(HttpResponse::Created().json(json!({
         "id": set_id,
@@ -247,10 +251,12 @@ pub async fn list_backups() -> Result<HttpResponse, AppError> {
 
 #[post("/api/backups")]
 pub async fn create_manual_backup() -> Result<HttpResponse, AppError> {
-    let backup_info = backup::create_backup(BackupType::Manual).await.map_err(|e| {
-        error!("Failed to create backup: {}", e);
-        AppError::InternalError(e.to_string())
-    })?;
+    let backup_info = backup::create_backup(BackupType::Manual)
+        .await
+        .map_err(|e| {
+            error!("Failed to create backup: {}", e);
+            AppError::InternalError(e.to_string())
+        })?;
     Ok(HttpResponse::Created().json(backup_info))
 }
 
@@ -262,10 +268,10 @@ pub async fn restore_backup(
     // Close all existing connections in the pool
     let current_pool = db.get_pool();
     current_pool.close().await;
-    
+
     // Wait for all connections to be dropped
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-    
+
     // Perform the restore
     backup::restore_backup(&filename).await.map_err(|e| {
         error!("Failed to restore backup: {}", e);
@@ -278,7 +284,7 @@ pub async fn restore_backup(
     // Create a new connection pool with WAL mode disabled temporarily
     let db_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "sqlite:database/swolemate.db".to_string());
-    
+
     // Try to connect multiple times with increasing delays
     let mut retry_count = 0;
     let max_retries = 3;
@@ -295,7 +301,10 @@ pub async fn restore_backup(
                     error!("Failed to disable WAL mode: {}", e);
                     new_pool.close().await;
                     retry_count += 1;
-                    tokio::time::sleep(std::time::Duration::from_millis(100 * (retry_count as u64))).await;
+                    tokio::time::sleep(std::time::Duration::from_millis(
+                        100 * (retry_count as u64),
+                    ))
+                    .await;
                     continue;
                 }
 
@@ -306,14 +315,14 @@ pub async fn restore_backup(
                     "PRAGMA foreign_keys = ON",
                     "PRAGMA busy_timeout = 5000",
                 ] {
-                    if let Err(e) = sqlx::query(pragma)
-                        .execute(&new_pool)
-                        .await
-                    {
+                    if let Err(e) = sqlx::query(pragma).execute(&new_pool).await {
                         error!("Failed to set pragma {}: {}", pragma, e);
                         new_pool.close().await;
                         retry_count += 1;
-                        tokio::time::sleep(std::time::Duration::from_millis(100 * (retry_count as u64))).await;
+                        tokio::time::sleep(std::time::Duration::from_millis(
+                            100 * (retry_count as u64),
+                        ))
+                        .await;
                         continue;
                     }
                 }
@@ -327,7 +336,8 @@ pub async fn restore_backup(
             Err(e) => {
                 last_error = Some(e);
                 retry_count += 1;
-                tokio::time::sleep(std::time::Duration::from_millis(100 * (retry_count as u64))).await;
+                tokio::time::sleep(std::time::Duration::from_millis(100 * (retry_count as u64)))
+                    .await;
             }
         }
     }
@@ -356,13 +366,20 @@ pub async fn get_exercise_progress(
         .map_err(|e| AppError::BadRequest(format!("Invalid exercise type: {}", e)))?
         .into_owned();
     let progress = db.get_exercise_progress(&decoded_type).await?;
+    let progress = progress
+        .into_iter()
+        .map(|(exercise, sets)| {
+            json!({
+                "exercise": exercise,
+                "sets": sets,
+            })
+        })
+        .collect::<Vec<_>>();
     Ok(HttpResponse::Ok().json(progress))
 }
 
 #[get("/api/progress/workout-stats")]
-pub async fn get_workout_stats(
-    db: web::Data<Database>,
-) -> Result<HttpResponse, AppError> {
+pub async fn get_workout_stats(db: web::Data<Database>) -> Result<HttpResponse, AppError> {
     let stats = db.get_workout_stats().await?;
     Ok(HttpResponse::Ok().json(stats))
 }
@@ -401,4 +418,4 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(get_exercise_progress)
         .service(get_workout_stats)
         .service(get_volume_stats);
-} 
+}

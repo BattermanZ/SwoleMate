@@ -15,6 +15,7 @@ vite.config.ts.timestamp-*
 server/database/*.db
 server/database/*.db-shm
 server/database/*.db-wal
+*.bak
 
 # Environment files
 *.env
@@ -45,6 +46,7 @@ pnpm-debug.log*
 
 # Build
 /build
+client/build/
 .svelte-kit
 /package 
 server/Cargo.lock

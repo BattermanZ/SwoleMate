@@ -1,36 +1,45 @@
 use chrono::{DateTime, Utc};
-use log::{error, info};
-use std::fs;
-use std::path::PathBuf;
-use tokio::fs as tokio_fs;
-use serde::{Serialize, Deserialize};
-use std::fmt;
-use std::io::Read;
-use flate2::Compression;
-use flate2::write::GzEncoder;
 use flate2::read::GzDecoder;
+use flate2::write::GzEncoder;
+use flate2::Compression;
+use log::{error, info};
+use serde::{Deserialize, Serialize};
+use sqlx::{Connection, SqliteConnection};
+use std::fmt;
+use std::fs;
+use std::io::Read;
+use std::path::PathBuf;
 use tar::{Archive, Builder};
+use tokio::fs as tokio_fs;
 
 fn get_backup_dir() -> PathBuf {
     let dir = std::env::current_dir()
         .expect("Failed to get current directory")
         .join("backups");
-    
+
     // Ensure the directory exists
     if !dir.exists() {
-        fs::create_dir_all(&dir)
-            .expect("Failed to create backups directory");
+        fs::create_dir_all(&dir).expect("Failed to create backups directory");
         info!("Created backups directory at: {}", dir.display());
     }
-    
+
     dir
 }
 
+fn get_database_url() -> String {
+    std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:database/swolemate.db".to_string())
+}
+
 fn get_database_path() -> PathBuf {
+    let database_url = get_database_url();
+    let path = database_url
+        .strip_prefix("sqlite:")
+        .unwrap_or("database/swolemate.db")
+        .trim_start_matches("//");
+
     std::env::current_dir()
         .expect("Failed to get current directory")
-        .join("database")
-        .join("swolemate.db")
+        .join(path)
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -83,7 +92,40 @@ pub async fn create_backup(backup_type: BackupType) -> Result<BackupInfo, std::i
 
     // Add database file to archive
     let db_path = get_database_path();
-    let db_content = fs::read(&db_path)?;
+    let snapshot_path = backup_dir.join(format!("swolemate_snapshot_{}.db", now.timestamp()));
+
+    let db_content = match SqliteConnection::connect(&get_database_url()).await {
+        Ok(mut conn) => {
+            let snapshot_path_sql = snapshot_path.to_string_lossy().replace('\'', "''");
+            let vacuum_sql = format!("VACUUM INTO '{}'", snapshot_path_sql);
+
+            match sqlx::query(&vacuum_sql).execute(&mut conn).await {
+                Ok(_) => {
+                    let content = fs::read(&snapshot_path)?;
+                    let _ = fs::remove_file(&snapshot_path);
+                    content
+                }
+                Err(e) => {
+                    error!(
+                        "Failed to create consistent DB snapshot, falling back to direct copy: {}",
+                        e
+                    );
+                    let _ = sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
+                        .execute(&mut conn)
+                        .await;
+                    fs::read(&db_path)?
+                }
+            }
+        }
+        Err(e) => {
+            error!(
+                "Failed to open DB connection for snapshot, falling back to direct copy: {}",
+                e
+            );
+            fs::read(&db_path)?
+        }
+    };
+
     let mut header = tar::Header::new_gnu();
     header.set_size(db_content.len() as u64);
     header.set_mode(0o644);
@@ -222,18 +264,18 @@ pub async fn list_backups() -> Result<Vec<BackupInfo>, std::io::Error> {
                     let decoder = GzDecoder::new(file);
                     let mut archive = Archive::new(decoder);
                     if let Ok(entries) = archive.entries() {
-                        for entry_result in entries {
-                            if let Ok(mut entry) = entry_result {
-                                if let Ok(path) = entry.path() {
-                                    if path.to_string_lossy() == "metadata.json" {
-                                        let mut metadata_content = String::new();
-                                        if entry.read_to_string(&mut metadata_content).is_ok() {
-                                            if let Ok(backup_info) = serde_json::from_str(&metadata_content) {
-                                                backups.push(backup_info);
-                                            }
+                        for mut entry in entries.flatten() {
+                            if let Ok(path) = entry.path() {
+                                if path.to_string_lossy() == "metadata.json" {
+                                    let mut metadata_content = String::new();
+                                    if entry.read_to_string(&mut metadata_content).is_ok() {
+                                        if let Ok(backup_info) =
+                                            serde_json::from_str(&metadata_content)
+                                        {
+                                            backups.push(backup_info);
                                         }
-                                        break;
                                     }
+                                    break;
                                 }
                             }
                         }
@@ -281,4 +323,4 @@ pub async fn delete_backup(filename: &str) -> Result<(), std::io::Error> {
     }
 
     Ok(())
-} 
+}
