@@ -1,5 +1,5 @@
 # Stage 1: Plan
-FROM rust:1.82-slim as planner
+FROM rust:1.92-slim as planner
 WORKDIR /usr/src/app
 
 # Install build dependencies and cargo-chef
@@ -15,7 +15,7 @@ COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
 # Stage 2: Build
-FROM rust:1.82-slim as builder
+FROM rust:1.92-slim as builder
 WORKDIR /usr/src/app
 
 # Install build dependencies
