@@ -954,14 +954,8 @@
 	.sets-list {
 		@apply flex flex-wrap gap-1 items-center;
 	}
-	.set-chip {
-		@apply px-2 py-1 rounded-md bg-surface-900/50 text-sm whitespace-nowrap;
-	}
 	:global(.dark) .exercise-row {
 		@apply bg-surface-900/50;
-	}
-	:global(.dark) .set-chip {
-		@apply bg-surface-700/50;
 	}
 	.last-exercise-info {
 		@apply text-sm p-3 rounded-lg bg-surface-900/30 flex flex-wrap items-center gap-3;

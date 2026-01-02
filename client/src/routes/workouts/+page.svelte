@@ -111,7 +111,7 @@
 		</div>
 	{/if}
 
-	<div class="workout-list">
+	<div class="grid gap-4">
 		{#if loading}
 			<div class="card p-4 text-center">
 				<span class="loading">Loading workouts...</span>
@@ -122,11 +122,13 @@
 			</div>
 		{:else}
 			{#each workouts as workout}
-				<div class="workout-card">
-					<div class="workout-header">
+				<div
+					class="card p-4 transition-transform hover:scale-[1.01] bg-surface-900/50 border border-[#e9a737]"
+				>
+					<div class="flex justify-between items-center mb-2">
 						<div>
-							<div class="workout-date">{formatDateRelative(workout.date)}</div>
-							<div class="workout-time">
+							<div class="text-2xl font-semibold">{formatDateRelative(workout.date)}</div>
+							<div class="text-base opacity-90">
 								{formatTime(workout.start_time)} - {formatTime(workout.end_time)}
 							</div>
 						</div>
@@ -138,10 +140,10 @@
 					</div>
 
 					{#if workout.notes}
-						<div class="workout-notes">{workout.notes}</div>
+						<div class="text-base opacity-90 mb-4">{workout.notes}</div>
 					{/if}
 
-					<div class="workout-actions">
+					<div class="flex justify-end gap-2 mt-2">
 						<button
 							class="btn variant-filled-error"
 							on:click={() => handleDeleteWorkout(workout.id)}
@@ -150,45 +152,10 @@
 							<span class="text-xl mr-2">🗑️</span>
 							Delete
 						</button>
-						<a href="/workouts/{workout.id}" class="view-details-btn"> View Details → </a>
+						<a href="/workouts/{workout.id}" class="btn variant-filled-primary"> View Details → </a>
 					</div>
 				</div>
 			{/each}
 		{/if}
 	</div>
 </div>
-
-<style lang="postcss">
-	.workout-list {
-		@apply grid gap-4;
-	}
-	.workout-card {
-		@apply card p-4 transition-transform hover:scale-[1.01] bg-surface-900/50;
-		border: 1px solid #e9a737;
-	}
-	.workout-header {
-		@apply flex justify-between items-center mb-2;
-	}
-	.workout-date {
-		@apply text-2xl font-semibold;
-	}
-	.workout-time {
-		@apply text-base opacity-90;
-	}
-	.workout-notes {
-		@apply text-base opacity-90 mb-4;
-	}
-	.workout-actions {
-		@apply flex justify-end gap-2 mt-2;
-	}
-	.view-details-btn {
-		@apply btn variant-filled-primary;
-	}
-	:global(.dark) .workout-card {
-		@apply bg-surface-900/50;
-		border: 1px solid #e9a737;
-	}
-	:global(.dark) .view-details-btn {
-		@apply bg-primary-500/80 hover:bg-primary-500;
-	}
-</style>

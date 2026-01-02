@@ -135,7 +135,6 @@
 	}
 
 	:global(body) {
-		@apply bg-surface-50-900-token;
 		/* Ensure content fills the screen */
 		display: flex;
 		flex-direction: column;
