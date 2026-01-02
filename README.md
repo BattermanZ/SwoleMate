@@ -28,7 +28,7 @@ SwoleMate is a modern fitness tracking application that helps you monitor and vi
 ## Getting Started
 
 ### Prerequisites
-- Node.js (v16 or later)
+- Node.js (v20.19+ / v22.12+ / v24+)
 - Rust (latest stable)
 - SQLite
 
