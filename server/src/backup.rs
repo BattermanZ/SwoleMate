@@ -12,34 +12,30 @@ use std::path::PathBuf;
 use tar::{Archive, Builder};
 use tokio::fs as tokio_fs;
 
-fn get_backup_dir() -> PathBuf {
-    let dir = std::env::current_dir()
-        .expect("Failed to get current directory")
-        .join("backups");
+fn get_backup_dir() -> Result<PathBuf, std::io::Error> {
+    let dir = std::env::current_dir()?.join("backups");
 
     // Ensure the directory exists
     if !dir.exists() {
-        fs::create_dir_all(&dir).expect("Failed to create backups directory");
+        fs::create_dir_all(&dir)?;
         info!("Created backups directory at: {}", dir.display());
     }
 
-    dir
+    Ok(dir)
 }
 
 fn get_database_url() -> String {
     std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:database/swolemate.db".to_string())
 }
 
-fn get_database_path() -> PathBuf {
+fn get_database_path() -> Result<PathBuf, std::io::Error> {
     let database_url = get_database_url();
     let path = database_url
         .strip_prefix("sqlite:")
         .unwrap_or("database/swolemate.db")
         .trim_start_matches("//");
 
-    std::env::current_dir()
-        .expect("Failed to get current directory")
-        .join(path)
+    Ok(std::env::current_dir()?.join(path))
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -65,7 +61,7 @@ impl fmt::Display for BackupType {
 }
 
 pub async fn create_backup(backup_type: BackupType) -> Result<BackupInfo, std::io::Error> {
-    let backup_dir = get_backup_dir();
+    let backup_dir = get_backup_dir()?;
     if !backup_dir.exists() {
         fs::create_dir_all(&backup_dir)?;
     }
@@ -91,7 +87,7 @@ pub async fn create_backup(backup_type: BackupType) -> Result<BackupInfo, std::i
     let mut archive = Builder::new(encoder);
 
     // Add database file to archive
-    let db_path = get_database_path();
+    let db_path = get_database_path()?;
     let snapshot_path = backup_dir.join(format!("swolemate_snapshot_{}.db", now.timestamp()));
 
     let db_content = match SqliteConnection::connect(&get_database_url()).await {
@@ -151,8 +147,8 @@ pub async fn create_backup(backup_type: BackupType) -> Result<BackupInfo, std::i
 }
 
 pub async fn restore_backup(filename: &str) -> Result<(), std::io::Error> {
-    let backup_path = get_backup_dir().join(filename);
-    let db_path = get_database_path();
+    let backup_path = get_backup_dir()?.join(filename);
+    let db_path = get_database_path()?;
     let wal_path = db_path.with_extension("db-wal");
     let shm_path = db_path.with_extension("db-shm");
 
@@ -247,7 +243,7 @@ pub async fn restore_backup(filename: &str) -> Result<(), std::io::Error> {
 }
 
 pub async fn list_backups() -> Result<Vec<BackupInfo>, std::io::Error> {
-    let backup_dir = get_backup_dir();
+    let backup_dir = get_backup_dir()?;
     if !backup_dir.exists() {
         fs::create_dir_all(&backup_dir)?;
         info!("Created backups directory at: {}", backup_dir.display());
@@ -302,7 +298,7 @@ async fn cleanup_old_backups() -> Result<(), std::io::Error> {
     // Keep only the last 4 auto backups
     if auto_backups.len() > 4 {
         for backup in auto_backups.iter().skip(4) {
-            let path = get_backup_dir().join(&backup.filename);
+            let path = get_backup_dir()?.join(&backup.filename);
             if path.exists() {
                 tokio_fs::remove_file(path).await?;
                 info!("Removed old backup: {}", backup.filename);
@@ -314,7 +310,7 @@ async fn cleanup_old_backups() -> Result<(), std::io::Error> {
 }
 
 pub async fn delete_backup(filename: &str) -> Result<(), std::io::Error> {
-    let backup_path = get_backup_dir().join(filename);
+    let backup_path = get_backup_dir()?.join(filename);
 
     // Delete the backup file
     if backup_path.exists() {

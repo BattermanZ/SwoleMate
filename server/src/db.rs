@@ -3,35 +3,35 @@ use chrono::{DateTime, Utc};
 use log::{debug, error, info};
 use serde_json::json;
 use sqlx::{Pool, Sqlite};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 #[derive(Clone)]
 pub struct Database {
-    pool: Arc<Mutex<Pool<Sqlite>>>,
+    pool: Arc<RwLock<Pool<Sqlite>>>,
 }
 
 impl Database {
     pub fn new(pool: Pool<Sqlite>) -> Self {
         info!(target: "database", "Database connection pool initialized");
         Self {
-            pool: Arc::new(Mutex::new(pool)),
+            pool: Arc::new(RwLock::new(pool)),
         }
     }
 
-    pub fn get_pool(&self) -> Pool<Sqlite> {
-        self.pool.lock().unwrap().clone()
+    pub async fn pool(&self) -> Pool<Sqlite> {
+        self.pool.read().await.clone()
     }
 
-    pub fn update_pool(&self, new_pool: Pool<Sqlite>) {
-        let mut pool = self.pool.lock().unwrap();
-        *pool = new_pool;
+    pub async fn replace_pool(&self, new_pool: Pool<Sqlite>) {
+        *self.pool.write().await = new_pool;
         info!(target: "database", "Database connection pool updated");
     }
 
     pub async fn create_workout(&self, req: &CreateWorkoutRequest) -> Result<i64, AppError> {
         debug!(target: "database", "Creating new workout for date: {}", req.date);
 
-        let pool = self.get_pool();
+        let pool = self.pool().await;
         let result = sqlx::query!(
             r#"
             INSERT INTO workouts (date, start_time, end_time, notes)
@@ -63,7 +63,7 @@ impl Database {
     ) -> Result<(), AppError> {
         debug!(target: "database", "Updating workout #{} end time to {} with feedback", id, end_time);
 
-        let pool = self.get_pool();
+        let pool = self.pool().await;
         sqlx::query!(
             r#"
             UPDATE workouts
@@ -90,7 +90,7 @@ impl Database {
         debug!(target: "database", "Creating exercise '{}' for workout #{}", 
             exercise.exercise_type, exercise.workout_id);
 
-        let pool = self.get_pool();
+        let pool = self.pool().await;
         let result = sqlx::query!(
             r#"
             INSERT INTO exercises (workout_id, exercise_type, start_time, end_time, notes)
@@ -122,7 +122,7 @@ impl Database {
     ) -> Result<(), AppError> {
         debug!(target: "database", "Updating exercise #{} end time to {} with notes", id, end_time);
 
-        let pool = self.get_pool();
+        let pool = self.pool().await;
         sqlx::query!(
             r#"
             UPDATE exercises
@@ -148,7 +148,7 @@ impl Database {
         debug!(target: "database", "Creating set for exercise #{}: {}x{}kg", 
             set.exercise_id, set.reps, set.weight);
 
-        let pool = self.get_pool();
+        let pool = self.pool().await;
         let result = sqlx::query!(
             r#"
             INSERT INTO sets (exercise_id, reps, weight, notes)
@@ -174,7 +174,7 @@ impl Database {
     pub async fn get_workout(&self, id: i64) -> Result<Workout, AppError> {
         debug!(target: "database", "Fetching workout #{}", id);
 
-        let pool = self.get_pool();
+        let pool = self.pool().await;
         let result = sqlx::query!(
             r#"
             SELECT 
@@ -213,7 +213,7 @@ impl Database {
     ) -> Result<Vec<Exercise>, AppError> {
         debug!(target: "database", "Fetching exercises for workout #{}", workout_id);
 
-        let pool = self.get_pool();
+        let pool = self.pool().await;
         let rows = sqlx::query!(
             r#"
             SELECT 
@@ -235,17 +235,20 @@ impl Database {
             AppError::DatabaseError(e)
         })?;
 
-        let exercises: Vec<Exercise> = rows
-            .into_iter()
-            .map(|row| Exercise {
-                id: Some(row.id.expect("Exercise ID should not be null")),
+        let mut exercises = Vec::with_capacity(rows.len());
+        for row in rows {
+            let id = row
+                .id
+                .ok_or_else(|| AppError::InternalError("Exercise row missing id".to_string()))?;
+            exercises.push(Exercise {
+                id: Some(id),
                 workout_id: row.workout_id,
                 exercise_type: row.exercise_type,
                 start_time: row.start_time,
                 end_time: row.end_time,
                 notes: row.notes,
-            })
-            .collect();
+            });
+        }
 
         debug!(target: "database", "Found {} exercises for workout #{}", exercises.len(), workout_id);
         Ok(exercises)
@@ -254,7 +257,7 @@ impl Database {
     pub async fn get_sets_for_exercise(&self, exercise_id: i64) -> Result<Vec<Set>, AppError> {
         debug!(target: "database", "Fetching sets for exercise #{}", exercise_id);
 
-        let pool = self.get_pool();
+        let pool = self.pool().await;
         let sets = sqlx::query_as!(
             Set,
             r#"
@@ -278,7 +281,7 @@ impl Database {
     pub async fn get_workouts(&self) -> Result<Vec<Workout>, AppError> {
         debug!(target: "database", "Fetching all workouts");
 
-        let pool = self.get_pool();
+        let pool = self.pool().await;
         let rows = sqlx::query!(
             r#"
             SELECT 
@@ -318,7 +321,7 @@ impl Database {
     pub async fn get_unique_exercise_types(&self) -> Result<Vec<String>, AppError> {
         debug!(target: "database", "Fetching unique exercise types");
 
-        let pool = self.get_pool();
+        let pool = self.pool().await;
         let rows = sqlx::query!(
             r#"
             SELECT DISTINCT exercise_type
@@ -346,7 +349,7 @@ impl Database {
     ) -> Result<Option<(Exercise, Vec<Set>)>, AppError> {
         debug!(target: "database", "Fetching last data for exercise type: {}", exercise_type);
 
-        let pool = self.get_pool();
+        let pool = self.pool().await;
         let exercise = sqlx::query_as!(
             Exercise,
             r#"
@@ -372,7 +375,10 @@ impl Database {
         })?;
 
         if let Some(exercise) = exercise {
-            let sets = self.get_sets_for_exercise(exercise.id.unwrap()).await?;
+            let exercise_id = exercise.id.ok_or_else(|| {
+                AppError::InternalError("Exercise row missing id for sets lookup".to_string())
+            })?;
+            let sets = self.get_sets_for_exercise(exercise_id).await?;
             Ok(Some((exercise, sets)))
         } else {
             Ok(None)
@@ -382,7 +388,7 @@ impl Database {
     pub async fn delete_exercise(&self, id: i64) -> Result<(), AppError> {
         debug!(target: "database", "Deleting exercise #{}", id);
 
-        let pool = self.get_pool();
+        let pool = self.pool().await;
         // With CASCADE DELETE, we only need to delete the exercise
         // and all related sets will be automatically deleted
         sqlx::query!(
@@ -406,7 +412,7 @@ impl Database {
     pub async fn delete_workout(&self, id: i64) -> Result<(), AppError> {
         debug!(target: "database", "Deleting workout #{}", id);
 
-        let pool = self.get_pool();
+        let pool = self.pool().await;
         // With CASCADE DELETE, we only need to delete the workout
         // and all related exercises and sets will be automatically deleted
         sqlx::query!(
@@ -433,7 +439,7 @@ impl Database {
     ) -> Result<Vec<(Exercise, Vec<Set>)>, AppError> {
         debug!(target: "database", "Fetching progress data for exercise type: {}", exercise_type);
 
-        let pool = self.get_pool();
+        let pool = self.pool().await;
         let exercises = sqlx::query_as!(
             Exercise,
             r#"
@@ -459,7 +465,12 @@ impl Database {
 
         let mut result = Vec::new();
         for exercise in exercises {
-            let sets = self.get_sets_for_exercise(exercise.id.unwrap()).await?;
+            let exercise_id = exercise.id.ok_or_else(|| {
+                AppError::InternalError(
+                    "Exercise row missing id for progress sets lookup".to_string(),
+                )
+            })?;
+            let sets = self.get_sets_for_exercise(exercise_id).await?;
             result.push((exercise, sets));
         }
 
@@ -470,7 +481,7 @@ impl Database {
     pub async fn get_workout_stats(&self) -> Result<serde_json::Value, AppError> {
         debug!(target: "database", "Calculating workout statistics");
 
-        let pool = self.get_pool();
+        let pool = self.pool().await;
         let stats = sqlx::query!(
             r#"
             WITH workout_times AS (
@@ -645,7 +656,7 @@ impl Database {
     ) -> Result<serde_json::Value, AppError> {
         debug!(target: "database", "Calculating volume statistics for {}", exercise_type);
 
-        let pool = self.get_pool();
+        let pool = self.pool().await;
         let weekly_volume = sqlx::query!(
             r#"
             WITH exercise_stats AS (

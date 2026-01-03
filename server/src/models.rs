@@ -45,7 +45,6 @@ pub struct CreateWorkoutRequest {
 }
 
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]
 pub struct UpdateWorkoutRequest {
     pub end_time: DateTime<Utc>,
     pub notes: Option<String>,
@@ -60,8 +59,14 @@ pub struct CreateExerciseRequest {
 }
 
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]
 pub struct UpdateExerciseRequest {
     pub end_time: DateTime<Utc>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateSetRequest {
+    pub reps: i64,
+    pub weight: f64,
     pub notes: Option<String>,
 }

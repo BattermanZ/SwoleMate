@@ -1,6 +1,7 @@
 # Stage 1: Plan
 FROM rust:1.92-slim as planner
 WORKDIR /usr/src/app
+ENV SQLX_OFFLINE=true
 
 # Install build dependencies and cargo-chef
 RUN apt-get update && \
@@ -17,6 +18,7 @@ RUN cargo chef prepare --recipe-path recipe.json
 # Stage 2: Build
 FROM rust:1.92-slim as builder
 WORKDIR /usr/src/app
+ENV SQLX_OFFLINE=true
 
 # Install build dependencies
 RUN apt-get update && \

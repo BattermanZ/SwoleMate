@@ -1,6 +1,6 @@
 use actix_cors::Cors;
-use actix_web::{middleware::Logger, App, HttpServer};
-use chrono::{Datelike, Local, Timelike, Weekday};
+use actix_web::{App, HttpServer};
+use chrono::{Datelike, Local, NaiveDate, TimeZone, Weekday};
 use log::{error, info, LevelFilter};
 use sqlx::sqlite::SqlitePoolOptions;
 use std::env;
@@ -46,31 +46,56 @@ fn find_env_file() -> Option<String> {
     None
 }
 
+fn local_datetime_at(date: NaiveDate, preferred_hour: u32) -> chrono::DateTime<Local> {
+    // Prefer the requested hour, but handle DST "gaps" and ambiguous times safely.
+    for hour in [
+        preferred_hour,
+        preferred_hour.saturating_add(1),
+        preferred_hour.saturating_add(2),
+    ] {
+        if hour > 23 {
+            continue;
+        }
+        match Local.with_ymd_and_hms(date.year(), date.month(), date.day(), hour, 0, 0) {
+            chrono::LocalResult::Single(dt) => return dt,
+            chrono::LocalResult::Ambiguous(dt, _) => return dt,
+            chrono::LocalResult::None => continue,
+        }
+    }
+
+    // Last resort: midnight of that date in local time (this should always exist).
+    match Local.with_ymd_and_hms(date.year(), date.month(), date.day(), 0, 0, 0) {
+        chrono::LocalResult::Single(dt) => dt,
+        chrono::LocalResult::Ambiguous(dt, _) => dt,
+        chrono::LocalResult::None => Local::now(),
+    }
+}
+
+fn redact_database_url(database_url: &str) -> String {
+    if let Some(path) = database_url.strip_prefix("sqlite:") {
+        format!("sqlite:{}", path)
+    } else {
+        "<redacted>".to_string()
+    }
+}
+
 async fn schedule_backups() {
     info!("Starting automatic backup scheduler");
     loop {
         let now = Local::now();
-        let next_monday = if now.weekday() == Weekday::Mon && now.hour() < 1 {
-            now
-        } else {
-            let days_until_monday = (Weekday::Mon as i32 - now.weekday() as i32 + 7) % 7;
-            now + chrono::Duration::days(days_until_monday as i64)
-        };
-
-        let next_backup = next_monday
-            .with_hour(1)
-            .unwrap()
-            .with_minute(0)
-            .unwrap()
-            .with_second(0)
-            .unwrap();
+        let days_until_monday = (7 + Weekday::Mon.num_days_from_monday() as i64
+            - now.weekday().num_days_from_monday() as i64)
+            % 7;
+        let mut monday_date = now.date_naive() + chrono::Duration::days(days_until_monday);
+        let mut next_backup = local_datetime_at(monday_date, 1);
 
         if next_backup <= now {
-            let next_week = next_backup + chrono::Duration::days(7);
-            sleep(Duration::from_secs((next_week - now).num_seconds() as u64)).await;
-        } else {
-            sleep(Duration::from_secs((next_backup - now).num_seconds() as u64)).await;
+            monday_date += chrono::Duration::days(7);
+            next_backup = local_datetime_at(monday_date, 1);
         }
+
+        let seconds = (next_backup - now).num_seconds().max(0) as u64;
+        sleep(Duration::from_secs(seconds)).await;
 
         info!("Creating automatic backup");
         match backup::create_backup(backup::BackupType::Auto).await {
@@ -121,8 +146,8 @@ CREATE INDEX IF NOT EXISTS idx_sets_exercise_id_composite ON sets(exercise_id, i
 "#;
 
 // Define schema updates for future versions
-const SCHEMA_UPDATES: &[(&str, &str)] = &[
-    // ("2", "ALTER TABLE workouts ADD COLUMN new_column TEXT;"),
+const SCHEMA_UPDATES: &[(i64, &str)] = &[
+    // (2, "ALTER TABLE workouts ADD COLUMN new_column TEXT;"),
     // Add more version updates here as needed
 ];
 
@@ -190,10 +215,9 @@ async fn setup_schema(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<(), sqlx::Error
 
     // Apply any pending updates
     for (version, update_sql) in SCHEMA_UPDATES {
-        let version: i64 = version.parse().unwrap();
         let version_exists = sqlx::query_scalar!(
             r#"SELECT COUNT(*) FROM schema_version WHERE version = ?"#,
-            version
+            *version
         )
         .fetch_one(pool)
         .await?
@@ -204,7 +228,7 @@ async fn setup_schema(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<(), sqlx::Error
             sqlx::query(update_sql).execute(pool).await?;
 
             sqlx::query("INSERT INTO schema_version (version) VALUES (?)")
-                .bind(version)
+                .bind(*version)
                 .execute(pool)
                 .await?;
 
@@ -289,7 +313,7 @@ async fn main() -> std::io::Result<()> {
             // Verify some key environment variables were loaded
             info!("Verifying environment variables...");
             if let Ok(db_url) = env::var("DATABASE_URL") {
-                info!("DATABASE_URL is set to: {}", db_url);
+                info!("DATABASE_URL is set to: {}", redact_database_url(&db_url));
             }
             if let Ok(port) = env::var("SERVER_PORT") {
                 info!("SERVER_PORT is set to: {}", port);
@@ -306,7 +330,7 @@ async fn main() -> std::io::Result<()> {
     // Get database URL from environment
     let database_url =
         env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:database/swolemate.db".to_string());
-    info!("Using database: {}", database_url);
+    info!("Using database: {}", redact_database_url(&database_url));
 
     // Ensure database directory exists and create if needed
     let db_file = database_url.trim_start_matches("sqlite:");
@@ -321,12 +345,12 @@ async fn main() -> std::io::Result<()> {
         .max_connections(1)
         .connect(&database_url)
         .await
-        .expect("Failed to create temporary database connection");
+        .map_err(|e| std::io::Error::other(format!("{e}")))?;
 
     // Setup and update schema
     if let Err(e) = setup_schema(&temp_pool).await {
         error!("Failed to setup/update database schema: {}", e);
-        panic!("Database schema setup failed");
+        return Err(std::io::Error::other("Database schema setup failed"));
     }
 
     info!("Database schema is up to date");
@@ -336,10 +360,7 @@ async fn main() -> std::io::Result<()> {
         .max_connections(5)
         .connect(&database_url)
         .await
-        .unwrap_or_else(|e| {
-            error!("Failed to connect to database: {}", e);
-            panic!("Database connection failed");
-        });
+        .map_err(|e| std::io::Error::other(format!("{e}")))?;
 
     // Enable foreign key support and optimize performance
     for pragma in [
@@ -351,13 +372,10 @@ async fn main() -> std::io::Result<()> {
         "PRAGMA page_size = 4096",
         "PRAGMA cache_size = -8000",
     ] {
-        sqlx::query(pragma)
-            .execute(&pool)
-            .await
-            .unwrap_or_else(|e| {
-                error!("Failed to set pragma {}: {}", pragma, e);
-                panic!("Failed to set database pragma");
-            });
+        if let Err(e) = sqlx::query(pragma).execute(&pool).await {
+            error!("Failed to set pragma {}: {}", pragma, e);
+            return Err(std::io::Error::other("Failed to set database pragma"));
+        }
     }
 
     info!("Database configuration completed successfully");
@@ -369,7 +387,12 @@ async fn main() -> std::io::Result<()> {
     let port = env::var("SERVER_PORT")
         .unwrap_or_else(|_| "2469".to_string())
         .parse::<u16>()
-        .expect("SERVER_PORT must be a valid port number");
+        .map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "SERVER_PORT must be a valid port number",
+            )
+        })?;
 
     // Get frontend URL from environment
     let frontend_url =
@@ -396,7 +419,6 @@ async fn main() -> std::io::Result<()> {
 
         App::new()
             .wrap(cors)
-            .wrap(Logger::new("[%t] %s %r - %D ms - %a - %{User-Agent}i"))
             .wrap(middleware::RequestLogger)
             .app_data(actix_web::web::Data::new(database.clone()))
             .configure(routes::config)

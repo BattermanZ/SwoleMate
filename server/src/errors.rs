@@ -3,6 +3,10 @@ use log::error;
 use serde_json::json;
 use thiserror::Error;
 
+fn expose_internal_errors() -> bool {
+    cfg!(debug_assertions) || std::env::var("EXPOSE_INTERNAL_ERRORS").is_ok()
+}
+
 #[derive(Error, Debug)]
 pub enum AppError {
     #[error("Database error: {0}")]
@@ -41,10 +45,18 @@ impl ResponseError for AppError {
 
         match self {
             AppError::DatabaseError(e) => HttpResponse::InternalServerError().json(json!({
-                "error": format!("Database error: {}", e)
+                "error": if expose_internal_errors() {
+                    format!("Database error: {}", e)
+                } else {
+                    "Database error".to_string()
+                }
             })),
             AppError::InternalError(msg) => HttpResponse::InternalServerError().json(json!({
-                "error": msg
+                "error": if expose_internal_errors() {
+                    msg.clone()
+                } else {
+                    "Internal server error".to_string()
+                }
             })),
             AppError::BadRequest(msg) => HttpResponse::BadRequest().json(json!({
                 "error": msg

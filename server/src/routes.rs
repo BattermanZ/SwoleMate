@@ -1,5 +1,4 @@
 use crate::backup::{self, BackupType};
-use crate::models;
 use crate::{db::Database, errors::AppError, models::*};
 use actix_web::{delete, get, post, put, web, HttpResponse};
 use log::error;
@@ -8,26 +7,6 @@ use serde_json::json;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
-
-#[derive(Debug, Deserialize)]
-pub struct CreateSetRequest {
-    pub reps: i64,
-    pub weight: f64,
-    pub notes: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct UpdateWorkoutRequest {
-    pub end_time: chrono::DateTime<chrono::Utc>,
-    pub notes: Option<String>,
-    pub feedback: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct UpdateExerciseRequest {
-    pub end_time: chrono::DateTime<chrono::Utc>,
-    pub notes: Option<String>,
-}
 
 #[derive(Debug, Deserialize)]
 pub struct ExerciseTypeQuery {
@@ -45,7 +24,7 @@ pub async fn health_check() -> HttpResponse {
 #[post("/api/workouts")]
 pub async fn create_workout(
     db: web::Data<Database>,
-    workout_req: web::Json<models::CreateWorkoutRequest>,
+    workout_req: web::Json<CreateWorkoutRequest>,
 ) -> Result<HttpResponse, AppError> {
     let workout_id = db.create_workout(&workout_req.0).await?;
     Ok(HttpResponse::Created().json(json!({
@@ -82,7 +61,10 @@ pub async fn get_workout(
 
     let mut exercises_with_sets = Vec::new();
     for exercise in exercises {
-        let sets = db.get_sets_for_exercise(exercise.id.unwrap()).await?;
+        let exercise_id = exercise
+            .id
+            .ok_or_else(|| AppError::InternalError("Exercise missing id".to_string()))?;
+        let sets = db.get_sets_for_exercise(exercise_id).await?;
         exercises_with_sets.push(json!({
             "exercise": exercise,
             "sets": sets
@@ -173,6 +155,13 @@ pub async fn init_logs_directory() -> HttpResponse {
 
 #[post("/api/logs")]
 pub async fn write_logs(logs: web::Json<Vec<serde_json::Value>>) -> HttpResponse {
+    const MAX_LOG_ENTRIES: usize = 1000;
+    if logs.len() > MAX_LOG_ENTRIES {
+        return HttpResponse::PayloadTooLarge().json(json!({
+            "error": "Too many log entries"
+        }));
+    }
+
     let client_log_path = Path::new("logs/client.log");
     let file = fs::OpenOptions::new()
         .create(true)
@@ -182,7 +171,15 @@ pub async fn write_logs(logs: web::Json<Vec<serde_json::Value>>) -> HttpResponse
     match file {
         Ok(mut file) => {
             for log in logs.iter() {
-                if let Err(e) = writeln!(file, "{}", serde_json::to_string(log).unwrap()) {
+                let line = match serde_json::to_string(log) {
+                    Ok(line) => line,
+                    Err(e) => {
+                        error!("Failed to serialize client log: {}", e);
+                        continue;
+                    }
+                };
+
+                if let Err(e) = writeln!(file, "{}", line) {
                     error!("Failed to write client log: {}", e);
                     return HttpResponse::InternalServerError().json(json!({
                         "error": "Failed to write logs"
@@ -266,7 +263,7 @@ pub async fn restore_backup(
     db: web::Data<Database>,
 ) -> Result<HttpResponse, AppError> {
     // Close all existing connections in the pool
-    let current_pool = db.get_pool();
+    let current_pool = db.pool().await;
     current_pool.close().await;
 
     // Wait for all connections to be dropped
@@ -291,7 +288,11 @@ pub async fn restore_backup(
     let mut last_error = None;
 
     while retry_count < max_retries {
-        match sqlx::SqlitePool::connect(&db_url).await {
+        match sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(5)
+            .connect(&db_url)
+            .await
+        {
             Ok(new_pool) => {
                 // Disable WAL mode temporarily to ensure database consistency
                 if let Err(e) = sqlx::query("PRAGMA journal_mode = DELETE")
@@ -309,6 +310,7 @@ pub async fn restore_backup(
                 }
 
                 // Re-enable WAL mode and other optimizations
+                let mut pragma_ok = true;
                 for pragma in [
                     "PRAGMA journal_mode = WAL",
                     "PRAGMA synchronous = NORMAL",
@@ -317,18 +319,24 @@ pub async fn restore_backup(
                 ] {
                     if let Err(e) = sqlx::query(pragma).execute(&new_pool).await {
                         error!("Failed to set pragma {}: {}", pragma, e);
-                        new_pool.close().await;
-                        retry_count += 1;
-                        tokio::time::sleep(std::time::Duration::from_millis(
-                            100 * (retry_count as u64),
-                        ))
-                        .await;
-                        continue;
+                        last_error = Some(e);
+                        pragma_ok = false;
+                        break;
                     }
                 }
 
+                if !pragma_ok {
+                    new_pool.close().await;
+                    retry_count += 1;
+                    tokio::time::sleep(std::time::Duration::from_millis(
+                        100 * (retry_count as u64),
+                    ))
+                    .await;
+                    continue;
+                }
+
                 // Update the database instance with the new pool
-                db.update_pool(new_pool);
+                db.replace_pool(new_pool).await;
                 return Ok(HttpResponse::Ok().json(json!({
                     "message": "Backup restored successfully"
                 })));
@@ -343,7 +351,9 @@ pub async fn restore_backup(
     }
 
     // If we get here, all retries failed
-    Err(AppError::DatabaseError(last_error.unwrap()))
+    Err(AppError::DatabaseError(last_error.unwrap_or_else(|| {
+        sqlx::Error::Protocol("restore retry failed".into())
+    })))
 }
 
 #[delete("/api/backups/{filename}")]
