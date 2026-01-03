@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" class="dark" data-theme="sahara">
+<html lang="en" class="dark">
 	<head>
 		<meta charset="utf-8" />
 		<link rel="icon" href="%sveltekit.assets%/favicon.png" />
@@ -75,7 +75,7 @@
 			}
 
 			/* Fix for iOS height */
-			:global(.app-shell) {
+			.app-shell {
 				display: flex;
 				flex-direction: column;
 				min-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
@@ -87,7 +87,7 @@
 
 		%sveltekit.head%
 	</head>
-	<body data-sveltekit-preload-data="hover" class="bg-surface-50-900-token">
+	<body data-sveltekit-preload-data="hover" data-theme="sahara" class="bg-surface-50-900-token">
 		<div style="display: contents">%sveltekit.body%</div>
 	</body>
 </html>

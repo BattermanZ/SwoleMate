@@ -4,6 +4,18 @@
 @import '@skeletonlabs/skeleton-svelte';
 @import '@skeletonlabs/skeleton/themes/sahara';
 
+/* Restore a few Skeleton v2 token pairings that changed in v4 (e.g. 50-900 vs 50-950). */
+:root {
+	--color-surface-50-900: light-dark(var(--color-surface-50), var(--color-surface-900));
+	--color-surface-100-800: light-dark(var(--color-surface-100), var(--color-surface-800));
+}
+
+.list-nav {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
 /* Compatibility aliases for legacy Skeleton v2 class names used throughout the app. */
 @utility variant-filled {
 	@apply preset-filled;
@@ -70,7 +82,7 @@
 	@apply preset-filled;
 	background-color: color-mix(
 		in oklab,
-		light-dark(var(--color-surface-50), var(--color-surface-950)) 30%,
+		light-dark(var(--color-surface-50), var(--color-surface-900)) 30%,
 		transparent
 	);
 	backdrop-filter: blur(12px);
@@ -79,8 +91,8 @@
 
 /* Legacy token utility aliases (v2) -> v4 theme colors. */
 .bg-surface-50-900-token {
-	background-color: var(--color-surface-50-950);
+	background-color: var(--color-surface-50-900);
 }
 .bg-surface-100-800-token {
-	background-color: var(--color-surface-100-900);
+	background-color: var(--color-surface-100-800);
 }

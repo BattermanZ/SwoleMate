@@ -1,6 +1,6 @@
 <script lang="ts">
 	import '../app.css';
-	import { AppBar, Navigation, Switch } from '@skeletonlabs/skeleton-svelte';
+	import { AppBar } from '@skeletonlabs/skeleton-svelte';
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 
@@ -58,86 +58,83 @@
 	});
 </script>
 
-<AppBar class="app-shell-header">
-	<AppBar.Toolbar class="grid grid-cols-[1fr_auto] items-center gap-3">
-		<AppBar.Lead>
-			<a href="/" class="flex items-center gap-2">
-				<span class="text-2xl">💪</span>
-				<span class="text-xl font-bold">SwoleMate</span>
-			</a>
-		</AppBar.Lead>
-		<AppBar.Trail class="flex items-center gap-2">
-			<nav class="hidden md:block">
-				<ul class="flex gap-2">
+<div class="app-shell">
+	<AppBar class="app-shell-header bg-surface-100-800-token border-b-2">
+		<AppBar.Toolbar class="grid grid-cols-[1fr_auto] items-center gap-3">
+			<AppBar.Lead>
+				<a href="/" class="flex items-center gap-2">
+					<span class="text-2xl">💪</span>
+					<span class="text-xl font-bold">SwoleMate</span>
+				</a>
+			</AppBar.Lead>
+			<AppBar.Trail class="flex items-center gap-2">
+				<nav class="hidden md:block">
+					<ul class="list-nav flex space-x-4">
+						{#each navItems as item}
+							<li>
+								<a
+									href={item.href}
+									class="btn btn-sm {$page.url.pathname === item.href
+										? 'variant-filled-primary'
+										: 'variant-ghost-primary'}"
+								>
+									<span>{item.icon}</span>
+									<span>{item.label}</span>
+								</a>
+							</li>
+						{/each}
+					</ul>
+				</nav>
+
+				<div class="md:hidden">
+					<button class="btn btn-sm variant-ghost-primary" on:click={toggleDrawer}>
+						<span>☰</span>
+					</button>
+				</div>
+
+				<button
+					type="button"
+					class="btn btn-sm variant-ghost-primary"
+					aria-label="Toggle dark mode"
+					on:click={() => setDarkMode(!darkMode)}
+				>
+					<span aria-hidden="true">{darkMode ? '🌙' : '☀️'}</span>
+				</button>
+			</AppBar.Trail>
+		</AppBar.Toolbar>
+	</AppBar>
+
+	{#if drawerOpen}
+		<div class="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
+			<button
+				class="absolute inset-0 bg-black/50"
+				aria-label="Close menu"
+				on:click={() => (drawerOpen = false)}
+			></button>
+			<nav
+				class="absolute right-0 top-0 h-full w-72 bg-surface-50-900-token shadow-lg overflow-y-auto drawer-content p-4 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pr-[env(safe-area-inset-right)]"
+			>
+				<ul class="list-nav flex flex-col space-y-4">
 					{#each navItems as item}
 						<li>
 							<a
 								href={item.href}
-								class="btn btn-sm {$page.url.pathname === item.href
+								class="btn w-full justify-start {$page.url.pathname === item.href
 									? 'variant-filled-primary'
 									: 'variant-ghost-primary'}"
+								on:click={() => (drawerOpen = false)}
 							>
-								<span>{item.icon}</span>
+								<span class="text-xl">{item.icon}</span>
 								<span>{item.label}</span>
 							</a>
 						</li>
 					{/each}
 				</ul>
 			</nav>
-
-			<div class="md:hidden">
-				<button class="btn btn-sm variant-ghost-primary" on:click={toggleDrawer}>
-					<span>☰</span>
-				</button>
-			</div>
-
-			<Switch class="flex items-center gap-2" on:click={() => setDarkMode(!darkMode)}>
-				<Switch.Control class="data-[state=checked]:bg-primary-500">
-					<Switch.Thumb />
-				</Switch.Control>
-				<Switch.HiddenInput checked={darkMode} />
-			</Switch>
-		</AppBar.Trail>
-	</AppBar.Toolbar>
-</AppBar>
-
-{#if drawerOpen}
-	<div class="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
-		<button
-			class="absolute inset-0 bg-black/50"
-			aria-label="Close menu"
-			on:click={() => (drawerOpen = false)}
-		></button>
-		<div
-			class="absolute right-0 top-0 h-full w-72 p-4 bg-surface-50-950 shadow-lg overflow-y-auto"
-			style="padding-top: max(1rem, env(safe-area-inset-top)); padding-bottom: max(1rem, env(safe-area-inset-bottom)); padding-right: max(1rem, env(safe-area-inset-right));"
-		>
-			<Navigation>
-				<Navigation.Content>
-					<Navigation.Group>
-						<Navigation.Menu>
-							{#each navItems as item}
-								<Navigation.TriggerAnchor
-									href={item.href}
-									on:click={() => (drawerOpen = false)}
-									class="btn w-full justify-start {$page.url.pathname === item.href
-										? 'variant-filled-primary'
-										: 'variant-ghost-primary'}"
-								>
-									<Navigation.TriggerText>
-										<span class="text-xl mr-2">{item.icon}</span>
-										{item.label}
-									</Navigation.TriggerText>
-								</Navigation.TriggerAnchor>
-							{/each}
-						</Navigation.Menu>
-					</Navigation.Group>
-				</Navigation.Content>
-			</Navigation>
 		</div>
-	</div>
-{/if}
+	{/if}
 
-<main class="container mx-auto p-4 flex-1 flex flex-col app-content h-full">
-	<slot />
-</main>
+	<main class="container mx-auto p-4 flex-1 flex flex-col app-content h-full">
+		<slot />
+	</main>
+</div>
