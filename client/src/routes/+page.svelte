@@ -1,5 +1,3 @@
-<!-- YOU CAN DELETE EVERYTHING IN THIS PAGE -->
-
 <script lang="ts">
 	import {
 		createWorkout,
@@ -16,6 +14,8 @@
 	} from '$lib/api';
 	import type { Workout, Exercise, UpdateExerciseRequest, Set as WorkoutSet } from '$lib/types';
 	import { logger } from '$lib/logger';
+	import { formatDateRelative, formatTime } from '$lib/utils/date';
+	import { compressSets } from '$lib/utils/sets';
 	import { onMount } from 'svelte';
 
 	// Workout session persistence
@@ -397,11 +397,12 @@
 			error = null;
 			const now = new Date().toISOString();
 			const workoutId = currentWorkout.id; // Store the ID before clearing
+			const feedback = sessionFeedback;
 
 			await endWorkout(currentWorkout.id, {
 				end_time: now,
 				notes: sessionNotes || undefined,
-				feedback: sessionFeedback
+				feedback
 			});
 
 			// Clear the saved workout
@@ -416,7 +417,7 @@
 
 			logger.info('workout', 'Workout completed', {
 				workoutId, // Use the stored ID
-				feedback: sessionFeedback
+				feedback
 			});
 
 			// Refresh recent workouts to show the completed one
@@ -427,74 +428,6 @@
 		} finally {
 			loading = false;
 		}
-	}
-
-	function formatTime(dateString: string): string {
-		return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-	}
-
-	function formatDateRelative(dateString: string): string {
-		const date = new Date(dateString);
-		const now = new Date();
-		const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-		const months = [
-			'January',
-			'February',
-			'March',
-			'April',
-			'May',
-			'June',
-			'July',
-			'August',
-			'September',
-			'October',
-			'November',
-			'December'
-		];
-
-		// Function to add ordinal suffix
-		const getOrdinal = (n: number) => {
-			const s = ['th', 'st', 'nd', 'rd'];
-			const v = n % 100;
-			return n + (s[(v - 20) % 10] || s[v] || s[0]);
-		};
-
-		// Check if it's today
-		if (date.toDateString() === now.toDateString()) {
-			return 'Today';
-		}
-
-		// Check if it's yesterday
-		const yesterday = new Date(now);
-		yesterday.setDate(yesterday.getDate() - 1);
-		if (date.toDateString() === yesterday.toDateString()) {
-			return 'Yesterday';
-		}
-
-		// Check if it's within the last week
-		const lastWeek = new Date(now);
-		lastWeek.setDate(lastWeek.getDate() - 7);
-		if (date > lastWeek) {
-			return `Last ${days[date.getDay()]}`;
-		}
-
-		// Otherwise, return the full date
-		return `${days[date.getDay()]}, ${getOrdinal(date.getDate())} of ${months[date.getMonth()]}`;
-	}
-
-	function compressSets(sets: Array<{ reps: number; weight: number }>) {
-		const compressed: Array<{ count: number; reps: number; weight: number }> = [];
-
-		sets.forEach((set) => {
-			const existing = compressed.find((c) => c.reps === set.reps && c.weight === set.weight);
-			if (existing) {
-				existing.count++;
-			} else {
-				compressed.push({ count: 1, reps: set.reps, weight: set.weight });
-			}
-		});
-
-		return compressed;
 	}
 
 	async function cancelExerciseAndRefresh(exerciseIndex: number) {
@@ -543,7 +476,7 @@
 	}
 </script>
 
-<div class="content-container">
+<div class="flex flex-col min-h-full">
 	<header class="text-center space-y-2 sm:space-y-4 mb-4 sm:mb-6">
 		<div class="card variant-filled-tertiary p-3 sm:p-4">
 			<h1 class="h1 text-xl sm:text-2xl mb-2 sm:mb-4">Today's Workout</h1>
@@ -577,7 +510,7 @@
 
 	<div class="grid gap-4 sm:gap-6">
 		{#if currentWorkout}
-			<div class="workout-container">
+			<div class="flex-1 flex flex-col">
 				<div class="card variant-filled-surface p-2 sm:p-4 space-y-3 sm:space-y-5">
 					<header class="flex flex-col sm:flex-row justify-between items-center gap-2 mb-2 sm:mb-4">
 						<h2 class="h2 text-lg sm:text-2xl">Current Session</h2>
@@ -600,7 +533,7 @@
 					</header>
 					<div class="space-y-5">
 						{#each exercises as exercise, exerciseIndex}
-							<div class="card variant-soft p-3 sm:p-5 exercise-card">
+							<div class="card variant-soft p-3 sm:p-5 transition-transform hover:scale-[1.01]">
 								<div class="flex flex-col gap-3 sm:gap-5">
 									<div class="flex justify-between items-center">
 										<span class="text-lg sm:text-xl font-bold">{exercise.name}</span>
@@ -612,11 +545,13 @@
 										</button>
 									</div>
 									{#if exercise.lastExerciseData}
-										<div class="last-exercise-info">
+										<div
+											class="text-sm p-3 rounded-lg bg-surface-900/30 dark:bg-surface-700/30 flex flex-wrap items-center gap-3"
+										>
 											<span class="opacity-75 whitespace-nowrap text-sm"
 												>Last time ({formatDateRelative(exercise.lastExerciseData.date)}):</span
 											>
-											<div class="last-sets">
+											<div class="flex gap-2 flex-wrap items-center">
 												{#each compressSets(exercise.lastExerciseData.sets) as set}
 													{#if set.count > 1}
 														<span class="badge variant-filled-secondary text-xs">
@@ -647,7 +582,7 @@
 														class="card variant-ghost p-2 flex gap-2 items-center w-full sm:w-auto"
 													>
 														<span class="text-xs opacity-75">{setIndex + 1}</span>
-														<div class="input-container">
+														<div class="flex items-center gap-2 min-h-10">
 															<input
 																type="number"
 																inputmode="numeric"
@@ -669,7 +604,7 @@
 															<span class="text-base">kg</span>
 														</div>
 														<button
-															class="btn variant-filled-success btn-sm round-btn ml-auto"
+															class="btn variant-filled-success btn-sm rounded-full aspect-square flex items-center justify-center size-8 p-0 ml-auto"
 															on:click={() => confirmSet(exerciseIndex, setIndex)}
 															disabled={loading}
 														>
@@ -684,7 +619,7 @@
 											{/each}
 											{#if !exercise.sets.some((s) => s.isEditing)}
 												<button
-													class="btn variant-filled-secondary round-btn btn-sm"
+													class="btn variant-filled-secondary btn-sm rounded-full aspect-square flex items-center justify-center size-8 p-0"
 													on:click={() => addSet(exerciseIndex)}
 												>
 													+
@@ -703,7 +638,7 @@
 													bind:value={exercise.notes}
 												/>
 												<button
-													class="btn variant-filled-success btn-sm round-btn"
+													class="btn variant-filled-success btn-sm rounded-full aspect-square flex items-center justify-center size-8 p-0"
 													on:click={() => updateExerciseNotes(exerciseIndex)}
 												>
 													✓
@@ -715,7 +650,7 @@
 											<div class="flex gap-2 items-center">
 												<span class="flex-grow text-sm">{exercise.notes}</span>
 												<button
-													class="btn variant-filled btn-sm round-btn"
+													class="btn variant-filled btn-sm rounded-full aspect-square flex items-center justify-center size-8 p-0"
 													on:click={() => (exercises[exerciseIndex].isEditingNotes = true)}
 												>
 													✎
@@ -818,16 +753,18 @@
 								<p class="opacity-70">{workout.notes}</p>
 							{/if}
 
-							<div class="exercise-list">
+							<div class="grid gap-1">
 								{#each exercises as { exercise, sets }}
-									<div class="exercise-row">
+									<div
+										class="flex justify-between items-center p-2 rounded-lg bg-surface-700/50 dark:bg-surface-900/50"
+									>
 										<div class="flex-1">
-											<span class="exercise-name">{exercise.exercise_type}</span>
+											<span class="font-semibold">{exercise.exercise_type}</span>
 											{#if exercise.notes}
 												<p class="text-sm opacity-90 mt-0.5">{exercise.notes}</p>
 											{/if}
 										</div>
-										<div class="sets-list">
+										<div class="flex flex-wrap gap-1 items-center">
 											{#each compressSets(sets) as set}
 												{#if set.count > 1}
 													<span class="badge variant-filled-secondary">
@@ -904,83 +841,20 @@
 </div>
 
 <style>
-	@reference '../app.css';
-
 	/* Remove spinner arrows from number inputs */
 	input[type='number']::-webkit-inner-spin-button,
 	input[type='number']::-webkit-outer-spin-button {
-		-webkit-appearance: none;
+		appearance: none;
 		margin: 0;
 	}
 	input[type='number'] {
+		appearance: textfield;
 		-moz-appearance: textfield;
 	}
-	.exercise-card {
-		@apply transition-transform;
-	}
-	.exercise-card:hover {
-		@apply scale-[1.01];
-	}
-	.round-btn {
-		@apply aspect-square rounded-full flex items-center justify-center;
-		padding: 0;
-		width: 2rem;
-		height: 2rem;
-	}
-	.content-container {
-		@apply flex flex-col min-h-full;
-	}
-	.workout-container {
-		@apply flex-1 flex flex-col;
-	}
-	:global(.dark) .variant-ghost {
-		background-color: rgba(0, 0, 0, 0.2) !important;
-	}
-	:global(.dark) .variant-soft {
-		background-color: rgba(0, 0, 0, 0.3) !important;
-	}
-	.exercise-list {
-		@apply grid gap-1;
-	}
-	.exercise-row {
-		@apply flex justify-between items-center p-2 rounded-lg bg-surface-700/50;
-	}
-	.exercise-name {
-		@apply font-semibold;
-	}
-	.sets-list {
-		@apply flex flex-wrap gap-1 items-center;
-	}
-	:global(.dark) .exercise-row {
-		@apply bg-surface-900/50;
-	}
-	.last-exercise-info {
-		@apply text-sm p-3 rounded-lg bg-surface-900/30 flex flex-wrap items-center gap-3;
-	}
-	.last-sets {
-		@apply flex gap-2 flex-wrap items-center;
-	}
-	:global(.dark) .last-exercise-info {
-		@apply bg-surface-700/30;
-	}
-	.badge {
-		@apply px-2 py-1 rounded-full text-sm font-medium whitespace-nowrap;
-	}
-	.badge .badge {
-		@apply ml-1;
-	}
-
 	/* Prevent zoom on input fields */
 	input[type='number'],
 	input[type='text'] {
-		@apply text-base;
 		touch-action: manipulation;
 		font-size: 16px !important;
-	}
-
-	/* Make input containers taller to accommodate the larger font size */
-	.input-container {
-		@apply flex items-center gap-2;
-		min-height: 2.5rem;
 	}
 </style>

@@ -3,6 +3,7 @@
 	import { writable } from 'svelte/store';
 	import { getWorkouts } from '$lib/api';
 	import { browser } from '$app/environment';
+	import { logger } from '$lib/logger';
 
 	function getStoredString(key: string, fallback: string): string {
 		if (!browser) return fallback;
@@ -46,7 +47,7 @@
 			a.click();
 			window.URL.revokeObjectURL(url);
 		} catch (error) {
-			console.error('Failed to export data:', error);
+			logger.error('settings', 'Failed to export data', { error });
 		}
 	}
 </script>

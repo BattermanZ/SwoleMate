@@ -16,6 +16,14 @@
 	padding: 0;
 }
 
+html.dark .variant-ghost {
+	background-color: color-mix(in oklab, var(--color-surface-950) 20%, transparent) !important;
+}
+
+html.dark .variant-soft {
+	background-color: color-mix(in oklab, var(--color-surface-950) 30%, transparent) !important;
+}
+
 /* Compatibility aliases for legacy Skeleton v2 class names used throughout the app. */
 @utility variant-filled {
 	@apply preset-filled;

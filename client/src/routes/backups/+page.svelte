@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { getBackups, createBackup, restoreBackup, deleteBackup } from '$lib/api';
 	import type { BackupInfo } from '$lib/api';
 	import { logger } from '$lib/logger';
+	import { formatDateLongWithTime } from '$lib/utils/date';
 
 	export let data: { backups: BackupInfo[] };
 	let backups = data.backups;
@@ -79,34 +79,6 @@
 			loading = false;
 		}
 	}
-
-	function formatDate(date: Date): string {
-		const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-		const months = [
-			'January',
-			'February',
-			'March',
-			'April',
-			'May',
-			'June',
-			'July',
-			'August',
-			'September',
-			'October',
-			'November',
-			'December'
-		];
-
-		const getOrdinal = (n: number) => {
-			const s = ['th', 'st', 'nd', 'rd'];
-			const v = n % 100;
-			return n + (s[(v - 20) % 10] || s[v] || s[0]);
-		};
-
-		return `${days[date.getDay()]}, ${getOrdinal(date.getDate())} of ${months[date.getMonth()]} at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-	}
-
-	onMount(loadBackups);
 </script>
 
 <div class="container mx-auto p-4 space-y-6">
@@ -143,7 +115,7 @@
 							<div class="flex-1">
 								<div class="flex items-center justify-between mb-2">
 									<span class="text-base font-medium">
-										{formatDate(new Date(backup.created_at))}
+										{formatDateLongWithTime(new Date(backup.created_at))}
 									</span>
 								</div>
 								<div class="mt-2">

@@ -1,9 +1,10 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { Chart, registerables } from 'chart.js';
 	import 'chartjs-adapter-date-fns';
 	import { getWorkoutStats, getExerciseTypes, getVolumeStats, getExerciseProgress } from '$lib/api';
 	import type { WorkoutStats, VolumeStats, ExerciseProgress } from '$lib/types';
+	import { logger } from '$lib/logger';
 
 	Chart.register(...registerables);
 
@@ -30,7 +31,7 @@
 			createTimeDistributionChart();
 			createDurationDistributionChart();
 		} catch (error) {
-			console.error('Error loading initial data:', error);
+			logger.error('progress', 'Error loading initial data', { error });
 		}
 	});
 
@@ -42,7 +43,7 @@
 			createProgressChart();
 			createMonthlyVolumeChart();
 		} catch (error) {
-			console.error('Error loading exercise data:', error);
+			logger.error('progress', 'Error loading exercise data', { error, selectedExercise });
 		}
 	}
 
@@ -302,9 +303,16 @@
 	$: if (selectedExercise) {
 		loadExerciseData();
 	}
-</script>
 
-# Progress Page
+	onDestroy(() => {
+		volumeChart?.destroy();
+		progressChart?.destroy();
+		feedbackChart?.destroy();
+		timeDistributionChart?.destroy();
+		durationDistributionChart?.destroy();
+		monthlyVolumeChart?.destroy();
+	});
+</script>
 
 <div class="container mx-auto p-4">
 	<h1 class="h1 mb-4">Progress</h1>

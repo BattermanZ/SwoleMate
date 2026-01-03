@@ -14,24 +14,48 @@ import type {
 import { config } from './config';
 
 const API_BASE = config.apiUrl;
+type Fetcher = typeof fetch;
 
 async function handleResponse<T>(response: Response): Promise<T> {
 	if (!response.ok) {
-		const error = (await response.json().catch(() => ({
-			message: `HTTP error! status: ${response.status}`
-		}))) as { message?: string; error?: string };
-		console.error('API Error:', {
-			status: response.status,
-			statusText: response.statusText,
-			error
-		});
-		throw new Error(error.message || error.error || `HTTP error! status: ${response.status}`);
+		const contentType = response.headers.get('content-type') ?? '';
+		let message = `HTTP error! status: ${response.status}`;
+
+		if (contentType.includes('application/json')) {
+			const error = (await response.json().catch(() => null)) as {
+				message?: string;
+				error?: string;
+			} | null;
+			message = error?.message || error?.error || message;
+		} else {
+			const text = await response.text().catch(() => '');
+			if (text.trim()) message = text;
+		}
+
+		throw new Error(message);
 	}
-	return response.json();
+
+	if (response.status === 204) {
+		return undefined as T;
+	}
+
+	const contentType = response.headers.get('content-type') ?? '';
+	if (!contentType.includes('application/json')) {
+		// Defensive: treat non-JSON success bodies as "no payload" for this app.
+		return undefined as T;
+	}
+
+	// Defensive: some endpoints may return an empty body with 200/201.
+	const text = await response.text().catch(() => '');
+	if (!text.trim()) return undefined as T;
+	return JSON.parse(text) as T;
 }
 
-export async function createWorkout(workout: CreateWorkoutRequest): Promise<{ id: number }> {
-	const response = await fetch(`${API_BASE}/api/workouts`, {
+export async function createWorkout(
+	workout: CreateWorkoutRequest,
+	fetcher: Fetcher = fetch
+): Promise<{ id: number }> {
+	const response = await fetcher(`${API_BASE}/api/workouts`, {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json'
@@ -41,8 +65,12 @@ export async function createWorkout(workout: CreateWorkoutRequest): Promise<{ id
 	return handleResponse(response);
 }
 
-export async function endWorkout(id: number, endTime: UpdateWorkoutRequest): Promise<void> {
-	const response = await fetch(`${API_BASE}/api/workouts/${id}/end`, {
+export async function endWorkout(
+	id: number,
+	endTime: UpdateWorkoutRequest,
+	fetcher: Fetcher = fetch
+): Promise<void> {
+	const response = await fetcher(`${API_BASE}/api/workouts/${id}/end`, {
 		method: 'PUT',
 		headers: {
 			'Content-Type': 'application/json'
@@ -53,17 +81,19 @@ export async function endWorkout(id: number, endTime: UpdateWorkoutRequest): Pro
 }
 
 export async function getWorkout(
-	id: number
+	id: number,
+	fetcher: Fetcher = fetch
 ): Promise<{ workout: Workout; exercises: Array<{ exercise: Exercise; sets: Set[] }> }> {
-	const response = await fetch(`${API_BASE}/api/workouts/${id}`);
+	const response = await fetcher(`${API_BASE}/api/workouts/${id}`);
 	return handleResponse(response);
 }
 
 export async function createExercise(
 	workoutId: number,
-	exercise: CreateExerciseRequest
+	exercise: CreateExerciseRequest,
+	fetcher: Fetcher = fetch
 ): Promise<{ id: number }> {
-	const response = await fetch(`${API_BASE}/api/workouts/${workoutId}/exercises`, {
+	const response = await fetcher(`${API_BASE}/api/workouts/${workoutId}/exercises`, {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json'
@@ -73,8 +103,12 @@ export async function createExercise(
 	return handleResponse(response);
 }
 
-export async function endExercise(id: number, endTime: UpdateExerciseRequest): Promise<void> {
-	const response = await fetch(`${API_BASE}/api/exercises/${id}/end`, {
+export async function endExercise(
+	id: number,
+	endTime: UpdateExerciseRequest,
+	fetcher: Fetcher = fetch
+): Promise<void> {
+	const response = await fetcher(`${API_BASE}/api/exercises/${id}/end`, {
 		method: 'PUT',
 		headers: {
 			'Content-Type': 'application/json'
@@ -86,10 +120,10 @@ export async function endExercise(id: number, endTime: UpdateExerciseRequest): P
 
 export async function createSet(
 	exerciseId: number,
-	set: CreateSetRequest
+	set: CreateSetRequest,
+	fetcher: Fetcher = fetch
 ): Promise<{ id: number }> {
-	console.log('Creating set:', { exerciseId, set });
-	const response = await fetch(`${API_BASE}/api/exercises/${exerciseId}/sets`, {
+	const response = await fetcher(`${API_BASE}/api/exercises/${exerciseId}/sets`, {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json'
@@ -99,20 +133,21 @@ export async function createSet(
 	return handleResponse(response);
 }
 
-export async function getWorkouts(): Promise<Workout[]> {
-	const response = await fetch(`${API_BASE}/api/workouts`);
+export async function getWorkouts(fetcher: Fetcher = fetch): Promise<Workout[]> {
+	const response = await fetcher(`${API_BASE}/api/workouts`);
 	return handleResponse(response);
 }
 
-export async function getExerciseTypes(): Promise<string[]> {
-	const response = await fetch(`${API_BASE}/api/exercises/types`);
+export async function getExerciseTypes(fetcher: Fetcher = fetch): Promise<string[]> {
+	const response = await fetcher(`${API_BASE}/api/exercises/types`);
 	return handleResponse(response);
 }
 
 export async function getLastExerciseData(
-	exerciseType: string
+	exerciseType: string,
+	fetcher: Fetcher = fetch
 ): Promise<{ exercise: Exercise; sets: Set[] } | null> {
-	const response = await fetch(
+	const response = await fetcher(
 		`${API_BASE}/api/exercises/last/${encodeURIComponent(exerciseType)}`
 	);
 	const data = await handleResponse<[Exercise, Set[]]>(response);
@@ -121,8 +156,8 @@ export async function getLastExerciseData(
 	return { exercise, sets };
 }
 
-export async function cancelExercise(id: number): Promise<void> {
-	const response = await fetch(`${API_BASE}/api/exercises/${id}`, {
+export async function cancelExercise(id: number, fetcher: Fetcher = fetch): Promise<void> {
+	const response = await fetcher(`${API_BASE}/api/exercises/${id}`, {
 		method: 'DELETE',
 		headers: {
 			'Content-Type': 'application/json'
@@ -131,8 +166,8 @@ export async function cancelExercise(id: number): Promise<void> {
 	return handleResponse(response);
 }
 
-export async function cancelWorkout(id: number): Promise<void> {
-	const response = await fetch(`${API_BASE}/api/workouts/${id}`, {
+export async function cancelWorkout(id: number, fetcher: Fetcher = fetch): Promise<void> {
+	const response = await fetcher(`${API_BASE}/api/workouts/${id}`, {
 		method: 'DELETE',
 		headers: {
 			'Content-Type': 'application/json'
@@ -147,13 +182,13 @@ export interface BackupInfo {
 	backup_type: 'Auto' | 'Manual';
 }
 
-export async function getBackups(): Promise<BackupInfo[]> {
-	const response = await fetch(`${API_BASE}/api/backups`);
+export async function getBackups(fetcher: Fetcher = fetch): Promise<BackupInfo[]> {
+	const response = await fetcher(`${API_BASE}/api/backups`);
 	return handleResponse(response);
 }
 
-export async function createBackup(): Promise<BackupInfo> {
-	const response = await fetch(`${API_BASE}/api/backups`, {
+export async function createBackup(fetcher: Fetcher = fetch): Promise<BackupInfo> {
+	const response = await fetcher(`${API_BASE}/api/backups`, {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json'
@@ -162,18 +197,21 @@ export async function createBackup(): Promise<BackupInfo> {
 	return handleResponse(response);
 }
 
-export async function restoreBackup(filename: string): Promise<void> {
-	const response = await fetch(`${API_BASE}/api/backups/${encodeURIComponent(filename)}/restore`, {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json'
+export async function restoreBackup(filename: string, fetcher: Fetcher = fetch): Promise<void> {
+	const response = await fetcher(
+		`${API_BASE}/api/backups/${encodeURIComponent(filename)}/restore`,
+		{
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			}
 		}
-	});
+	);
 	return handleResponse(response);
 }
 
-export async function deleteBackup(filename: string): Promise<void> {
-	const response = await fetch(`${API_BASE}/api/backups/${encodeURIComponent(filename)}`, {
+export async function deleteBackup(filename: string, fetcher: Fetcher = fetch): Promise<void> {
+	const response = await fetcher(`${API_BASE}/api/backups/${encodeURIComponent(filename)}`, {
 		method: 'DELETE',
 		headers: {
 			'Content-Type': 'application/json'
@@ -182,20 +220,26 @@ export async function deleteBackup(filename: string): Promise<void> {
 	return handleResponse(response);
 }
 
-export async function getWorkoutStats(): Promise<WorkoutStats> {
-	const response = await fetch(`${API_BASE}/api/progress/workout-stats`);
+export async function getWorkoutStats(fetcher: Fetcher = fetch): Promise<WorkoutStats> {
+	const response = await fetcher(`${API_BASE}/api/progress/workout-stats`);
 	return handleResponse(response);
 }
 
-export async function getExerciseProgress(exerciseType: string): Promise<ExerciseProgress[]> {
-	const response = await fetch(
+export async function getExerciseProgress(
+	exerciseType: string,
+	fetcher: Fetcher = fetch
+): Promise<ExerciseProgress[]> {
+	const response = await fetcher(
 		`${API_BASE}/api/progress/exercise/${encodeURIComponent(exerciseType)}`
 	);
 	return handleResponse(response);
 }
 
-export async function getVolumeStats(exerciseType: string): Promise<VolumeStats> {
-	const response = await fetch(
+export async function getVolumeStats(
+	exerciseType: string,
+	fetcher: Fetcher = fetch
+): Promise<VolumeStats> {
+	const response = await fetcher(
 		`${API_BASE}/api/progress/volume?exercise_type=${encodeURIComponent(exerciseType)}`
 	);
 	return handleResponse(response);

@@ -3,6 +3,7 @@
 	import { AppBar } from '@skeletonlabs/skeleton-svelte';
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
+	import { logger } from '$lib/logger';
 
 	let drawerOpen = false;
 	let darkMode = true;
@@ -49,10 +50,12 @@
 			navigator.serviceWorker
 				.register('/service-worker.js', { scope: '/' })
 				.then((registration) => {
-					console.log('ServiceWorker registration successful:', registration.scope);
+					logger.debug('pwa', 'ServiceWorker registration successful', {
+						scope: registration.scope
+					});
 				})
 				.catch((err) => {
-					console.error('ServiceWorker registration failed:', err);
+					logger.error('pwa', 'ServiceWorker registration failed', { err });
 				});
 		}
 	});

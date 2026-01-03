@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { getWorkouts, cancelWorkout } from '$lib/api';
 	import type { Workout } from '$lib/types';
 	import { logger } from '$lib/logger';
+	import { formatDateRelative, formatTime } from '$lib/utils/date';
 
 	export let data: { workouts: Workout[] };
 	let workouts = data.workouts;
@@ -12,9 +12,11 @@
 	async function refreshWorkouts() {
 		try {
 			loading = true;
+			error = null;
 			workouts = await getWorkouts();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load workouts';
+			logger.error('workout', 'Failed to load workouts', { error: e });
 		} finally {
 			loading = false;
 		}
@@ -43,61 +45,6 @@
 			loading = false;
 		}
 	}
-
-	function formatDateRelative(dateString: string): string {
-		const date = new Date(dateString);
-		const now = new Date();
-		const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-		const months = [
-			'January',
-			'February',
-			'March',
-			'April',
-			'May',
-			'June',
-			'July',
-			'August',
-			'September',
-			'October',
-			'November',
-			'December'
-		];
-
-		// Function to add ordinal suffix
-		const getOrdinal = (n: number) => {
-			const s = ['th', 'st', 'nd', 'rd'];
-			const v = n % 100;
-			return n + (s[(v - 20) % 10] || s[v] || s[0]);
-		};
-
-		// Check if it's today
-		if (date.toDateString() === now.toDateString()) {
-			return 'Today';
-		}
-
-		// Check if it's yesterday
-		const yesterday = new Date(now);
-		yesterday.setDate(yesterday.getDate() - 1);
-		if (date.toDateString() === yesterday.toDateString()) {
-			return 'Yesterday';
-		}
-
-		// Check if it's within the last week
-		const lastWeek = new Date(now);
-		lastWeek.setDate(lastWeek.getDate() - 7);
-		if (date > lastWeek) {
-			return `Last ${days[date.getDay()]}`;
-		}
-
-		// Otherwise, return the full date
-		return `${days[date.getDay()]}, ${getOrdinal(date.getDate())} of ${months[date.getMonth()]}`;
-	}
-
-	function formatTime(dateString: string): string {
-		return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-	}
-
-	onMount(refreshWorkouts);
 </script>
 
 <div class="container mx-auto p-4 space-y-6">

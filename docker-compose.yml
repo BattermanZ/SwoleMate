@@ -1,6 +1,6 @@
 services:
   client:
-    image: swolemate-client:v0.5.1
+    image: 192.168.31.233:5000/swolemate-client:latest
     container_name: swolemate-client
     ports:
       - "2470:2470"  # Frontend port
@@ -11,7 +11,7 @@ services:
       - server
         
   server:
-    image: swolemate-server:v0.5.4
+    image: 192.168.31.233:5000/swolemate-server:latest
     container_name: swolemate-server
     expose:  
       - 2469  # Backend port
