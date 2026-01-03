@@ -1,1 +1,86 @@
-app.postcss
+@import 'tailwindcss';
+
+@import '@skeletonlabs/skeleton';
+@import '@skeletonlabs/skeleton-svelte';
+@import '@skeletonlabs/skeleton/themes/sahara';
+
+/* Compatibility aliases for legacy Skeleton v2 class names used throughout the app. */
+@utility variant-filled {
+	@apply preset-filled;
+}
+@utility variant-filled-surface {
+	@apply preset-filled;
+}
+@utility variant-filled-primary {
+	@apply preset-filled-primary-500;
+}
+@utility variant-filled-secondary {
+	@apply preset-filled-secondary-500;
+}
+@utility variant-filled-tertiary {
+	@apply preset-filled-tertiary-500;
+}
+@utility variant-filled-success {
+	@apply preset-filled-success-500;
+}
+@utility variant-filled-warning {
+	@apply preset-filled-warning-500;
+}
+@utility variant-filled-error {
+	@apply preset-filled-error-500;
+}
+
+@utility variant-soft {
+	@apply preset-tonal;
+}
+@utility variant-soft-primary {
+	@apply preset-tonal-primary;
+}
+@utility variant-soft-secondary {
+	@apply preset-tonal-secondary;
+}
+@utility variant-soft-tertiary {
+	@apply preset-tonal-tertiary;
+}
+@utility variant-soft-success {
+	@apply preset-tonal-success;
+}
+@utility variant-soft-warning {
+	@apply preset-tonal-warning;
+}
+@utility variant-soft-error {
+	@apply preset-tonal-error;
+}
+@utility variant-soft-surface {
+	@apply preset-tonal-surface;
+}
+
+/* v2 "ghost" and "glass" variants were custom-ish; approximate them as user-generated presets. */
+@utility variant-ghost {
+	background-color: transparent;
+}
+@utility variant-ghost-primary {
+	@apply text-primary-500;
+	@variant hover {
+		@apply preset-tonal-primary;
+	}
+}
+
+@utility variant-glass-surface {
+	@apply preset-filled;
+	background-color: color-mix(
+		in oklab,
+		light-dark(var(--color-surface-50), var(--color-surface-950)) 30%,
+		transparent
+	);
+	backdrop-filter: blur(12px);
+	-webkit-backdrop-filter: blur(12px);
+}
+
+/* Legacy token utility aliases (v2) -> v4 theme colors. */
+.bg-surface-50-900-token {
+	background-color: var(--color-surface-50-950);
+}
+.bg-surface-100-800-token {
+	background-color: var(--color-surface-100-900);
+}

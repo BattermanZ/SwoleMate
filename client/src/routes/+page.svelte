@@ -15,7 +15,6 @@
 		cancelWorkout
 	} from '$lib/api';
 	import type { Workout, Exercise, UpdateExerciseRequest, Set as WorkoutSet } from '$lib/types';
-	import { ProgressRadial } from '@skeletonlabs/skeleton';
 	import { logger } from '$lib/logger';
 	import { onMount } from 'svelte';
 
@@ -556,12 +555,10 @@
 						disabled={loading}
 					>
 						{#if loading}
-							<ProgressRadial
-								width="w-6"
-								stroke={150}
-								meter="stroke-primary-500"
-								track="stroke-primary-500/30"
-							/>
+							<span
+								class="inline-block size-5 border-2 border-primary-500 border-r-transparent rounded-full animate-spin"
+								aria-label="Loading"
+							></span>
 						{:else}
 							<span class="text-xl sm:text-2xl mr-2">💪</span> Start New Session
 						{/if}
@@ -892,12 +889,10 @@
 						disabled={!sessionFeedback || loading}
 					>
 						{#if loading}
-							<ProgressRadial
-								width="w-6"
-								stroke={150}
-								meter="stroke-primary-500"
-								track="stroke-primary-500/30"
-							/>
+							<span
+								class="inline-block size-5 border-2 border-primary-500 border-r-transparent rounded-full animate-spin"
+								aria-label="Loading"
+							></span>
 						{:else}
 							<span class="text-lg mr-2">✨</span> Submit
 						{/if}
@@ -908,7 +903,9 @@
 	{/if}
 </div>
 
-<style lang="postcss">
+<style>
+	@reference '../app.css';
+
 	/* Remove spinner arrows from number inputs */
 	input[type='number']::-webkit-inner-spin-button,
 	input[type='number']::-webkit-outer-spin-button {
