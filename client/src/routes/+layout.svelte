@@ -6,7 +6,8 @@
 	import { logger } from '$lib/logger';
 
 	let drawerOpen = false;
-	let darkMode = true;
+	let darkMode = false;
+	const THEME_KEY = 'theme';
 
 	// Navigation items
 	const navItems = [
@@ -21,17 +22,35 @@
 		drawerOpen = !drawerOpen;
 	}
 
-	function setDarkMode(next: boolean) {
+	function applyTheme(next: boolean) {
 		darkMode = next;
-		if (typeof document !== 'undefined') {
-			document.documentElement.classList.toggle('dark', next);
+		if (typeof document === 'undefined') return;
+		document.documentElement.classList.toggle('dark', next);
+
+		try {
+			localStorage.setItem(THEME_KEY, next ? 'dark' : 'light');
+		} catch {
+			// ignore
 		}
+
+		const meta = document.querySelector('meta[name="theme-color"]');
+		if (meta) meta.setAttribute('content', next ? '#020617' : '#1d4ed8');
 	}
 
 	// Add service worker registration
 	onMount(() => {
 		if (typeof document !== 'undefined') {
-			darkMode = document.documentElement.classList.contains('dark');
+			try {
+				const stored = localStorage.getItem(THEME_KEY);
+				if (stored === 'dark' || stored === 'light') {
+					applyTheme(stored === 'dark');
+				} else {
+					const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
+					applyTheme(prefersDark);
+				}
+			} catch {
+				darkMode = document.documentElement.classList.contains('dark');
+			}
 		}
 
 		if ('serviceWorker' in navigator) {
@@ -99,7 +118,7 @@
 					type="button"
 					class="btn btn-sm variant-ghost-primary"
 					aria-label="Toggle dark mode"
-					on:click={() => setDarkMode(!darkMode)}
+					on:click={() => applyTheme(!darkMode)}
 				>
 					<span aria-hidden="true">{darkMode ? '🌙' : '☀️'}</span>
 				</button>

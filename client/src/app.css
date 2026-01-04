@@ -2,12 +2,23 @@
 
 @import '@skeletonlabs/skeleton';
 @import '@skeletonlabs/skeleton-svelte';
-@import '@skeletonlabs/skeleton/themes/sahara';
+@import '@skeletonlabs/skeleton/themes/rocket';
 
 /* Restore a few Skeleton v2 token pairings that changed in v4 (e.g. 50-900 vs 50-950). */
 :root {
 	--color-surface-50-900: light-dark(var(--color-surface-50), var(--color-surface-900));
 	--color-surface-100-800: light-dark(var(--color-surface-100), var(--color-surface-800));
+}
+
+[data-theme='rocket'] {
+	--base-font-family:
+		ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
+		Arial, 'Apple Color Emoji', 'Segoe UI Emoji';
+	--heading-font-family:
+		ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
+		Arial, 'Apple Color Emoji', 'Segoe UI Emoji';
+	--heading-font-weight: 800;
+	--heading-letter-spacing: -0.01em;
 }
 
 .list-nav {
@@ -103,4 +114,22 @@ html.dark .variant-soft {
 }
 .bg-surface-100-800-token {
 	background-color: var(--color-surface-100-800);
+}
+
+/* Global form ergonomics */
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+	appearance: none;
+	margin: 0;
+}
+input[type='number'] {
+	appearance: textfield;
+	-moz-appearance: textfield;
+}
+
+/* Prevent iOS zoom on focus */
+input[type='number'],
+input[type='text'],
+textarea {
+	font-size: 16px;
 }
