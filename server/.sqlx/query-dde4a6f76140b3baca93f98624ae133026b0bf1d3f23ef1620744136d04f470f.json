@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n            SELECT \n                id as \"id?\",\n                workout_id,\n                exercise_type,\n                start_time as \"start_time: DateTime<Utc>\",\n                end_time as \"end_time: DateTime<Utc>\",\n                notes\n            FROM exercises\n            WHERE workout_id = ?\n            ",
+  "query": "\n            SELECT \n                id as \"id?\",\n                workout_id,\n                exercise_type,\n                start_time as \"start_time: DateTime<Utc>\",\n                end_time as \"end_time: DateTime<Utc>\",\n                notes,\n                per_side_weight as \"per_side_weight: bool\",\n                split_weight as \"split_weight: bool\"\n            FROM exercises\n            WHERE workout_id = ?\n            ",
   "describe": {
     "columns": [
       {
@@ -32,6 +32,16 @@
         "name": "notes",
         "ordinal": 5,
         "type_info": "Text"
+      },
+      {
+        "name": "per_side_weight: bool",
+        "ordinal": 6,
+        "type_info": "Int64"
+      },
+      {
+        "name": "split_weight: bool",
+        "ordinal": 7,
+        "type_info": "Int64"
       }
     ],
     "parameters": {
@@ -43,8 +53,10 @@
       false,
       false,
       false,
-      true
+      true,
+      false,
+      false
     ]
   },
-  "hash": "3efe6f4d1ac768a9bed15c49dabf6577b7c92db9d75216d2e89735f09b736152"
+  "hash": "dde4a6f76140b3baca93f98624ae133026b0bf1d3f23ef1620744136d04f470f"
 }

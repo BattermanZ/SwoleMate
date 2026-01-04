@@ -147,7 +147,26 @@ CREATE INDEX IF NOT EXISTS idx_sets_exercise_id_composite ON sets(exercise_id, i
 
 // Define schema updates for future versions
 const SCHEMA_UPDATES: &[(i64, &str)] = &[
-    // (2, "ALTER TABLE workouts ADD COLUMN new_column TEXT;"),
+    (
+        2,
+        r#"
+        ALTER TABLE exercises ADD COLUMN per_side_weight INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE exercises ADD COLUMN split_weight INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE sets ADD COLUMN weight_left REAL;
+        ALTER TABLE sets ADD COLUMN weight_right REAL;
+
+        CREATE TABLE IF NOT EXISTS exercise_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            exercise_id INTEGER NOT NULL,
+            setting_key TEXT NOT NULL,
+            setting_value TEXT NOT NULL,
+            FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_exercise_settings_exercise_id_composite
+            ON exercise_settings(exercise_id, id);
+        "#,
+    ),
     // Add more version updates here as needed
 ];
 
@@ -225,6 +244,32 @@ async fn setup_schema(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<(), sqlx::Error
 
         if !version_exists {
             info!("Applying schema update version {}", version);
+
+            // Create a backup before applying schema updates when workout data exists.
+            let has_workouts_table = sqlx::query_scalar!(
+                r#"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='workouts'"#
+            )
+            .fetch_one(pool)
+            .await?
+                > 0;
+
+            if has_workouts_table {
+                let workout_count = sqlx::query_scalar!(r#"SELECT COUNT(*) FROM workouts"#)
+                    .fetch_one(pool)
+                    .await?;
+                if workout_count > 0 {
+                    info!(
+                        "Creating backup before applying schema update version {}",
+                        version
+                    );
+                    backup::create_backup(backup::BackupType::Auto)
+                        .await
+                        .map_err(|e| {
+                            sqlx::Error::Protocol(format!("Failed to create backup: {}", e))
+                        })?;
+                }
+            }
+
             sqlx::query(update_sql).execute(pool).await?;
 
             sqlx::query("INSERT INTO schema_version (version) VALUES (?)")

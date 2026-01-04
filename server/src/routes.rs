@@ -89,16 +89,7 @@ pub async fn create_exercise(
     workout_id: web::Path<i64>,
     exercise_req: web::Json<CreateExerciseRequest>,
 ) -> Result<HttpResponse, AppError> {
-    let exercise = Exercise {
-        id: None,
-        workout_id: *workout_id,
-        exercise_type: exercise_req.exercise_type.clone(),
-        start_time: exercise_req.start_time,
-        end_time: exercise_req.start_time, // Will be updated later
-        notes: exercise_req.notes.clone(),
-    };
-
-    let exercise_id = db.create_exercise(&exercise).await?;
+    let exercise_id = db.create_exercise(*workout_id, &exercise_req.0).await?;
     Ok(HttpResponse::Created().json(json!({
         "id": exercise_id,
         "message": "Exercise created successfully"
@@ -111,8 +102,7 @@ pub async fn end_exercise(
     id: web::Path<i64>,
     end_req: web::Json<UpdateExerciseRequest>,
 ) -> Result<HttpResponse, AppError> {
-    db.update_exercise_end_time(*id, end_req.end_time, end_req.notes.clone())
-        .await?;
+    db.update_exercise(*id, &end_req.0).await?;
     Ok(HttpResponse::Ok().json(json!({
         "message": "Exercise ended successfully"
     })))
@@ -124,15 +114,7 @@ pub async fn create_set(
     exercise_id: web::Path<i64>,
     set_req: web::Json<CreateSetRequest>,
 ) -> Result<HttpResponse, AppError> {
-    let set = Set {
-        id: None,
-        exercise_id: *exercise_id,
-        reps: set_req.reps,
-        weight: set_req.weight,
-        notes: set_req.notes.clone(),
-    };
-
-    let set_id = db.create_set(&set).await?;
+    let set_id = db.create_set(*exercise_id, &set_req.0).await?;
     Ok(HttpResponse::Created().json(json!({
         "id": set_id,
         "message": "Set created successfully"

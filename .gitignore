@@ -17,6 +17,9 @@ server/database/*.db-shm
 server/database/*.db-wal
 *.bak
 
+# SQLx offline query cache
+# Keep `server/.sqlx/` tracked when building with `SQLX_OFFLINE=true` (see `server/Dockerfile`).
+
 # Environment files
 *.env
 .env

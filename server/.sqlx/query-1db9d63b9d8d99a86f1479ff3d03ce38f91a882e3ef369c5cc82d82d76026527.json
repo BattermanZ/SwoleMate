@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                UPDATE exercises\n                SET per_side_weight = COALESCE(?, per_side_weight),\n                    split_weight = COALESCE(?, split_weight)\n                WHERE id = ?\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "1db9d63b9d8d99a86f1479ff3d03ce38f91a882e3ef369c5cc82d82d76026527"
+}

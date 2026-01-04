@@ -86,79 +86,203 @@ impl Database {
         Ok(())
     }
 
-    pub async fn create_exercise(&self, exercise: &Exercise) -> Result<i64, AppError> {
-        debug!(target: "database", "Creating exercise '{}' for workout #{}", 
-            exercise.exercise_type, exercise.workout_id);
+    pub async fn create_exercise(
+        &self,
+        workout_id: i64,
+        req: &CreateExerciseRequest,
+    ) -> Result<i64, AppError> {
+        debug!(
+            target: "database",
+            "Creating exercise '{}' for workout #{}",
+            req.exercise_type,
+            workout_id
+        );
 
         let pool = self.pool().await;
+        let mut tx = pool.begin().await.map_err(AppError::DatabaseError)?;
+
+        let split_weight = req.split_weight.unwrap_or(false);
+        let per_side_weight = req.per_side_weight.unwrap_or(false) || split_weight;
+
         let result = sqlx::query!(
             r#"
-            INSERT INTO exercises (workout_id, exercise_type, start_time, end_time, notes)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO exercises (workout_id, exercise_type, start_time, end_time, notes, per_side_weight, split_weight)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             RETURNING id
             "#,
-            exercise.workout_id,
-            exercise.exercise_type,
-            exercise.start_time,
-            exercise.end_time,
-            exercise.notes,
+            workout_id,
+            req.exercise_type,
+            req.start_time,
+            req.start_time, // Initially set end_time to start_time
+            req.notes,
+            per_side_weight,
+            split_weight,
         )
-        .fetch_one(&pool)
+        .fetch_one(&mut *tx)
         .await
         .map_err(|e| {
             error!(target: "database", "Failed to create exercise: {}", e);
             AppError::DatabaseError(e)
         })?;
 
-        info!(target: "database", "Created exercise #{}", result.id);
-        Ok(result.id)
+        let exercise_id = result.id;
+
+        if let Some(settings) = &req.settings {
+            for setting in settings {
+                sqlx::query!(
+                    r#"
+                    INSERT INTO exercise_settings (exercise_id, setting_key, setting_value)
+                    VALUES (?, ?, ?)
+                    "#,
+                    exercise_id,
+                    setting.key,
+                    setting.value
+                )
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| {
+                    error!(target: "database", "Failed to create exercise setting: {}", e);
+                    AppError::DatabaseError(e)
+                })?;
+            }
+        }
+
+        tx.commit().await.map_err(AppError::DatabaseError)?;
+
+        info!(target: "database", "Created exercise #{}", exercise_id);
+        Ok(exercise_id)
     }
 
-    pub async fn update_exercise_end_time(
+    pub async fn update_exercise(
         &self,
         id: i64,
-        end_time: DateTime<Utc>,
-        notes: Option<String>,
+        req: &UpdateExerciseRequest,
     ) -> Result<(), AppError> {
-        debug!(target: "database", "Updating exercise #{} end time to {} with notes", id, end_time);
+        debug!(
+            target: "database",
+            "Updating exercise #{} end time to {}",
+            id,
+            req.end_time
+        );
 
         let pool = self.pool().await;
+        let mut tx = pool.begin().await.map_err(AppError::DatabaseError)?;
+
         sqlx::query!(
             r#"
             UPDATE exercises
             SET end_time = ?, notes = ?
             WHERE id = ?
             "#,
-            end_time,
-            notes,
+            req.end_time,
+            req.notes,
             id,
         )
-        .execute(&pool)
+        .execute(&mut *tx)
         .await
         .map_err(|e| {
-            error!(target: "database", "Failed to update exercise end time: {}", e);
+            error!(target: "database", "Failed to update exercise: {}", e);
             AppError::DatabaseError(e)
         })?;
 
-        info!(target: "database", "Updated exercise #{} end time and notes", id);
+        let mut per_side_weight = req.per_side_weight;
+        let mut split_weight = req.split_weight;
+
+        // Enforce invariants:
+        // - split_weight implies per_side_weight
+        // - disabling per_side_weight also disables split_weight
+        if per_side_weight == Some(false) {
+            split_weight = Some(false);
+        } else if split_weight == Some(true) {
+            per_side_weight = Some(true);
+        }
+
+        if per_side_weight.is_some() || split_weight.is_some() {
+            sqlx::query!(
+                r#"
+                UPDATE exercises
+                SET per_side_weight = COALESCE(?, per_side_weight),
+                    split_weight = COALESCE(?, split_weight)
+                WHERE id = ?
+                "#,
+                per_side_weight,
+                split_weight,
+                id
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| {
+                error!(target: "database", "Failed to update exercise flags: {}", e);
+                AppError::DatabaseError(e)
+            })?;
+        }
+
+        if let Some(settings) = &req.settings {
+            sqlx::query!(
+                r#"
+                DELETE FROM exercise_settings
+                WHERE exercise_id = ?
+                "#,
+                id
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| {
+                error!(target: "database", "Failed to delete exercise settings: {}", e);
+                AppError::DatabaseError(e)
+            })?;
+
+            for setting in settings {
+                sqlx::query!(
+                    r#"
+                    INSERT INTO exercise_settings (exercise_id, setting_key, setting_value)
+                    VALUES (?, ?, ?)
+                    "#,
+                    id,
+                    setting.key,
+                    setting.value
+                )
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| {
+                    error!(target: "database", "Failed to create exercise setting: {}", e);
+                    AppError::DatabaseError(e)
+                })?;
+            }
+        }
+
+        tx.commit().await.map_err(AppError::DatabaseError)?;
+
+        info!(target: "database", "Updated exercise #{}", id);
         Ok(())
     }
 
-    pub async fn create_set(&self, set: &Set) -> Result<i64, AppError> {
-        debug!(target: "database", "Creating set for exercise #{}: {}x{}kg", 
-            set.exercise_id, set.reps, set.weight);
+    pub async fn create_set(
+        &self,
+        exercise_id: i64,
+        req: &CreateSetRequest,
+    ) -> Result<i64, AppError> {
+        debug!(
+            target: "database",
+            "Creating set for exercise #{}: {}x{}kg",
+            exercise_id,
+            req.reps,
+            req.weight
+        );
 
         let pool = self.pool().await;
         let result = sqlx::query!(
             r#"
-            INSERT INTO sets (exercise_id, reps, weight, notes)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO sets (exercise_id, reps, weight, weight_left, weight_right, notes)
+            VALUES (?, ?, ?, ?, ?, ?)
             RETURNING id
             "#,
-            set.exercise_id,
-            set.reps,
-            set.weight,
-            set.notes,
+            exercise_id,
+            req.reps,
+            req.weight,
+            req.weight_left,
+            req.weight_right,
+            req.notes,
         )
         .fetch_one(&pool)
         .await
@@ -222,7 +346,9 @@ impl Database {
                 exercise_type,
                 start_time as "start_time: DateTime<Utc>",
                 end_time as "end_time: DateTime<Utc>",
-                notes
+                notes,
+                per_side_weight as "per_side_weight: bool",
+                split_weight as "split_weight: bool"
             FROM exercises
             WHERE workout_id = ?
             "#,
@@ -240,6 +366,7 @@ impl Database {
             let id = row
                 .id
                 .ok_or_else(|| AppError::InternalError("Exercise row missing id".to_string()))?;
+            let settings = self.get_settings_for_exercise(id).await?;
             exercises.push(Exercise {
                 id: Some(id),
                 workout_id: row.workout_id,
@@ -247,6 +374,9 @@ impl Database {
                 start_time: row.start_time,
                 end_time: row.end_time,
                 notes: row.notes,
+                per_side_weight: row.per_side_weight,
+                split_weight: row.split_weight,
+                settings,
             });
         }
 
@@ -261,7 +391,7 @@ impl Database {
         let sets = sqlx::query_as!(
             Set,
             r#"
-            SELECT id, exercise_id, reps, weight, notes
+            SELECT id as "id?", exercise_id, reps, weight, weight_left, weight_right, notes
             FROM sets
             WHERE exercise_id = ?
             "#,
@@ -350,8 +480,7 @@ impl Database {
         debug!(target: "database", "Fetching last data for exercise type: {}", exercise_type);
 
         let pool = self.pool().await;
-        let exercise = sqlx::query_as!(
-            Exercise,
+        let row = sqlx::query!(
             r#"
             SELECT 
                 id as "id?",
@@ -359,7 +488,9 @@ impl Database {
                 exercise_type,
                 start_time as "start_time: DateTime<Utc>",
                 end_time as "end_time: DateTime<Utc>",
-                notes
+                notes,
+                per_side_weight as "per_side_weight: bool",
+                split_weight as "split_weight: bool"
             FROM exercises
             WHERE LOWER(exercise_type) = LOWER(?)
             ORDER BY start_time DESC
@@ -374,15 +505,54 @@ impl Database {
             AppError::DatabaseError(e)
         })?;
 
-        if let Some(exercise) = exercise {
-            let exercise_id = exercise.id.ok_or_else(|| {
+        if let Some(row) = row {
+            let exercise_id = row.id.ok_or_else(|| {
                 AppError::InternalError("Exercise row missing id for sets lookup".to_string())
             })?;
             let sets = self.get_sets_for_exercise(exercise_id).await?;
+
+            let mut exercise = Exercise {
+                id: row.id,
+                workout_id: row.workout_id,
+                exercise_type: row.exercise_type,
+                start_time: row.start_time,
+                end_time: row.end_time,
+                notes: row.notes,
+                per_side_weight: row.per_side_weight,
+                split_weight: row.split_weight,
+                settings: Vec::new(),
+            };
+
+            exercise.settings = self.get_settings_for_exercise(exercise_id).await?;
             Ok(Some((exercise, sets)))
         } else {
             Ok(None)
         }
+    }
+
+    pub async fn get_settings_for_exercise(
+        &self,
+        exercise_id: i64,
+    ) -> Result<Vec<ExerciseSetting>, AppError> {
+        let pool = self.pool().await;
+        let rows = sqlx::query_as!(
+            ExerciseSetting,
+            r#"
+            SELECT id as "id?", exercise_id, setting_key, setting_value
+            FROM exercise_settings
+            WHERE exercise_id = ?
+            ORDER BY id ASC
+            "#,
+            exercise_id
+        )
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| {
+            error!(target: "database", "Failed to fetch exercise settings: {}", e);
+            AppError::DatabaseError(e)
+        })?;
+
+        Ok(rows)
     }
 
     pub async fn delete_exercise(&self, id: i64) -> Result<(), AppError> {
@@ -440,8 +610,7 @@ impl Database {
         debug!(target: "database", "Fetching progress data for exercise type: {}", exercise_type);
 
         let pool = self.pool().await;
-        let exercises = sqlx::query_as!(
-            Exercise,
+        let rows = sqlx::query!(
             r#"
             SELECT 
                 id as "id?",
@@ -449,7 +618,9 @@ impl Database {
                 exercise_type,
                 start_time as "start_time: DateTime<Utc>",
                 end_time as "end_time: DateTime<Utc>",
-                notes
+                notes,
+                per_side_weight as "per_side_weight: bool",
+                split_weight as "split_weight: bool"
             FROM exercises
             WHERE LOWER(exercise_type) = LOWER(?)
             ORDER BY start_time ASC
@@ -464,13 +635,27 @@ impl Database {
         })?;
 
         let mut result = Vec::new();
-        for exercise in exercises {
-            let exercise_id = exercise.id.ok_or_else(|| {
+        for row in rows {
+            let exercise_id = row.id.ok_or_else(|| {
                 AppError::InternalError(
                     "Exercise row missing id for progress sets lookup".to_string(),
                 )
             })?;
             let sets = self.get_sets_for_exercise(exercise_id).await?;
+
+            let mut exercise = Exercise {
+                id: row.id,
+                workout_id: row.workout_id,
+                exercise_type: row.exercise_type,
+                start_time: row.start_time,
+                end_time: row.end_time,
+                notes: row.notes,
+                per_side_weight: row.per_side_weight,
+                split_weight: row.split_weight,
+                settings: Vec::new(),
+            };
+
+            exercise.settings = self.get_settings_for_exercise(exercise_id).await?;
             result.push((exercise, sets));
         }
 
@@ -565,13 +750,13 @@ impl Database {
             )
             SELECT 
                 COUNT(*) as total_workouts,
-                ROUND(AVG(duration), 1) as avg_duration,
+                COALESCE(ROUND(AVG(duration), 1), 0) as avg_duration,
                 (SELECT good_workouts FROM feedback_counts) as good_workouts,
                 (SELECT neutral_workouts FROM feedback_counts) as neutral_workouts,
                 (SELECT bad_workouts FROM feedback_counts) as bad_workouts,
-                (SELECT GROUP_CONCAT(hour || ':' || count) FROM popular_hours) as popular_hours,
-                (SELECT avg_workouts_per_week FROM avg_weekly) as avg_workouts_per_week,
-                (SELECT GROUP_CONCAT(duration_range || ':' || count) FROM duration_ranges) as duration_distribution,
+                COALESCE((SELECT GROUP_CONCAT(hour || ':' || count) FROM popular_hours), '') as popular_hours,
+                COALESCE((SELECT avg_workouts_per_week FROM avg_weekly), 0) as avg_workouts_per_week,
+                COALESCE((SELECT GROUP_CONCAT(duration_range || ':' || count) FROM duration_ranges), '') as duration_distribution,
                 COALESCE(
                     (
                         SELECT ROUND(
@@ -604,6 +789,50 @@ impl Database {
             AppError::DatabaseError(e)
         })?;
 
+        let popular_hours_raw = stats.popular_hours.unwrap_or_default();
+        let popular_hours = if popular_hours_raw.is_empty() {
+            None
+        } else {
+            Some(
+                popular_hours_raw
+                    .split(',')
+                    .filter_map(|pair| {
+                        let parts: Vec<&str> = pair.split(':').collect();
+                        if parts.len() == 2 {
+                            Some(json!({
+                                "hour": parts[0],
+                                "count": parts[1].parse::<i64>().unwrap_or(0)
+                            }))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>(),
+            )
+        };
+
+        let duration_distribution_raw = stats.duration_distribution.unwrap_or_default();
+        let duration_distribution = if duration_distribution_raw.is_empty() {
+            None
+        } else {
+            Some(
+                duration_distribution_raw
+                    .split(',')
+                    .filter_map(|pair| {
+                        let parts: Vec<&str> = pair.split(':').collect();
+                        if parts.len() == 2 {
+                            Some(json!({
+                                "range": parts[0],
+                                "count": parts[1].parse::<i64>().unwrap_or(0)
+                            }))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>(),
+            )
+        };
+
         Ok(json!({
             "total_workouts": stats.total_workouts,
             "average_duration_minutes": stats.avg_duration,
@@ -617,36 +846,8 @@ impl Database {
                 "trend": stats.frequency_trend
             },
             "duration_trend": stats.duration_trend,
-            "popular_hours": stats.popular_hours.map(|h| {
-                h.split(',')
-                    .filter_map(|pair| {
-                        let parts: Vec<&str> = pair.split(':').collect();
-                        if parts.len() == 2 {
-                            Some(json!({
-                                "hour": parts[0],
-                                "count": parts[1].parse::<i64>().unwrap_or(0)
-                            }))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>()
-            }),
-            "duration_distribution": stats.duration_distribution.map(|d| {
-                d.split(',')
-                    .filter_map(|pair| {
-                        let parts: Vec<&str> = pair.split(':').collect();
-                        if parts.len() == 2 {
-                            Some(json!({
-                                "range": parts[0],
-                                "count": parts[1].parse::<i64>().unwrap_or(0)
-                            }))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>()
-            })
+            "popular_hours": popular_hours,
+            "duration_distribution": duration_distribution
         }))
     }
 
@@ -663,9 +864,40 @@ impl Database {
                 SELECT 
                     e.start_time,
                     s.reps,
-                    s.weight,
-                    s.reps * s.weight as volume,
-                    ROUND(s.weight * (36.0 / (37.0 - CAST(s.reps AS FLOAT))), 2) as estimated_1rm
+                    CASE
+                        WHEN e.per_side_weight = 1 THEN
+                            CASE
+                                WHEN e.split_weight = 1 AND s.weight_left IS NOT NULL AND s.weight_right IS NOT NULL
+                                    THEN (s.weight_left + s.weight_right)
+                                ELSE (s.weight * 2)
+                            END
+                        ELSE s.weight
+                    END as weight,
+                    s.reps * (
+                        CASE
+                            WHEN e.per_side_weight = 1 THEN
+                                CASE
+                                    WHEN e.split_weight = 1 AND s.weight_left IS NOT NULL AND s.weight_right IS NOT NULL
+                                        THEN (s.weight_left + s.weight_right)
+                                    ELSE (s.weight * 2)
+                                END
+                            ELSE s.weight
+                        END
+                    ) as volume,
+                    ROUND(
+                        (
+                            CASE
+                                WHEN e.per_side_weight = 1 THEN
+                                    CASE
+                                        WHEN e.split_weight = 1 AND s.weight_left IS NOT NULL AND s.weight_right IS NOT NULL
+                                            THEN (s.weight_left + s.weight_right)
+                                        ELSE (s.weight * 2)
+                                    END
+                                ELSE s.weight
+                            END
+                        ) * (36.0 / (37.0 - CAST(s.reps AS FLOAT))),
+                        2
+                    ) as estimated_1rm
                 FROM exercises e
                 JOIN sets s ON e.id = s.exercise_id
                 WHERE LOWER(e.exercise_type) = LOWER(?)
@@ -706,8 +938,30 @@ impl Database {
             r#"
             SELECT 
                 strftime('%Y-%m', e.start_time) as month,
-                SUM(s.reps * s.weight) as total_volume,
-                MAX(s.weight) as max_weight,
+                SUM(
+                    s.reps * (
+                        CASE
+                            WHEN e.per_side_weight = 1 THEN
+                                CASE
+                                    WHEN e.split_weight = 1 AND s.weight_left IS NOT NULL AND s.weight_right IS NOT NULL
+                                        THEN (s.weight_left + s.weight_right)
+                                    ELSE (s.weight * 2)
+                                END
+                            ELSE s.weight
+                        END
+                    )
+                ) as total_volume,
+                MAX(
+                    CASE
+                        WHEN e.per_side_weight = 1 THEN
+                            CASE
+                                WHEN e.split_weight = 1 AND s.weight_left IS NOT NULL AND s.weight_right IS NOT NULL
+                                    THEN (s.weight_left + s.weight_right)
+                                ELSE (s.weight * 2)
+                            END
+                        ELSE s.weight
+                    END
+                ) as max_weight,
                 SUM(s.reps) as total_reps,
                 COUNT(*) as total_sets
             FROM exercises e
@@ -730,9 +984,40 @@ impl Database {
             WITH exercise_stats AS (
                 SELECT 
                     s.reps,
-                    s.weight,
-                    s.reps * s.weight as volume,
-                    ROUND(s.weight * (36.0 / (37.0 - CAST(s.reps AS FLOAT))), 2) as estimated_1rm
+                    CASE
+                        WHEN e.per_side_weight = 1 THEN
+                            CASE
+                                WHEN e.split_weight = 1 AND s.weight_left IS NOT NULL AND s.weight_right IS NOT NULL
+                                    THEN (s.weight_left + s.weight_right)
+                                ELSE (s.weight * 2)
+                            END
+                        ELSE s.weight
+                    END as weight,
+                    s.reps * (
+                        CASE
+                            WHEN e.per_side_weight = 1 THEN
+                                CASE
+                                    WHEN e.split_weight = 1 AND s.weight_left IS NOT NULL AND s.weight_right IS NOT NULL
+                                        THEN (s.weight_left + s.weight_right)
+                                    ELSE (s.weight * 2)
+                                END
+                            ELSE s.weight
+                        END
+                    ) as volume,
+                    ROUND(
+                        (
+                            CASE
+                                WHEN e.per_side_weight = 1 THEN
+                                    CASE
+                                        WHEN e.split_weight = 1 AND s.weight_left IS NOT NULL AND s.weight_right IS NOT NULL
+                                            THEN (s.weight_left + s.weight_right)
+                                        ELSE (s.weight * 2)
+                                    END
+                                ELSE s.weight
+                            END
+                        ) * (36.0 / (37.0 - CAST(s.reps AS FLOAT))),
+                        2
+                    ) as estimated_1rm
                 FROM exercises e
                 JOIN sets s ON e.id = s.exercise_id
                 WHERE LOWER(e.exercise_type) = LOWER(?)
