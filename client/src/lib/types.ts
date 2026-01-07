@@ -103,6 +103,10 @@ export interface WorkoutStats {
 		range: string;
 		count: number;
 	}>;
+	sessions_per_month?: Array<{
+		month: string; // YYYY-MM
+		count: number;
+	}>;
 }
 
 export interface VolumeStats {

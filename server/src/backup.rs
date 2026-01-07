@@ -94,6 +94,11 @@ pub async fn create_backup(backup_type: BackupType) -> Result<BackupInfo, std::i
 
     let (db_content, wal_content, shm_content) = match SqliteConnection::connect(&get_database_url()).await {
         Ok(mut conn) => {
+            // Ensure any WAL content is merged before snapshotting so the backup reflects the latest writes.
+            let _ = sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
+                .execute(&mut conn)
+                .await;
+
             let snapshot_path_sql = snapshot_path.to_string_lossy().replace('\'', "''");
             let vacuum_sql = format!("VACUUM INTO '{}'", snapshot_path_sql);
 

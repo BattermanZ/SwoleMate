@@ -2,7 +2,7 @@ use crate::{errors::AppError, models::*};
 use chrono::{DateTime, Utc};
 use log::{debug, error, info};
 use serde_json::json;
-use sqlx::{Pool, Sqlite};
+use sqlx::{Pool, Row, Sqlite};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -905,6 +905,50 @@ impl Database {
             )
         };
 
+        let monthly_rows = sqlx::query(
+            r#"
+            WITH RECURSIVE months(month_start) AS (
+                SELECT date('now', 'start of month', '-11 months')
+                UNION ALL
+                SELECT date(month_start, '+1 month')
+                FROM months
+                WHERE month_start < date('now', 'start of month')
+            ),
+            counts AS (
+                SELECT
+                    strftime('%Y-%m', start_time) as month,
+                    COUNT(*) as count
+                FROM workouts
+                WHERE date(start_time) >= date('now', 'start of month', '-11 months')
+                GROUP BY strftime('%Y-%m', start_time)
+            )
+            SELECT
+                strftime('%Y-%m', months.month_start) as month,
+                COALESCE(counts.count, 0) as count
+            FROM months
+            LEFT JOIN counts ON counts.month = strftime('%Y-%m', months.month_start)
+            ORDER BY months.month_start ASC
+            "#,
+        )
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| {
+            error!(target: "database", "Failed to fetch rolling-year monthly sessions: {}", e);
+            AppError::DatabaseError(e)
+        })?;
+
+        let monthly_sessions = monthly_rows
+            .into_iter()
+            .filter_map(|row| {
+                let month: Result<String, _> = row.try_get("month");
+                let count: Result<i64, _> = row.try_get("count");
+                match (month, count) {
+                    (Ok(month), Ok(count)) => Some(json!({ "month": month, "count": count })),
+                    _ => None,
+                }
+            })
+            .collect::<Vec<_>>();
+
         Ok(json!({
             "total_workouts": stats.total_workouts,
             "average_duration_minutes": stats.avg_duration,
@@ -919,7 +963,8 @@ impl Database {
             },
             "duration_trend": stats.duration_trend,
             "popular_hours": popular_hours,
-            "duration_distribution": duration_distribution
+            "duration_distribution": duration_distribution,
+            "sessions_per_month": monthly_sessions
         }))
     }
 
