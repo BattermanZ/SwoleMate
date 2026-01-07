@@ -68,13 +68,13 @@ html.dark .variant-soft {
 	@apply preset-filled;
 }
 @utility variant-filled-primary {
-	@apply preset-filled-primary-500;
+	@apply preset-filled-primary-600-400;
 }
 @utility variant-filled-secondary {
-	@apply preset-filled-secondary-500;
+	@apply preset-filled-secondary-600-400;
 }
 @utility variant-filled-tertiary {
-	@apply preset-filled-tertiary-500;
+	@apply preset-filled-tertiary-600-400;
 }
 @utility variant-filled-success {
 	@apply preset-filled-success-500;
@@ -109,6 +109,29 @@ html.dark .variant-soft {
 }
 @utility variant-soft-surface {
 	@apply preset-tonal-surface;
+}
+
+/* Contrast helpers for interactive pills (buttons/badges/chips). */
+.btn[class*='variant-filled-'],
+.badge[class*='variant-filled-'],
+.chip[class*='variant-filled-'] {
+	border: 1px solid color-mix(in oklab, currentColor 22%, transparent);
+	box-shadow:
+		0 1px 0 color-mix(in oklab, var(--color-surface-950-50) 18%, transparent),
+		0 10px 24px color-mix(in oklab, var(--color-surface-950) 14%, transparent);
+}
+
+.btn.variant-soft,
+.btn.variant-soft-primary,
+.btn.variant-soft-secondary,
+.btn.variant-soft-tertiary,
+.btn.variant-soft-success,
+.btn.variant-soft-warning,
+.btn.variant-soft-error,
+.btn.variant-soft-surface,
+.badge.variant-soft,
+.chip.variant-soft {
+	border: 1px solid color-mix(in oklab, var(--color-surface-950-50) 16%, transparent);
 }
 
 /* v2 "ghost" and "glass" variants were custom-ish; approximate them as user-generated presets. */
