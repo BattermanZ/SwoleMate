@@ -92,65 +92,66 @@ pub async fn create_backup(backup_type: BackupType) -> Result<BackupInfo, std::i
     let wal_path = db_path.with_extension("db-wal");
     let shm_path = db_path.with_extension("db-shm");
 
-    let (db_content, wal_content, shm_content) = match SqliteConnection::connect(&get_database_url()).await {
-        Ok(mut conn) => {
-            // Ensure any WAL content is merged before snapshotting so the backup reflects the latest writes.
-            let _ = sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
-                .execute(&mut conn)
-                .await;
+    let (db_content, wal_content, shm_content) =
+        match SqliteConnection::connect(&get_database_url()).await {
+            Ok(mut conn) => {
+                // Ensure any WAL content is merged before snapshotting so the backup reflects the latest writes.
+                let _ = sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
+                    .execute(&mut conn)
+                    .await;
 
-            let snapshot_path_sql = snapshot_path.to_string_lossy().replace('\'', "''");
-            let vacuum_sql = format!("VACUUM INTO '{}'", snapshot_path_sql);
+                let snapshot_path_sql = snapshot_path.to_string_lossy().replace('\'', "''");
+                let vacuum_sql = format!("VACUUM INTO '{}'", snapshot_path_sql);
 
-            match sqlx::query(&vacuum_sql).execute(&mut conn).await {
-                Ok(_) => {
-                    let content = fs::read(&snapshot_path)?;
-                    let _ = fs::remove_file(&snapshot_path);
-                    (content, None, None)
-                }
-                Err(e) => {
-                    error!(
+                match sqlx::query(&vacuum_sql).execute(&mut conn).await {
+                    Ok(_) => {
+                        let content = fs::read(&snapshot_path)?;
+                        let _ = fs::remove_file(&snapshot_path);
+                        (content, None, None)
+                    }
+                    Err(e) => {
+                        error!(
                         "Failed to create consistent DB snapshot, falling back to direct copy: {}",
                         e
                     );
-                    let _ = sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
-                        .execute(&mut conn)
-                        .await;
+                        let _ = sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
+                            .execute(&mut conn)
+                            .await;
 
-                    let main = fs::read(&db_path)?;
-                    let wal = if wal_path.exists() {
-                        Some(fs::read(&wal_path)?)
-                    } else {
-                        None
-                    };
-                    let shm = if shm_path.exists() {
-                        Some(fs::read(&shm_path)?)
-                    } else {
-                        None
-                    };
-                    (main, wal, shm)
+                        let main = fs::read(&db_path)?;
+                        let wal = if wal_path.exists() {
+                            Some(fs::read(&wal_path)?)
+                        } else {
+                            None
+                        };
+                        let shm = if shm_path.exists() {
+                            Some(fs::read(&shm_path)?)
+                        } else {
+                            None
+                        };
+                        (main, wal, shm)
+                    }
                 }
             }
-        }
-        Err(e) => {
-            error!(
-                "Failed to open DB connection for snapshot, falling back to direct copy: {}",
-                e
-            );
-            let main = fs::read(&db_path)?;
-            let wal = if wal_path.exists() {
-                Some(fs::read(&wal_path)?)
-            } else {
-                None
-            };
-            let shm = if shm_path.exists() {
-                Some(fs::read(&shm_path)?)
-            } else {
-                None
-            };
-            (main, wal, shm)
-        }
-    };
+            Err(e) => {
+                error!(
+                    "Failed to open DB connection for snapshot, falling back to direct copy: {}",
+                    e
+                );
+                let main = fs::read(&db_path)?;
+                let wal = if wal_path.exists() {
+                    Some(fs::read(&wal_path)?)
+                } else {
+                    None
+                };
+                let shm = if shm_path.exists() {
+                    Some(fs::read(&shm_path)?)
+                } else {
+                    None
+                };
+                (main, wal, shm)
+            }
+        };
 
     let mut header = tar::Header::new_gnu();
     header.set_size(db_content.len() as u64);

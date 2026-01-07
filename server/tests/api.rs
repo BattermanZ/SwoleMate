@@ -57,11 +57,14 @@ impl Drop for TestEnv {
     }
 }
 
-async fn setup_test_app() -> (Database, impl actix_web::dev::Service<
-    actix_http::Request,
-    Response = actix_web::dev::ServiceResponse,
-    Error = actix_web::Error,
->) {
+async fn setup_test_app() -> (
+    Database,
+    impl actix_web::dev::Service<
+        actix_http::Request,
+        Response = actix_web::dev::ServiceResponse,
+        Error = actix_web::Error,
+    >,
+) {
     let pool = SqlitePoolOptions::new()
         .max_connections(1)
         .connect("sqlite:database/swolemate.db")
@@ -332,9 +335,7 @@ async fn exercise_lookups_and_progress_endpoints_work() {
             "notes": null
         }))
         .to_request();
-    let exercise_id = json_body(test::call_service(&app, req).await)
-        .await
-        ["id"]
+    let exercise_id = json_body(test::call_service(&app, req).await).await["id"]
         .as_i64()
         .unwrap();
 
@@ -402,9 +403,7 @@ async fn logs_endpoints_work_and_enforce_limits() {
     assert!(resp.status().is_success());
     assert!(Path::new("logs/client.log").exists());
 
-    let too_many = (0..1001)
-        .map(|i| json!({ "idx": i }))
-        .collect::<Vec<_>>();
+    let too_many = (0..1001).map(|i| json!({ "idx": i })).collect::<Vec<_>>();
     let req = test::TestRequest::post()
         .uri("/api/logs")
         .set_json(too_many)
@@ -473,7 +472,9 @@ async fn not_found_is_mapped_and_unknown_exercise_returns_null() {
     let _env = TestEnv::new();
     let (_, app) = setup_test_app().await;
 
-    let req = test::TestRequest::get().uri("/api/workouts/999999").to_request();
+    let req = test::TestRequest::get()
+        .uri("/api/workouts/999999")
+        .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 404);
     let body = json_body(resp).await;

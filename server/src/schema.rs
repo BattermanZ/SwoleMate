@@ -40,10 +40,9 @@ CREATE INDEX IF NOT EXISTS idx_exercises_workout_id_composite ON exercises(worko
 CREATE INDEX IF NOT EXISTS idx_sets_exercise_id_composite ON sets(exercise_id, id);
 "#;
 
-pub const SCHEMA_UPDATES: &[(i64, &str)] = &[
-    (
-        2,
-        r#"
+pub const SCHEMA_UPDATES: &[(i64, &str)] = &[(
+    2,
+    r#"
         ALTER TABLE exercises ADD COLUMN per_side_weight INTEGER NOT NULL DEFAULT 0;
         ALTER TABLE exercises ADD COLUMN split_weight INTEGER NOT NULL DEFAULT 0;
         ALTER TABLE sets ADD COLUMN weight_left REAL;
@@ -60,8 +59,7 @@ pub const SCHEMA_UPDATES: &[(i64, &str)] = &[
         CREATE INDEX IF NOT EXISTS idx_exercise_settings_exercise_id_composite
             ON exercise_settings(exercise_id, id);
         "#,
-    ),
-];
+)];
 
 pub const SCHEMA_VERSION_TABLE: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -151,4 +149,3 @@ pub async fn setup_schema(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<(), sqlx::E
 
     Ok(())
 }
-
