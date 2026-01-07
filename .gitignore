@@ -53,9 +53,10 @@ client/build/
 .svelte-kit
 /package 
 
-# Playwright
+# (Former Playwright) leftover artifacts
 client/test-results/
 client/playwright-report/
+
 
 # backups
 server/backups/

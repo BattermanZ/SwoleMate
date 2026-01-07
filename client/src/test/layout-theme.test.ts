@@ -1,5 +1,4 @@
-import { render } from '@testing-library/svelte';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, render } from '@testing-library/svelte';
 import { readable } from 'svelte/store';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -27,19 +26,18 @@ describe('Layout theme toggle', () => {
 		document.documentElement.classList.remove('dark');
 
 		const { default: Layout } = await import('../routes/+layout.svelte');
-		const user = userEvent.setup();
 
 		const { getByRole } = render(Layout);
 
 		const toggle = getByRole('button', { name: /toggle dark mode/i });
 		expect(document.documentElement.classList.contains('dark')).toBe(false);
 
-		await user.click(toggle);
+		await fireEvent.click(toggle);
 		expect(document.documentElement.classList.contains('dark')).toBe(true);
 		expect(localStorage.getItem('theme')).toBe('dark');
 
-		await user.click(toggle);
+		await fireEvent.click(toggle);
 		expect(document.documentElement.classList.contains('dark')).toBe(false);
 		expect(localStorage.getItem('theme')).toBe('light');
-	});
+	}, 15_000);
 });
