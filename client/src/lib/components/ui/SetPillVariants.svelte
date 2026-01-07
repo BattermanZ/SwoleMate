@@ -4,9 +4,9 @@
 	type SetEntry = { reps: number; weight: number };
 	type SetGroup = { reps: number; weight: number; count: number };
 
-	export let selectedOption: 1 | 2 | 3 | 4 = 1;
+	export let selectedOption: 1 | 2 | 3 | 4 | 5 = 1;
 
-	const dispatch = createEventDispatcher<{ select: { option: 1 | 2 | 3 | 4 } }>();
+	const dispatch = createEventDispatcher<{ select: { option: 1 | 2 | 3 | 4 | 5 } }>();
 
 	const sampleSets: SetEntry[] = [
 		{ reps: 12, weight: 62 },
@@ -44,7 +44,7 @@
 		return `${Math.round(n * 100)}%`;
 	}
 
-	function select(option: 1 | 2 | 3 | 4) {
+	function select(option: 1 | 2 | 3 | 4 | 5) {
 		dispatch('select', { option });
 	}
 </script>
@@ -53,7 +53,7 @@
 	<header class="space-y-1">
 		<h3 class="text-lg font-semibold tracking-tight">Set chips — style options</h3>
 		<p class="text-sm opacity-75">
-			Same data, four visual systems. The goal is to keep repeated sets grouped while making reps vs
+			Same data, five visual systems. The goal is to keep repeated sets grouped while making reps vs
 			weight scannable.
 		</p>
 	</header>
@@ -74,6 +74,26 @@
 						{/if}
 						<span class="set-pill__reps">{g.reps}</span>
 						<span class="set-pill__weight">{g.weight}kg</span>
+					</span>
+				{/each}
+			</div>
+		</button>
+
+		<button
+			type="button"
+			class="option"
+			data-selected={selectedOption === 5}
+			on:click={() => select(5)}
+		>
+			<div class="text-sm font-semibold opacity-80">5) Segmented + weight intensity (hybrid)</div>
+			<div class="mt-2 flex flex-wrap gap-2">
+				{#each groups as g}
+					<span class="set-pill" style={`--w:${pct(weightIntensity(g.weight))}`}>
+						{#if g.count > 1}
+							<span class="set-pill__count">{g.count}×</span>
+						{/if}
+						<span class="set-pill__reps">{g.reps}</span>
+						<span class="set-pill__weight set-pill__weight--scale">{g.weight}kg</span>
 					</span>
 				{/each}
 			</div>
@@ -214,6 +234,15 @@
 		font-weight: 700;
 		font-size: 0.75rem;
 		line-height: 1;
+	}
+
+	.set-pill__weight--scale {
+		background-color: color-mix(
+			in oklab,
+			var(--color-primary-500) var(--w),
+			var(--color-surface-50-950)
+		);
+		color: var(--color-surface-950-50);
 	}
 
 	.chip-split {

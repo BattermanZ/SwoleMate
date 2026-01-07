@@ -19,8 +19,8 @@
 		return Number.isFinite(parsed) ? parsed : fallback;
 	}
 
-	function normalizeSetChipStyle(n: number): 1 | 2 | 3 | 4 {
-		if (n === 1 || n === 2 || n === 3 || n === 4) return n;
+	function normalizeSetChipStyle(n: number): 1 | 2 | 3 | 4 | 5 {
+		if (n === 1 || n === 2 || n === 3 || n === 4 || n === 5) return n;
 		return 1;
 	}
 
@@ -126,6 +126,7 @@
 						<span>Set Chip Style</span>
 						<select class="select" bind:value={$setChipStyle}>
 							<option value={1}>1) Segmented pill</option>
+							<option value={5}>5) Segmented + weight intensity</option>
 							<option value={2}>2) Chip + count badge</option>
 							<option value={3}>3) Weight-intensity scale</option>
 							<option value={4}>4) Two-row reps + weight</option>
