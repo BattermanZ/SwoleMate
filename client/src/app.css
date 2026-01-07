@@ -1,3 +1,5 @@
+@config '../tailwind.config.js';
+
 @import 'tailwindcss';
 
 @import '@skeletonlabs/skeleton';
@@ -6,15 +8,20 @@
 
 /* Restore a few Skeleton v2 token pairings that changed in v4 (e.g. 50-900 vs 50-950). */
 :root {
-	--color-surface-50-900: light-dark(var(--color-surface-50), var(--color-surface-900));
-	--color-surface-100-800: light-dark(var(--color-surface-100), var(--color-surface-800));
+	--color-surface-50-900: var(--color-surface-50);
+	--color-surface-100-800: var(--color-surface-100);
 }
 
-/* `light-dark()` follows `color-scheme`, not the presence of a `.dark` class.
-   We use `.dark` as the UX toggle and map it to `color-scheme` so tokens update correctly. */
+html.dark {
+	--color-surface-50-900: var(--color-surface-900);
+	--color-surface-100-800: var(--color-surface-800);
+}
+
+/* Many Skeleton tokens use `light-dark()` which keys off `color-scheme`. */
 html {
 	color-scheme: light;
 }
+
 html.dark {
 	color-scheme: dark;
 }
@@ -26,8 +33,17 @@ html.dark {
 	--heading-font-family:
 		ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
 		Arial, 'Apple Color Emoji', 'Segoe UI Emoji';
-	--heading-font-weight: 800;
-	--heading-letter-spacing: -0.01em;
+	--heading-font-weight: 700;
+	--heading-letter-spacing: -0.005em;
+	--body-background-color: var(--color-surface-50);
+	--body-background-color-dark: var(--color-surface-950);
+}
+
+/* Global readability defaults */
+body {
+	text-rendering: optimizeLegibility;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
 }
 
 .list-nav {
@@ -107,12 +123,8 @@ html.dark .variant-soft {
 }
 
 @utility variant-glass-surface {
-	@apply preset-filled;
-	background-color: color-mix(
-		in oklab,
-		light-dark(var(--color-surface-50), var(--color-surface-900)) 30%,
-		transparent
-	);
+	@apply preset-tonal-surface;
+	background-color: color-mix(in oklab, var(--color-surface-50-950) 75%, transparent);
 	backdrop-filter: blur(12px);
 	-webkit-backdrop-filter: blur(12px);
 }
