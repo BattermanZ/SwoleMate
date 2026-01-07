@@ -10,12 +10,7 @@ use std::io::Write;
 use std::path::Path;
 use tokio::time::{sleep, Duration};
 
-mod backup;
-mod db;
-mod errors;
-mod middleware;
-mod models;
-mod routes;
+use swolemate_server::{backup, db, middleware, routes, schema};
 
 fn find_env_file() -> Option<String> {
     let current_dir = std::env::current_dir().ok()?;
@@ -103,186 +98,6 @@ async fn schedule_backups() {
             Err(e) => error!("Failed to create automatic backup: {}", e),
         }
     }
-}
-
-const INITIAL_SCHEMA: &str = r#"
--- Enable foreign key support
-PRAGMA foreign_keys = ON;
-
--- Create workouts table
-CREATE TABLE IF NOT EXISTS workouts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    date DATETIME NOT NULL,
-    start_time DATETIME NOT NULL,
-    end_time DATETIME NOT NULL,
-    notes TEXT,
-    feedback TEXT CHECK(feedback IN ('😊', '😐', '😞') OR feedback IS NULL)
-);
-
--- Create exercises table
-CREATE TABLE IF NOT EXISTS exercises (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    workout_id INTEGER NOT NULL,
-    exercise_type TEXT NOT NULL,
-    start_time DATETIME NOT NULL,
-    end_time DATETIME NOT NULL,
-    notes TEXT,
-    FOREIGN KEY (workout_id) REFERENCES workouts(id) ON DELETE CASCADE
-);
-
--- Create sets table
-CREATE TABLE IF NOT EXISTS sets (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    exercise_id INTEGER NOT NULL,
-    reps INTEGER NOT NULL,
-    weight REAL NOT NULL,
-    notes TEXT,
-    FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
-);
-
--- Create indexes for better performance
-CREATE INDEX IF NOT EXISTS idx_exercises_workout_id_composite ON exercises(workout_id, id);
-CREATE INDEX IF NOT EXISTS idx_sets_exercise_id_composite ON sets(exercise_id, id);
-"#;
-
-// Define schema updates for future versions
-const SCHEMA_UPDATES: &[(i64, &str)] = &[
-    (
-        2,
-        r#"
-        ALTER TABLE exercises ADD COLUMN per_side_weight INTEGER NOT NULL DEFAULT 0;
-        ALTER TABLE exercises ADD COLUMN split_weight INTEGER NOT NULL DEFAULT 0;
-        ALTER TABLE sets ADD COLUMN weight_left REAL;
-        ALTER TABLE sets ADD COLUMN weight_right REAL;
-
-        CREATE TABLE IF NOT EXISTS exercise_settings (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            exercise_id INTEGER NOT NULL,
-            setting_key TEXT NOT NULL,
-            setting_value TEXT NOT NULL,
-            FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_exercise_settings_exercise_id_composite
-            ON exercise_settings(exercise_id, id);
-        "#,
-    ),
-    // Add more version updates here as needed
-];
-
-const SCHEMA_VERSION_TABLE: &str = r#"
-CREATE TABLE IF NOT EXISTS schema_version (
-    version INTEGER PRIMARY KEY,
-    applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-"#;
-
-async fn setup_schema(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<(), sqlx::Error> {
-    // Create schema_version table
-    sqlx::query(SCHEMA_VERSION_TABLE).execute(pool).await?;
-
-    // Check if this is a pre-v1 database by looking for schema_version
-    let has_version_table = sqlx::query_scalar!(
-        r#"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='schema_version'"#
-    )
-    .fetch_one(pool)
-    .await?
-        > 0;
-
-    // For pre-v1 databases or new databases, we need to verify the table structure
-    let needs_schema_update = if !has_version_table {
-        true
-    } else {
-        // Check if version 1 is recorded
-        let version_exists =
-            sqlx::query_scalar!(r#"SELECT COUNT(*) FROM schema_version WHERE version = 1"#)
-                .fetch_one(pool)
-                .await?
-                == 0;
-        version_exists
-    };
-
-    if needs_schema_update {
-        // For pre-v1 databases, we need to verify each table's structure
-        info!("Checking database structure for potential updates...");
-
-        // Backup existing data if tables exist
-        let has_workouts = sqlx::query_scalar!(
-            r#"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='workouts'"#
-        )
-        .fetch_one(pool)
-        .await?
-            > 0;
-
-        if has_workouts {
-            info!("Found existing workout data, creating backup before schema update");
-            backup::create_backup(backup::BackupType::Auto)
-                .await
-                .map_err(|e| sqlx::Error::Protocol(format!("Failed to create backup: {}", e)))?;
-        }
-
-        // Apply initial schema
-        info!("Applying initial schema...");
-        sqlx::query(INITIAL_SCHEMA).execute(pool).await?;
-
-        // Insert version 1 record
-        sqlx::query("INSERT OR IGNORE INTO schema_version (version) VALUES (1)")
-            .execute(pool)
-            .await?;
-        info!("Initial schema (version 1) applied successfully");
-    }
-
-    // Apply any pending updates
-    for (version, update_sql) in SCHEMA_UPDATES {
-        let version_exists = sqlx::query_scalar!(
-            r#"SELECT COUNT(*) FROM schema_version WHERE version = ?"#,
-            *version
-        )
-        .fetch_one(pool)
-        .await?
-            > 0;
-
-        if !version_exists {
-            info!("Applying schema update version {}", version);
-
-            // Create a backup before applying schema updates when workout data exists.
-            let has_workouts_table = sqlx::query_scalar!(
-                r#"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='workouts'"#
-            )
-            .fetch_one(pool)
-            .await?
-                > 0;
-
-            if has_workouts_table {
-                let workout_count = sqlx::query_scalar!(r#"SELECT COUNT(*) FROM workouts"#)
-                    .fetch_one(pool)
-                    .await?;
-                if workout_count > 0 {
-                    info!(
-                        "Creating backup before applying schema update version {}",
-                        version
-                    );
-                    backup::create_backup(backup::BackupType::Auto)
-                        .await
-                        .map_err(|e| {
-                            sqlx::Error::Protocol(format!("Failed to create backup: {}", e))
-                        })?;
-                }
-            }
-
-            sqlx::query(update_sql).execute(pool).await?;
-
-            sqlx::query("INSERT INTO schema_version (version) VALUES (?)")
-                .bind(*version)
-                .execute(pool)
-                .await?;
-
-            info!("Successfully applied schema update version {}", version);
-        }
-    }
-
-    info!("Database schema is up to date");
-    Ok(())
 }
 
 #[actix_web::main]
@@ -393,7 +208,7 @@ async fn main() -> std::io::Result<()> {
         .map_err(|e| std::io::Error::other(format!("{e}")))?;
 
     // Setup and update schema
-    if let Err(e) = setup_schema(&temp_pool).await {
+    if let Err(e) = schema::setup_schema(&temp_pool).await {
         error!("Failed to setup/update database schema: {}", e);
         return Err(std::io::Error::other("Database schema setup failed"));
     }
