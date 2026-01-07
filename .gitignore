@@ -53,5 +53,9 @@ client/build/
 .svelte-kit
 /package 
 
+# Playwright
+client/test-results/
+client/playwright-report/
+
 # backups
 server/backups/

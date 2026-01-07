@@ -35,4 +35,24 @@ npm run build
 
 You can preview the production build with `npm run preview`.
 
+## Testing
+
+Unit/component tests (Vitest):
+
+```bash
+npm run test:unit
+```
+
+E2E smoke tests (Playwright):
+
+```bash
+# installs browser binaries
+npx playwright install chromium
+
+# Linux only: installs system libraries (requires sudo)
+sudo npx playwright install-deps chromium
+
+npm run test:e2e
+```
+
 > To deploy your app, you may need to install an [adapter](https://kit.svelte.dev/docs/adapters) for your target environment.
