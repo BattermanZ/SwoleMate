@@ -68,13 +68,13 @@ html.dark .variant-soft {
 	@apply preset-filled;
 }
 @utility variant-filled-primary {
-	@apply preset-filled-primary-600-400;
+	@apply preset-filled-primary-500;
 }
 @utility variant-filled-secondary {
-	@apply preset-filled-secondary-600-400;
+	@apply preset-filled-secondary-500;
 }
 @utility variant-filled-tertiary {
-	@apply preset-filled-tertiary-600-400;
+	@apply preset-filled-tertiary-500;
 }
 @utility variant-filled-success {
 	@apply preset-filled-success-500;
@@ -132,6 +132,64 @@ html.dark .variant-soft {
 .badge.variant-soft,
 .chip.variant-soft {
 	border: 1px solid color-mix(in oklab, var(--color-surface-950-50) 16%, transparent);
+}
+
+/* Increase contrast for the neutral "soft" variant (used for secondary actions + inline setting badges). */
+.btn.variant-soft,
+.badge.variant-soft,
+.chip.variant-soft {
+	background-color: color-mix(in oklab, var(--color-surface-950) 10%, var(--color-surface-50));
+	color: var(--color-surface-950);
+}
+
+html.dark .btn.variant-soft,
+html.dark .badge.variant-soft,
+html.dark .chip.variant-soft {
+	background-color: color-mix(in oklab, var(--color-surface-50) 10%, var(--color-surface-900));
+	color: var(--color-surface-50);
+}
+
+/* Add a little more character to accent-filled controls. */
+.btn.variant-filled-primary,
+.badge.variant-filled-primary,
+.chip.variant-filled-primary {
+	background-image: linear-gradient(
+		135deg,
+		color-mix(in oklab, var(--color-primary-500) 92%, white),
+		color-mix(in oklab, var(--color-primary-600) 92%, black)
+	);
+}
+
+.btn.variant-filled-secondary,
+.badge.variant-filled-secondary,
+.chip.variant-filled-secondary {
+	background-image: linear-gradient(
+		135deg,
+		color-mix(in oklab, var(--color-secondary-500) 92%, white),
+		color-mix(in oklab, var(--color-secondary-600) 92%, black)
+	);
+}
+
+.btn.variant-filled-tertiary,
+.badge.variant-filled-tertiary,
+.chip.variant-filled-tertiary {
+	background-image: linear-gradient(
+		135deg,
+		color-mix(in oklab, var(--color-tertiary-500) 92%, white),
+		color-mix(in oklab, var(--color-tertiary-600) 92%, black)
+	);
+}
+
+html.dark .btn.variant-filled-primary,
+html.dark .badge.variant-filled-primary,
+html.dark .chip.variant-filled-primary,
+html.dark .btn.variant-filled-secondary,
+html.dark .badge.variant-filled-secondary,
+html.dark .chip.variant-filled-secondary,
+html.dark .btn.variant-filled-tertiary,
+html.dark .badge.variant-filled-tertiary,
+html.dark .chip.variant-filled-tertiary {
+	filter: saturate(1.05) brightness(1.05);
 }
 
 /* v2 "ghost" and "glass" variants were custom-ish; approximate them as user-generated presets. */
