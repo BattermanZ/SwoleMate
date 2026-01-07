@@ -10,6 +10,15 @@
 	--color-surface-100-800: light-dark(var(--color-surface-100), var(--color-surface-800));
 }
 
+/* `light-dark()` follows `color-scheme`, not the presence of a `.dark` class.
+   We use `.dark` as the UX toggle and map it to `color-scheme` so tokens update correctly. */
+html {
+	color-scheme: light;
+}
+html.dark {
+	color-scheme: dark;
+}
+
 [data-theme='rocket'] {
 	--base-font-family:
 		ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
@@ -128,8 +137,10 @@ input[type='number'] {
 }
 
 /* Prevent iOS zoom on focus */
-input[type='number'],
-input[type='text'],
-textarea {
-	font-size: 16px;
+@media (pointer: coarse) {
+	input[type='number'],
+	input[type='text'],
+	textarea {
+		font-size: 16px;
+	}
 }

@@ -51,7 +51,7 @@
 	}
 </script>
 
-<section class="space-y-3">
+<section class="space-y-3 min-w-0">
 	<header class="flex items-end justify-between gap-2">
 		<div>
 			<h2 class="text-lg font-semibold tracking-tight">Past 2 Sessions</h2>
@@ -62,9 +62,9 @@
 	{#if sessions.length === 0}
 		<div class="card variant-ghost p-4 text-center opacity-80">No sessions yet.</div>
 	{:else}
-		<div class="space-y-3">
+		<div class="space-y-3 min-w-0">
 			{#each sessions as session (session.id)}
-				<article class="card variant-glass-surface p-4 space-y-3">
+				<article class="card variant-glass-surface p-4 space-y-3 min-w-0">
 					<header class="flex items-start justify-between gap-3">
 						<div>
 							<div class="flex items-center gap-2">

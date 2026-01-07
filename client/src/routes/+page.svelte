@@ -459,7 +459,7 @@
 	</header>
 
 	<div class="grid gap-6 md:grid-cols-12">
-		<section class="md:col-span-7 lg:col-span-8 space-y-4">
+		<section class="md:col-span-7 lg:col-span-8 space-y-4 min-w-0">
 			{#if currentSession}
 				<div class="card variant-glass-surface p-4 space-y-2">
 					<label class="block">
@@ -547,7 +547,7 @@
 			{/if}
 		</section>
 
-		<aside class="md:col-span-5 lg:col-span-4">
+		<aside class="md:col-span-5 lg:col-span-4 min-w-0">
 			<RecentSessions
 				sessions={recentSessions}
 				canAdd={Boolean(currentSession)}

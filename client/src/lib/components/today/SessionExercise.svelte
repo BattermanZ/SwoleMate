@@ -252,9 +252,9 @@
 
 				<div class="space-y-2">
 					{#each exercise.settings as s (s.id)}
-						<div class="grid grid-cols-[1fr_1fr_auto] gap-2">
+						<div class="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2">
 							<input
-								class="input"
+								class="input min-w-0"
 								value={s.key}
 								placeholder="Setting"
 								{disabled}
@@ -266,7 +266,7 @@
 									})}
 							/>
 							<input
-								class="input"
+								class="input min-w-0"
 								value={s.value}
 								placeholder="Value"
 								{disabled}
@@ -279,7 +279,7 @@
 							/>
 							<button
 								type="button"
-								class="btn variant-soft-error"
+								class="btn variant-soft-error justify-self-end w-10"
 								on:click={() => dispatch('removeSetting', { id: s.id })}
 								{disabled}
 								aria-label="Remove setting"
@@ -289,16 +289,16 @@
 						</div>
 					{/each}
 
-					<div class="grid grid-cols-[1fr_1fr_auto] gap-2">
+					<div class="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2">
 						<input
-							class="input"
+							class="input min-w-0"
 							bind:value={newSettingKey}
 							placeholder="e.g. Bench angle"
 							{disabled}
 							on:keydown={(e) => e.key === 'Enter' && addSetting()}
 						/>
 						<input
-							class="input"
+							class="input min-w-0"
 							bind:value={newSettingValue}
 							placeholder="e.g. 30°"
 							{disabled}
@@ -306,7 +306,7 @@
 						/>
 						<button
 							type="button"
-							class="btn variant-filled-primary"
+							class="btn variant-filled-primary justify-self-end sm:justify-self-auto"
 							on:click={addSetting}
 							disabled={disabled || !newSettingKey.trim() || !newSettingValue.trim()}
 						>
@@ -319,7 +319,7 @@
 			<section class="space-y-2">
 				<div class="flex items-center justify-between">
 					<h4 class="text-sm font-semibold opacity-80">Sets</h4>
-					<div class="flex items-center gap-2">
+					<div class="flex flex-wrap items-center gap-2">
 						<label class="flex items-center gap-2 text-xs opacity-80 select-none">
 							<input
 								type="checkbox"
@@ -367,7 +367,7 @@
 					</div>
 				{/if}
 
-				<div class="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
+				<div class="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 items-end">
 					<label class="block">
 						<span class="text-xs font-semibold opacity-70">Reps</span>
 						<input
@@ -375,7 +375,7 @@
 							min="0"
 							inputmode="numeric"
 							pattern="[0-9]*"
-							class="input w-full"
+							class="input w-full min-w-0"
 							bind:value={setReps}
 							disabled={disabled || exercise.status === 'done'}
 						/>
@@ -388,7 +388,7 @@
 								min="0"
 								step="0.5"
 								inputmode="decimal"
-								class="input w-full"
+								class="input w-full min-w-0"
 								bind:value={setWeight}
 								disabled={disabled || exercise.status === 'done'}
 							/>
@@ -401,13 +401,13 @@
 								min="0"
 								step="0.5"
 								inputmode="decimal"
-								class="input w-full"
+								class="input w-full min-w-0"
 								bind:value={setWeight}
 								disabled={disabled || exercise.status === 'done'}
 							/>
 						</label>
 					{:else}
-						<div class="grid grid-cols-2 gap-2">
+						<div class="grid grid-cols-2 gap-2 min-w-0">
 							<label class="block">
 								<span class="text-xs font-semibold opacity-70">Left (kg)</span>
 								<input
@@ -415,7 +415,7 @@
 									min="0"
 									step="0.5"
 									inputmode="decimal"
-									class="input w-full"
+									class="input w-full min-w-0"
 									bind:value={setWeightLeft}
 									disabled={disabled || exercise.status === 'done'}
 								/>
@@ -427,7 +427,7 @@
 									min="0"
 									step="0.5"
 									inputmode="decimal"
-									class="input w-full"
+									class="input w-full min-w-0"
 									bind:value={setWeightRight}
 									disabled={disabled || exercise.status === 'done'}
 								/>
@@ -436,7 +436,7 @@
 					{/if}
 					<button
 						type="button"
-						class="btn variant-filled-primary"
+						class="btn variant-filled-primary w-full sm:w-auto"
 						on:click={addSet}
 						disabled={disabled || exercise.status === 'done'}
 					>

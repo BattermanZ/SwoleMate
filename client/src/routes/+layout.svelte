@@ -26,6 +26,7 @@
 		darkMode = next;
 		if (typeof document === 'undefined') return;
 		document.documentElement.classList.toggle('dark', next);
+		document.documentElement.style.colorScheme = next ? 'dark' : 'light';
 
 		try {
 			localStorage.setItem(THEME_KEY, next ? 'dark' : 'light');
