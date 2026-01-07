@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
-	import type { UiExercise } from '$lib/mocks/today';
+	import type { UiExercise } from '$lib/today/types';
 	import SetPillsHybrid from '$lib/components/ui/SetPillsHybrid.svelte';
 
 	export let exercise: UiExercise;

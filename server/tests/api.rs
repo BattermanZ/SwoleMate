@@ -207,6 +207,65 @@ async fn workout_and_exercise_flow_works() {
 }
 
 #[actix_web::test]
+async fn replace_sets_overwrites_existing_sets() {
+    let _env = TestEnv::new();
+    let (_, app) = setup_test_app().await;
+    let now = chrono::Utc::now();
+
+    let req = test::TestRequest::post()
+        .uri("/api/workouts")
+        .set_json(json!({ "date": now, "start_time": now, "notes": null }))
+        .to_request();
+    let workout_id = json_body(test::call_service(&app, req).await).await["id"]
+        .as_i64()
+        .unwrap();
+
+    let req = test::TestRequest::post()
+        .uri(&format!("/api/workouts/{workout_id}/exercises"))
+        .set_json(json!({
+            "exercise_type": "Dumbbell Press",
+            "start_time": now,
+            "notes": null,
+            "per_side_weight": true,
+        }))
+        .to_request();
+    let exercise_id = json_body(test::call_service(&app, req).await).await["id"]
+        .as_i64()
+        .unwrap();
+
+    let req = test::TestRequest::post()
+        .uri(&format!("/api/exercises/{exercise_id}/sets"))
+        .set_json(json!({ "reps": 8, "weight": 22.5, "notes": null }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 201);
+
+    let req = test::TestRequest::put()
+        .uri(&format!("/api/exercises/{exercise_id}/sets"))
+        .set_json(json!([
+            { "reps": 10, "weight": 20.0, "weight_left": 20.0, "weight_right": 22.5, "notes": null },
+            { "reps": 12, "weight": 17.5, "weight_left": 17.5, "weight_right": 17.5, "notes": "easy" }
+        ]))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+    let replaced = json_body(resp).await;
+    assert_eq!(replaced.as_array().unwrap().len(), 2);
+    assert!(replaced[0]["id"].is_number());
+
+    let req = test::TestRequest::get()
+        .uri(&format!("/api/workouts/{workout_id}"))
+        .to_request();
+    let body = json_body(test::call_service(&app, req).await).await;
+    let sets = body["exercises"][0]["sets"].as_array().unwrap();
+    assert_eq!(sets.len(), 2);
+    assert_eq!(sets[0]["reps"], 10);
+    assert_eq!(sets[0]["weight_left"], 20.0);
+    assert_eq!(sets[0]["weight_right"], 22.5);
+    assert_eq!(sets[1]["notes"], "easy");
+}
+
+#[actix_web::test]
 async fn cancel_endpoints_remove_data() {
     let _env = TestEnv::new();
     let (_, app) = setup_test_app().await;

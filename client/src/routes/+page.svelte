@@ -4,33 +4,48 @@
 	import EndSessionModal from '$lib/components/today/EndSessionModal.svelte';
 	import RecentSessions from '$lib/components/today/RecentSessions.svelte';
 	import SessionExercise from '$lib/components/today/SessionExercise.svelte';
-	import {
-		createDemoSession,
-		createEmptySession,
-		createMockRecentSessions,
-		EXERCISE_LIBRARY,
-		type UiMood,
-		type UiSession
-	} from '$lib/mocks/today';
-	import { createId } from '$lib/utils/id';
+	import { EXERCISE_LIBRARY, createDemoSession } from '$lib/mocks/today';
 	import { formatDateRelative, formatTime } from '$lib/utils/date';
+	import { createId } from '$lib/utils/id';
+	import {
+		cancelExercise,
+		cancelWorkout,
+		createExercise,
+		createSet,
+		createWorkout,
+		endExercise,
+		endWorkout,
+		getExerciseTypes,
+		getWorkout,
+		getWorkouts,
+		replaceSets
+	} from '$lib/api';
+	import { toUiSession, workoutIsActive } from '$lib/today/backend';
+	import type { UiMood, UiSession } from '$lib/today/types';
 
 	let nowMs = Date.now();
 
 	let currentSession: UiSession | null = null;
-	let recentSessions: UiSession[] = createMockRecentSessions();
+	let recentSessions: UiSession[] = [];
 
-	let openExerciseId: string | null = null;
+	let openExerciseId: number | null = null;
 
 	let exerciseQuery = '';
 	let sessionNotes = '';
 	let endMood: UiMood | null = null;
 	let endModalOpen = false;
 	let endNotes = '';
+	let loading = false;
+	let error: string | null = null;
 
 	const MAX_SUGGESTIONS = 10;
+	let exerciseLibrary: string[] = EXERCISE_LIBRARY;
+
+	const syncTimers = new Map<number, number>();
 
 	onMount(() => {
+		void refreshFromBackend();
+		void hydrateExerciseLibrary();
 		const timer = window.setInterval(() => (nowMs = Date.now()), 10_000);
 		return () => window.clearInterval(timer);
 	});
@@ -39,24 +54,125 @@
 		currentSession = { ...currentSession, notes: sessionNotes };
 	}
 
-	function startSession(mode: 'empty' | 'demo') {
-		currentSession = mode === 'demo' ? createDemoSession() : createEmptySession();
-		sessionNotes = currentSession.notes;
-		openExerciseId = currentSession.exercises[0]?.id ?? null;
+	async function hydrateExerciseLibrary() {
+		try {
+			const types = await getExerciseTypes();
+			const merged = new Set<string>([...EXERCISE_LIBRARY, ...types]);
+			exerciseLibrary = Array.from(merged).sort((a, b) => a.localeCompare(b));
+		} catch {
+			// ignore: local library is good enough
+		}
+	}
+
+	function getErrorMessage(e: unknown): string {
+		if (e instanceof Error) return e.message;
+		return 'Something went wrong';
+	}
+
+	function resetLocalSessionUi() {
 		exerciseQuery = '';
 		endMood = null;
 		endNotes = '';
 		endModalOpen = false;
 	}
 
-	function cancelSession() {
-		currentSession = null;
-		sessionNotes = '';
-		openExerciseId = null;
-		exerciseQuery = '';
-		endMood = null;
-		endNotes = '';
-		endModalOpen = false;
+	async function refreshFromBackend() {
+		loading = true;
+		error = null;
+
+		try {
+			const workouts = await getWorkouts();
+			const active = workouts.find((w) => workoutIsActive(w) && w.id != null);
+
+			if (active?.id != null) {
+				const data = await getWorkout(active.id);
+				currentSession = toUiSession(data.workout, data.exercises);
+				sessionNotes = currentSession.notes;
+				openExerciseId = currentSession.exercises[0]?.id ?? null;
+			} else {
+				currentSession = null;
+				sessionNotes = '';
+				openExerciseId = null;
+			}
+
+			const completed = workouts.filter((w) => w.id != null && !workoutIsActive(w)).slice(0, 2);
+			const recent = await Promise.all(completed.map((w) => getWorkout(w.id!)));
+			recentSessions = recent.map((d) => toUiSession(d.workout, d.exercises));
+
+			resetLocalSessionUi();
+		} catch (e) {
+			error = getErrorMessage(e);
+		} finally {
+			loading = false;
+		}
+	}
+
+	async function startSession(mode: 'empty' | 'demo') {
+		if (currentSession) return;
+		loading = true;
+		error = null;
+
+		try {
+			const demo = mode === 'demo' ? createDemoSession() : null;
+			const startIso = demo?.startedAt ?? new Date().toISOString();
+
+			const created = await createWorkout({
+				date: startIso,
+				start_time: startIso,
+				notes: demo?.notes?.trim() || undefined
+			});
+
+			currentSession = {
+				id: created.id,
+				startedAt: startIso,
+				notes: demo?.notes ?? '',
+				exercises: []
+			};
+			sessionNotes = currentSession.notes;
+			openExerciseId = null;
+			resetLocalSessionUi();
+
+			if (demo) {
+				for (const ex of demo.exercises) {
+					await addExercise(
+						ex.name,
+						{
+							notes: ex.notes,
+							perSideWeight: ex.perSideWeight,
+							splitWeight: ex.splitWeight,
+							settings: ex.settings.map((s) => ({ key: s.key, value: s.value }))
+						},
+						ex.sets.map((s) => ({ reps: s.reps, weight: s.weight }))
+					);
+				}
+			}
+
+			await refreshFromBackend();
+		} catch (e) {
+			error = getErrorMessage(e);
+			await refreshFromBackend();
+		} finally {
+			loading = false;
+		}
+	}
+
+	async function cancelSession() {
+		if (!currentSession) return;
+		loading = true;
+		error = null;
+
+		try {
+			await cancelWorkout(currentSession.id);
+			currentSession = null;
+			sessionNotes = '';
+			openExerciseId = null;
+			resetLocalSessionUi();
+			await refreshFromBackend();
+		} catch (e) {
+			error = getErrorMessage(e);
+		} finally {
+			loading = false;
+		}
 	}
 
 	function openEndModal() {
@@ -66,123 +182,254 @@
 		endModalOpen = true;
 	}
 
-	function submitEndSession() {
+	async function submitEndSession() {
 		if (!currentSession || !endMood) return;
-		const endedAt = new Date().toISOString();
+		loading = true;
+		error = null;
 
-		const completed: UiSession = {
-			...currentSession,
-			endedAt,
-			mood: endMood,
-			notes: endNotes.trim(),
-			exercises: currentSession.exercises.map((e) => ({
-				...e,
-				status: 'done'
-			}))
-		};
+		try {
+			const endedAt = new Date().toISOString();
 
-		recentSessions = [completed, ...recentSessions].slice(0, 2);
-		cancelSession();
+			await Promise.all(
+				currentSession.exercises
+					.filter((e) => e.status !== 'done')
+					.map((e) =>
+						endExercise(e.id, {
+							end_time: endedAt,
+							notes: e.notes || undefined,
+							per_side_weight: e.perSideWeight,
+							split_weight: e.splitWeight,
+							settings: e.settings.map((s) => ({ key: s.key, value: s.value }))
+						})
+					)
+			);
+
+			await endWorkout(currentSession.id, {
+				end_time: endedAt,
+				notes: endNotes.trim() || undefined,
+				feedback: endMood
+			});
+
+			currentSession = null;
+			sessionNotes = '';
+			openExerciseId = null;
+			resetLocalSessionUi();
+			await refreshFromBackend();
+		} catch (e) {
+			error = getErrorMessage(e);
+		} finally {
+			loading = false;
+		}
 	}
 
-	function toggleExercise(exerciseId: string) {
+	function toggleExercise(exerciseId: number) {
 		openExerciseId = openExerciseId === exerciseId ? null : exerciseId;
 	}
 
-	function addExercise(
+	async function addExercise(
 		name: string,
 		options?: {
 			notes?: string;
 			perSideWeight?: boolean;
 			splitWeight?: boolean;
 			settings?: Array<{ key: string; value: string }>;
-		}
+		},
+		seedSets?: Array<{ reps: number; weight: number; weightLeft?: number; weightRight?: number }>
 	) {
 		if (!currentSession) return;
 		const trimmed = name.trim();
 		if (!trimmed) return;
 
-		const newExercise = {
-			id: createId('ex'),
-			name: trimmed,
-			notes: options?.notes?.trim() ?? '',
-			status: 'active' as const,
-			perSideWeight: options?.perSideWeight ?? false,
-			splitWeight: options?.splitWeight ?? false,
-			settings: (options?.settings ?? []).map((s) => ({
-				id: createId('setting'),
-				key: s.key,
-				value: s.value
-			})),
-			sets: []
-		};
+		loading = true;
+		error = null;
 
-		currentSession = {
-			...currentSession,
-			exercises: [...currentSession.exercises, newExercise]
-		};
+		try {
+			const startIso = new Date().toISOString();
+			const perSideWeight = options?.perSideWeight ?? false;
+			const splitWeight = options?.splitWeight ?? false;
+			const settings = options?.settings ?? [];
 
-		openExerciseId = newExercise.id;
-		exerciseQuery = '';
+			const created = await createExercise(currentSession.id, {
+				exercise_type: trimmed,
+				start_time: startIso,
+				notes: options?.notes?.trim() || undefined,
+				per_side_weight: perSideWeight,
+				split_weight: splitWeight,
+				settings: settings.length
+					? settings.map((s) => ({ key: s.key, value: s.value }))
+					: undefined
+			});
+
+			const newExercise = {
+				id: created.id,
+				name: trimmed,
+				notes: options?.notes?.trim() ?? '',
+				startedAt: startIso,
+				endedAt: startIso,
+				status: 'active' as const,
+				perSideWeight,
+				splitWeight,
+				settings: settings.map((s) => ({
+					id: createId('setting'),
+					key: s.key,
+					value: s.value
+				})),
+				sets: []
+			};
+
+			currentSession = {
+				...currentSession,
+				exercises: [...currentSession.exercises, newExercise]
+			};
+
+			openExerciseId = newExercise.id;
+			exerciseQuery = '';
+
+			if (seedSets?.length) {
+				for (const s of seedSets) {
+					await addSet(newExercise.id, s.reps, s.weight, s.weightLeft, s.weightRight);
+				}
+			}
+		} catch (e) {
+			error = getErrorMessage(e);
+		} finally {
+			loading = false;
+		}
 	}
 
-	function removeExercise(exerciseId: string) {
+	async function removeExercise(exerciseId: number) {
 		if (!currentSession) return;
-		currentSession = {
-			...currentSession,
-			exercises: currentSession.exercises.filter((e) => e.id !== exerciseId)
-		};
-		if (openExerciseId === exerciseId) openExerciseId = null;
+		loading = true;
+		error = null;
+
+		try {
+			await cancelExercise(exerciseId);
+			currentSession = {
+				...currentSession,
+				exercises: currentSession.exercises.filter((e) => e.id !== exerciseId)
+			};
+			if (openExerciseId === exerciseId) openExerciseId = null;
+		} catch (e) {
+			error = getErrorMessage(e);
+			await refreshFromBackend();
+		} finally {
+			loading = false;
+		}
 	}
 
-	function markExerciseDone(exerciseId: string) {
+	async function markExerciseDone(exerciseId: number) {
 		if (!currentSession) return;
-		currentSession = {
-			...currentSession,
-			exercises: currentSession.exercises.map((e) =>
-				e.id === exerciseId ? { ...e, status: 'done' as const } : e
-			)
-		};
+		loading = true;
+		error = null;
+
+		try {
+			const endedAt = new Date().toISOString();
+			const ex = currentSession.exercises.find((e) => e.id === exerciseId);
+			if (!ex) return;
+
+			await endExercise(exerciseId, {
+				end_time: endedAt,
+				notes: ex.notes || undefined,
+				per_side_weight: ex.perSideWeight,
+				split_weight: ex.splitWeight,
+				settings: ex.settings.map((s) => ({ key: s.key, value: s.value }))
+			});
+
+			currentSession = {
+				...currentSession,
+				exercises: currentSession.exercises.map((e) =>
+					e.id === exerciseId ? { ...e, status: 'done' as const, endedAt } : e
+				)
+			};
+		} catch (e) {
+			error = getErrorMessage(e);
+		} finally {
+			loading = false;
+		}
 	}
 
-	function addSet(
-		exerciseId: string,
+	async function addSet(
+		exerciseId: number,
 		reps: number,
 		weight: number,
 		weightLeft?: number,
 		weightRight?: number
 	) {
 		if (!currentSession) return;
-		currentSession = {
-			...currentSession,
-			exercises: currentSession.exercises.map((e) => {
-				if (e.id !== exerciseId) return e;
-				return {
-					...e,
-					sets: [
-						...e.sets,
-						{
-							id: createId('set'),
-							reps,
-							weight,
-							weightLeft,
-							weightRight
-						}
-					]
-				};
-			})
-		};
+		loading = true;
+		error = null;
+
+		try {
+			const created = await createSet(exerciseId, {
+				reps,
+				weight,
+				weight_left: weightLeft,
+				weight_right: weightRight,
+				notes: undefined
+			});
+
+			currentSession = {
+				...currentSession,
+				exercises: currentSession.exercises.map((e) => {
+					if (e.id !== exerciseId) return e;
+					return {
+						...e,
+						sets: [
+							...e.sets,
+							{
+								id: created.id,
+								reps,
+								weight,
+								weightLeft,
+								weightRight
+							}
+						]
+					};
+				})
+			};
+		} catch (e) {
+			error = getErrorMessage(e);
+		} finally {
+			loading = false;
+		}
 	}
 
-	function updateExerciseNotes(exerciseId: string, notes: string) {
+	function scheduleExerciseSync(exerciseId: number) {
+		if (typeof window === 'undefined') return;
+		const existing = syncTimers.get(exerciseId);
+		if (existing) window.clearTimeout(existing);
+		const timer = window.setTimeout(() => void syncExercise(exerciseId), 650);
+		syncTimers.set(exerciseId, timer);
+	}
+
+	async function syncExercise(exerciseId: number) {
+		if (!currentSession) return;
+		const ex = currentSession.exercises.find((e) => e.id === exerciseId);
+		if (!ex) return;
+
+		try {
+			await endExercise(exerciseId, {
+				end_time: ex.endedAt,
+				notes: ex.notes || undefined,
+				per_side_weight: ex.perSideWeight,
+				split_weight: ex.splitWeight,
+				settings: ex.settings.map((s) => ({ key: s.key, value: s.value }))
+			});
+		} catch (e) {
+			error = getErrorMessage(e);
+		}
+	}
+
+	function updateExerciseNotes(exerciseId: number, notes: string) {
 		if (!currentSession) return;
 		currentSession = {
 			...currentSession,
 			exercises: currentSession.exercises.map((e) => (e.id === exerciseId ? { ...e, notes } : e))
 		};
+		scheduleExerciseSync(exerciseId);
 	}
 
-	function addExerciseSetting(exerciseId: string, key: string, value: string) {
+	function addExerciseSetting(exerciseId: number, key: string, value: string) {
 		if (!currentSession) return;
 		currentSession = {
 			...currentSession,
@@ -194,9 +441,10 @@
 				};
 			})
 		};
+		scheduleExerciseSync(exerciseId);
 	}
 
-	function removeExerciseSetting(exerciseId: string, settingId: string) {
+	function removeExerciseSetting(exerciseId: number, settingId: string) {
 		if (!currentSession) return;
 		currentSession = {
 			...currentSession,
@@ -208,10 +456,11 @@
 				};
 			})
 		};
+		scheduleExerciseSync(exerciseId);
 	}
 
 	function updateExerciseSetting(
-		exerciseId: string,
+		exerciseId: number,
 		settingId: string,
 		key: string,
 		value: string
@@ -227,54 +476,167 @@
 				};
 			})
 		};
+		scheduleExerciseSync(exerciseId);
 	}
 
-	function toggleExercisePerSideWeight(exerciseId: string, enabled: boolean) {
+	async function toggleExercisePerSideWeight(exerciseId: number, enabled: boolean) {
 		if (!currentSession) return;
-		currentSession = {
-			...currentSession,
-			exercises: currentSession.exercises.map((e) => {
-				if (e.id !== exerciseId) return e;
-				if (!enabled) {
-					const normalized = e.sets.map((s) => {
-						if (!e.perSideWeight) return s;
-						if (!e.splitWeight)
-							return { ...s, weight: s.weight * 2, weightLeft: undefined, weightRight: undefined };
-						const left = s.weightLeft ?? s.weight;
-						const right = s.weightRight ?? s.weight;
-						return { ...s, weight: left + right, weightLeft: undefined, weightRight: undefined };
-					});
-					return { ...e, perSideWeight: false, splitWeight: false, sets: normalized };
+		const ex = currentSession.exercises.find((e) => e.id === exerciseId);
+		if (!ex || ex.status === 'done') return;
+		if (enabled === ex.perSideWeight) return;
+
+		let nextSets = ex.sets;
+		let nextSplit = ex.splitWeight;
+
+		if (!enabled) {
+			nextSplit = false;
+			nextSets = ex.sets.map((s) => {
+				if (!ex.perSideWeight) return s;
+				if (!ex.splitWeight) {
+					return { ...s, weight: s.weight * 2, weightLeft: undefined, weightRight: undefined };
 				}
+				const left = s.weightLeft ?? s.weight;
+				const right = s.weightRight ?? s.weight;
+				return { ...s, weight: left + right, weightLeft: undefined, weightRight: undefined };
+			});
+		} else {
+			nextSets = ex.sets.map((s) => ({
+				...s,
+				weight: s.weight / 2,
+				weightLeft: undefined,
+				weightRight: undefined
+			}));
+		}
 
-				const normalized = e.sets.map((s) => ({
-					...s,
-					weightLeft: s.weightLeft ?? s.weight,
-					weightRight: s.weightRight ?? s.weight
-				}));
-				return { ...e, perSideWeight: true, splitWeight: e.splitWeight, sets: normalized };
-			})
-		};
-	}
-
-	function toggleExerciseSplitWeight(exerciseId: string, enabled: boolean) {
-		if (!currentSession) return;
 		currentSession = {
 			...currentSession,
-			exercises: currentSession.exercises.map((e) => {
-				if (e.id !== exerciseId) return e;
-				if (!e.perSideWeight) return { ...e, splitWeight: false };
-				const normalized = e.sets.map((s) => {
-					if (!enabled) return { ...s, weightLeft: undefined, weightRight: undefined };
-					return {
-						...s,
-						weightLeft: s.weightLeft ?? s.weight,
-						weightRight: s.weightRight ?? s.weight
-					};
-				});
-				return { ...e, splitWeight: enabled, sets: normalized };
-			})
+			exercises: currentSession.exercises.map((e) =>
+				e.id === exerciseId
+					? { ...e, perSideWeight: enabled, splitWeight: nextSplit, sets: nextSets }
+					: e
+			)
 		};
+
+		try {
+			await endExercise(exerciseId, {
+				end_time: ex.endedAt,
+				notes: ex.notes || undefined,
+				per_side_weight: enabled,
+				split_weight: nextSplit,
+				settings: ex.settings.map((s) => ({ key: s.key, value: s.value }))
+			});
+
+			if (nextSets.length) {
+				const replaced = await replaceSets(
+					exerciseId,
+					nextSets.map((s) => ({
+						reps: s.reps,
+						weight: s.weight,
+						weight_left: s.weightLeft,
+						weight_right: s.weightRight,
+						notes: undefined
+					}))
+				);
+
+				currentSession = {
+					...currentSession,
+					exercises: currentSession.exercises.map((e) =>
+						e.id === exerciseId
+							? {
+									...e,
+									sets: replaced.map((s) => ({
+										id: s.id ?? 0,
+										reps: Number(s.reps),
+										weight: s.weight,
+										weightLeft: s.weight_left ?? undefined,
+										weightRight: s.weight_right ?? undefined
+									}))
+								}
+							: e
+					)
+				};
+			}
+		} catch (e) {
+			error = getErrorMessage(e);
+			await refreshFromBackend();
+		}
+	}
+
+	async function toggleExerciseSplitWeight(exerciseId: number, enabled: boolean) {
+		if (!currentSession) return;
+		const ex = currentSession.exercises.find((e) => e.id === exerciseId);
+		if (!ex || ex.status === 'done') return;
+		if (!ex.perSideWeight) return;
+		if (enabled === ex.splitWeight) return;
+
+		const nextSets = ex.sets.map((s) => {
+			if (!enabled) {
+				const left = s.weightLeft ?? s.weight;
+				const right = s.weightRight ?? s.weight;
+				return {
+					...s,
+					weight: Math.max(left, right),
+					weightLeft: undefined,
+					weightRight: undefined
+				};
+			}
+			return {
+				...s,
+				weightLeft: s.weightLeft ?? s.weight,
+				weightRight: s.weightRight ?? s.weight
+			};
+		});
+
+		currentSession = {
+			...currentSession,
+			exercises: currentSession.exercises.map((e) =>
+				e.id === exerciseId ? { ...e, splitWeight: enabled, sets: nextSets } : e
+			)
+		};
+
+		try {
+			await endExercise(exerciseId, {
+				end_time: ex.endedAt,
+				notes: ex.notes || undefined,
+				per_side_weight: true,
+				split_weight: enabled,
+				settings: ex.settings.map((s) => ({ key: s.key, value: s.value }))
+			});
+
+			if (nextSets.length) {
+				const replaced = await replaceSets(
+					exerciseId,
+					nextSets.map((s) => ({
+						reps: s.reps,
+						weight: s.weight,
+						weight_left: s.weightLeft,
+						weight_right: s.weightRight,
+						notes: undefined
+					}))
+				);
+
+				currentSession = {
+					...currentSession,
+					exercises: currentSession.exercises.map((e) =>
+						e.id === exerciseId
+							? {
+									...e,
+									sets: replaced.map((s) => ({
+										id: s.id ?? 0,
+										reps: Number(s.reps),
+										weight: s.weight,
+										weightLeft: s.weight_left ?? undefined,
+										weightRight: s.weight_right ?? undefined
+									}))
+								}
+							: e
+					)
+				};
+			}
+		} catch (e) {
+			error = getErrorMessage(e);
+			await refreshFromBackend();
+		}
 	}
 
 	function getLastTimeForExercise(name: string) {
@@ -316,7 +678,7 @@
 		const recentSet = new Set(getQuickPicks(sessions));
 		const inSession = new Set((activeSession?.exercises ?? []).map((e) => e.name.toLowerCase()));
 
-		const matches = EXERCISE_LIBRARY.filter((name) => {
+		const matches = exerciseLibrary.filter((name) => {
 			if (inSession.has(name.toLowerCase())) return false;
 			return name.toLowerCase().includes(term);
 		});
@@ -373,6 +735,10 @@
 </script>
 
 <div class="space-y-6">
+	{#if error}
+		<div class="alert variant-filled-error">{error}</div>
+	{/if}
+
 	<header
 		class="relative overflow-hidden rounded-2xl border border-surface-200/50 dark:border-surface-700/50 bg-gradient-to-br from-primary-500/10 via-transparent to-tertiary-500/10 p-5 sm:p-6"
 	>
@@ -404,6 +770,7 @@
 							type="button"
 							class="btn variant-soft-error flex-1 sm:flex-initial"
 							on:click={cancelSession}
+							disabled={loading}
 						>
 							Cancel
 						</button>
@@ -411,6 +778,7 @@
 							type="button"
 							class="btn variant-filled-primary flex-1 sm:flex-initial"
 							on:click={openEndModal}
+							disabled={loading}
 						>
 							End session
 						</button>
@@ -421,6 +789,7 @@
 							type="button"
 							class="btn variant-filled-primary w-full sm:w-auto"
 							on:click={() => startSession('empty')}
+							disabled={loading}
 						>
 							Start session
 						</button>
@@ -428,6 +797,7 @@
 							type="button"
 							class="btn variant-soft w-full sm:w-auto"
 							on:click={() => startSession('demo')}
+							disabled={loading}
 						>
 							Load demo
 						</button>
@@ -475,7 +845,7 @@
 
 				<ExerciseComposer
 					bind:query={exerciseQuery}
-					disabled={!currentSession}
+					disabled={loading || !currentSession}
 					{suggestions}
 					quickPicks={getQuickPicks(recentSessions)}
 					on:add={(e) => addExercise(e.detail.name)}
@@ -494,7 +864,7 @@
 							<SessionExercise
 								exercise={ex}
 								isOpen={openExerciseId === ex.id}
-								disabled={false}
+								disabled={loading}
 								lastTime={getLastTimeForExercise(ex.name)}
 								on:toggle={() => toggleExercise(ex.id)}
 								on:delete={() => removeExercise(ex.id)}
@@ -522,8 +892,8 @@
 				<div class="card variant-glass-surface p-6 space-y-3">
 					<h2 class="text-xl font-semibold tracking-tight">Your landing page, rebuilt</h2>
 					<p class="opacity-75">
-						This is a UI-first mock: everything is local, fast, and designed around logging “now”
-						while keeping the last two sessions visible.
+						Log your session now, backed by your database, while keeping the last two sessions
+						visible for instant recall.
 					</p>
 					<ol class="grid gap-2 text-sm opacity-80 list-decimal pl-5">
 						<li>Start a session</li>
@@ -536,10 +906,16 @@
 							type="button"
 							class="btn variant-filled-primary"
 							on:click={() => startSession('empty')}
+							disabled={loading}
 						>
 							Start session
 						</button>
-						<button type="button" class="btn variant-soft" on:click={() => startSession('demo')}>
+						<button
+							type="button"
+							class="btn variant-soft"
+							on:click={() => startSession('demo')}
+							disabled={loading}
+						>
 							Load demo session
 						</button>
 					</div>
@@ -550,8 +926,8 @@
 		<aside class="md:col-span-5 lg:col-span-4 min-w-0">
 			<RecentSessions
 				sessions={recentSessions}
-				canAdd={Boolean(currentSession)}
-				disabled={!currentSession}
+				canAdd={Boolean(currentSession) && !loading}
+				disabled={loading || !currentSession}
 				on:addExercise={(e) => addExercise(e.detail.name, e.detail)}
 			/>
 		</aside>
@@ -561,6 +937,7 @@
 		open={endModalOpen}
 		bind:notes={endNotes}
 		bind:mood={endMood}
+		disabled={loading}
 		on:cancel={() => (endModalOpen = false)}
 		on:submit={submitEndSession}
 	/>

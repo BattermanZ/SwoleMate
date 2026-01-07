@@ -121,6 +121,18 @@ pub async fn create_set(
     })))
 }
 
+#[put("/api/exercises/{exercise_id}/sets")]
+pub async fn replace_sets(
+    db: web::Data<Database>,
+    exercise_id: web::Path<i64>,
+    sets_req: web::Json<Vec<CreateSetRequest>>,
+) -> Result<HttpResponse, AppError> {
+    let sets = db
+        .replace_sets_for_exercise(*exercise_id, &sets_req.0)
+        .await?;
+    Ok(HttpResponse::Ok().json(sets))
+}
+
 #[post("/api/logs/init")]
 pub async fn init_logs_directory() -> HttpResponse {
     let logs_dir = Path::new("logs");
@@ -397,6 +409,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(create_exercise)
         .service(end_exercise)
         .service(create_set)
+        .service(replace_sets)
         .service(init_logs_directory)
         .service(write_logs)
         .service(get_exercise_types)

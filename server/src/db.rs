@@ -295,6 +295,78 @@ impl Database {
         Ok(result.id)
     }
 
+    pub async fn replace_sets_for_exercise(
+        &self,
+        exercise_id: i64,
+        sets: &[CreateSetRequest],
+    ) -> Result<Vec<Set>, AppError> {
+        debug!(
+            target: "database",
+            "Replacing {} sets for exercise #{}",
+            sets.len(),
+            exercise_id
+        );
+
+        let pool = self.pool().await;
+        let mut tx = pool.begin().await.map_err(AppError::DatabaseError)?;
+
+        sqlx::query!(
+            r#"
+            DELETE FROM sets
+            WHERE exercise_id = ?
+            "#,
+            exercise_id
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| {
+            error!(target: "database", "Failed to delete sets: {}", e);
+            AppError::DatabaseError(e)
+        })?;
+
+        let mut created = Vec::with_capacity(sets.len());
+        for req in sets {
+            let result = sqlx::query!(
+                r#"
+                INSERT INTO sets (exercise_id, reps, weight, weight_left, weight_right, notes)
+                VALUES (?, ?, ?, ?, ?, ?)
+                RETURNING id
+                "#,
+                exercise_id,
+                req.reps,
+                req.weight,
+                req.weight_left,
+                req.weight_right,
+                req.notes,
+            )
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|e| {
+                error!(target: "database", "Failed to create set during replace: {}", e);
+                AppError::DatabaseError(e)
+            })?;
+
+            created.push(Set {
+                id: Some(result.id),
+                exercise_id,
+                reps: req.reps,
+                weight: req.weight,
+                weight_left: req.weight_left,
+                weight_right: req.weight_right,
+                notes: req.notes.clone(),
+            });
+        }
+
+        tx.commit().await.map_err(AppError::DatabaseError)?;
+
+        info!(
+            target: "database",
+            "Replaced sets for exercise #{}",
+            exercise_id
+        );
+        Ok(created)
+    }
+
     pub async fn get_workout(&self, id: i64) -> Result<Workout, AppError> {
         debug!(target: "database", "Fetching workout #{}", id);
 

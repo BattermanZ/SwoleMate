@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
 	import { formatDateRelative, formatTime } from '$lib/utils/date';
-	import type { UiSession } from '$lib/mocks/today';
+	import type { UiSession } from '$lib/today/types';
 	import SetPillsHybrid from '$lib/components/ui/SetPillsHybrid.svelte';
 
 	export let sessions: UiSession[] = [];

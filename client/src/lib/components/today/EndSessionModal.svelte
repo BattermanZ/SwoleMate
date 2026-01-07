@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
 	import { FEEDBACK_OPTIONS } from '$lib/mocks/today';
-	import type { UiMood } from '$lib/mocks/today';
+	import type { UiMood } from '$lib/today/types';
 
 	export let open = false;
 	export let notes = '';

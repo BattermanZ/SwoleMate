@@ -133,6 +133,21 @@ export async function createSet(
 	return handleResponse(response);
 }
 
+export async function replaceSets(
+	exerciseId: number,
+	sets: CreateSetRequest[],
+	fetcher: Fetcher = fetch
+): Promise<Set[]> {
+	const response = await fetcher(`${API_BASE}/api/exercises/${exerciseId}/sets`, {
+		method: 'PUT',
+		headers: {
+			'Content-Type': 'application/json'
+		},
+		body: JSON.stringify(sets)
+	});
+	return handleResponse(response);
+}
+
 export async function getWorkouts(fetcher: Fetcher = fetch): Promise<Workout[]> {
 	const response = await fetcher(`${API_BASE}/api/workouts`);
 	return handleResponse(response);
