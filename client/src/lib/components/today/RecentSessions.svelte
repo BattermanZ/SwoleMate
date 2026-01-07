@@ -2,6 +2,7 @@
 	import { createEventDispatcher } from 'svelte';
 	import { formatDateRelative, formatTime } from '$lib/utils/date';
 	import type { UiSession } from '$lib/mocks/today';
+	import SetPillsHybrid from '$lib/components/ui/SetPillsHybrid.svelte';
 
 	export let sessions: UiSession[] = [];
 	export let canAdd = false;
@@ -16,31 +17,6 @@
 			settings?: Array<{ key: string; value: string }>;
 		};
 	}>();
-
-	function setLabel(
-		exercise: UiSession['exercises'][number],
-		reps: number,
-		set: { weight: number; weightLeft?: number; weightRight?: number }
-	) {
-		if (!exercise.perSideWeight) return `${reps}×${set.weight}kg`;
-		if (!exercise.splitWeight) return `${reps}×${set.weight}kg/side`;
-		const left = set.weightLeft ?? set.weight;
-		const right = set.weightRight ?? set.weight;
-		return left === right ? `${reps}×${left}kg/side` : `${reps}×${left}/${right}kg`;
-	}
-
-	function compressSetLabels(
-		exercise: UiSession['exercises'][number]
-	): Array<{ count: number; label: string }> {
-		const compressed: Array<{ count: number; label: string }> = [];
-		for (const set of exercise.sets) {
-			const label = setLabel(exercise, set.reps, set);
-			const existing = compressed.find((c) => c.label === label);
-			if (existing) existing.count += 1;
-			else compressed.push({ count: 1, label });
-		}
-		return compressed;
-	}
 
 	function durationMinutes(session: UiSession): number | null {
 		if (!session.endedAt) return null;
@@ -111,12 +87,13 @@
 												{/if}
 											</div>
 										{/if}
-										<div class="mt-2 flex flex-wrap gap-1">
-											{#each compressSetLabels(ex) as s}
-												<span class="badge variant-filled-secondary text-xs"
-													>{s.count}×{s.label}</span
-												>
-											{/each}
+										<div class="mt-2">
+											<SetPillsHybrid
+												sets={ex.sets}
+												perSideWeight={ex.perSideWeight}
+												splitWeight={ex.splitWeight}
+												size="xs"
+											/>
 										</div>
 									</div>
 

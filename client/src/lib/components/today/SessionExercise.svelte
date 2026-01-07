@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
 	import type { UiExercise } from '$lib/mocks/today';
+	import SetPillsHybrid from '$lib/components/ui/SetPillsHybrid.svelte';
 
 	export let exercise: UiExercise;
 	export let isOpen = false;
@@ -50,18 +51,6 @@
 		return left + right;
 	}
 
-	function formatWeight(
-		set: { weight: number; weightLeft?: number; weightRight?: number },
-		perSideWeight: boolean,
-		splitWeight: boolean
-	): string {
-		if (!perSideWeight) return `${set.weight}kg`;
-		if (!splitWeight) return `${set.weight}kg/side`;
-		const left = set.weightLeft ?? set.weight;
-		const right = set.weightRight ?? set.weight;
-		return left === right ? `${left}kg/side` : `${left}/${right}kg`;
-	}
-
 	function volumeForSets(
 		sets: Array<{ reps: number; weight: number; weightLeft?: number; weightRight?: number }>,
 		perSideWeight: boolean,
@@ -71,21 +60,6 @@
 			(total, s) => total + s.reps * setTotalWeight(s, perSideWeight, splitWeight),
 			0
 		);
-	}
-
-	function compressSetLabels(
-		sets: Array<{ reps: number; weight: number; weightLeft?: number; weightRight?: number }>,
-		perSideWeight: boolean,
-		splitWeight: boolean
-	): Array<{ count: number; label: string }> {
-		const compressed: Array<{ count: number; label: string }> = [];
-		for (const set of sets) {
-			const label = `${set.reps}×${formatWeight(set, perSideWeight, splitWeight)}`;
-			const existing = compressed.find((c) => c.label === label);
-			if (existing) existing.count += 1;
-			else compressed.push({ count: 1, label });
-		}
-		return compressed;
 	}
 
 	function useLastSet() {
@@ -226,11 +200,12 @@
 					<div class="flex flex-wrap items-center gap-2">
 						<span class="font-semibold opacity-80">Last time</span>
 						<span class="opacity-60">({new Date(lastTime.startedAt).toLocaleDateString()})</span>
-						<div class="flex flex-wrap gap-1">
-							{#each compressSetLabels(lastTime.sets, lastTime.perSideWeight, lastTime.splitWeight) as s}
-								<span class="badge variant-filled-secondary text-xs">{s.count}×{s.label}</span>
-							{/each}
-						</div>
+						<SetPillsHybrid
+							sets={lastTime.sets}
+							perSideWeight={lastTime.perSideWeight}
+							splitWeight={lastTime.splitWeight}
+							size="xs"
+						/>
 					</div>
 					{#if lastTime.notes}
 						<p class="mt-2 opacity-80">{lastTime.notes}</p>
@@ -358,13 +333,12 @@
 				{#if exercise.sets.length === 0}
 					<p class="text-sm opacity-70">Add your first set for this exercise.</p>
 				{:else}
-					<div class="flex flex-wrap gap-2">
-						{#each exercise.sets as s, idx (s.id)}
-							<span class="chip variant-filled text-sm">
-								{idx + 1}. {s.reps}×{formatWeight(s, exercise.perSideWeight, exercise.splitWeight)}
-							</span>
-						{/each}
-					</div>
+					<SetPillsHybrid
+						sets={exercise.sets}
+						perSideWeight={exercise.perSideWeight}
+						splitWeight={exercise.splitWeight}
+						size="sm"
+					/>
 				{/if}
 
 				<div class="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 items-end">
