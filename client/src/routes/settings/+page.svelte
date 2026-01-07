@@ -4,6 +4,7 @@
 	import { getWorkouts } from '$lib/api';
 	import { browser } from '$app/environment';
 	import { logger } from '$lib/logger';
+	import SetPillVariants from '$lib/components/ui/SetPillVariants.svelte';
 
 	function getStoredString(key: string, fallback: string): string {
 		if (!browser) return fallback;
@@ -18,12 +19,18 @@
 		return Number.isFinite(parsed) ? parsed : fallback;
 	}
 
+	function normalizeSetChipStyle(n: number): 1 | 2 | 3 | 4 {
+		if (n === 1 || n === 2 || n === 3 || n === 4) return n;
+		return 1;
+	}
+
 	// Settings stores
 	const unitPreference = writable(getStoredString('unitPreference', 'kg'));
 	const restTimer = writable(getStoredNumber('restTimer', 90));
 	const autoEndTimeout = writable(getStoredNumber('autoEndTimeout', 300));
 	const viewDensity = writable(getStoredString('viewDensity', 'comfortable'));
 	const accentColor = writable(getStoredString('accentColor', '#652B26'));
+	const setChipStyle = writable(normalizeSetChipStyle(getStoredNumber('setChipStyle', 1)));
 
 	// Save settings to localStorage when they change
 	$: {
@@ -33,6 +40,7 @@
 			localStorage.setItem('autoEndTimeout', $autoEndTimeout.toString());
 			localStorage.setItem('viewDensity', $viewDensity);
 			localStorage.setItem('accentColor', $accentColor);
+			localStorage.setItem('setChipStyle', $setChipStyle.toString());
 		}
 	}
 
@@ -113,7 +121,22 @@
 						<span>Accent Color</span>
 						<input type="color" class="input" bind:value={$accentColor} />
 					</label>
+
+					<label class="label">
+						<span>Set Chip Style</span>
+						<select class="select" bind:value={$setChipStyle}>
+							<option value={1}>1) Segmented pill</option>
+							<option value={2}>2) Chip + count badge</option>
+							<option value={3}>3) Weight-intensity scale</option>
+							<option value={4}>4) Two-row reps + weight</option>
+						</select>
+					</label>
 				</div>
+
+				<SetPillVariants
+					selectedOption={$setChipStyle}
+					on:select={(e) => setChipStyle.set(e.detail.option)}
+				/>
 			</div>
 		</Tabs.Content>
 
