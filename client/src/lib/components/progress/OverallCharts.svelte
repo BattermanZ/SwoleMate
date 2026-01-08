@@ -1,0 +1,269 @@
+<script lang="ts">
+	import { onDestroy, onMount } from 'svelte';
+	import type { ChartConfiguration } from 'chart.js';
+	import type { WorkoutStats } from '$lib/types';
+	import {
+		baseOptions,
+		formatMonthLabel,
+		observeTheme,
+		rgba,
+		readTheme,
+		upsertChart,
+		type AnyChart,
+		type ChartTheme
+	} from '$lib/progress/charting';
+
+	export let workoutStats: WorkoutStats | null = null;
+
+	let feedbackCanvas: HTMLCanvasElement | null = null;
+	let timeCanvas: HTMLCanvasElement | null = null;
+	let durationCanvas: HTMLCanvasElement | null = null;
+	let monthlySessionsCanvas: HTMLCanvasElement | null = null;
+
+	let feedbackChart: AnyChart | null = null;
+	let timeDistributionChart: AnyChart | null = null;
+	let durationDistributionChart: AnyChart | null = null;
+	let monthlySessionsChart: AnyChart | null = null;
+
+	let theme: ChartTheme = {
+		isDark: false,
+		text: '#0f172a',
+		mutedText: 'rgba(15, 23, 42, 0.65)',
+		grid: 'rgba(15, 23, 42, 0.12)',
+		primary: '#0ea5e9',
+		secondary: '#14b8a6',
+		tertiary: '#f59e0b',
+		success: '#22c55e',
+		warning: '#f59e0b',
+		error: '#ef4444'
+	};
+
+	let observer: MutationObserver | null = null;
+
+	function destroyCharts() {
+		feedbackChart?.destroy();
+		timeDistributionChart?.destroy();
+		durationDistributionChart?.destroy();
+		monthlySessionsChart?.destroy();
+		feedbackChart = null;
+		timeDistributionChart = null;
+		durationDistributionChart = null;
+		monthlySessionsChart = null;
+	}
+
+	function render(...deps: unknown[]) {
+		if (deps.length < 0) return;
+		if (!workoutStats) {
+			destroyCharts();
+			return;
+		}
+
+		const base = baseOptions(theme);
+		const basePlugins = (base.plugins ?? {}) as unknown as Record<string, unknown>;
+		const baseScales = (base.scales ?? {}) as unknown as {
+			x?: Record<string, unknown>;
+			y?: Record<string, unknown>;
+		};
+
+		feedbackChart = upsertChart(feedbackChart, feedbackCanvas, {
+			type: 'doughnut',
+			data: {
+				labels: ['Good', 'Neutral', 'Bad'],
+				datasets: [
+					{
+						data: [
+							workoutStats.feedback_distribution.good,
+							workoutStats.feedback_distribution.neutral,
+							workoutStats.feedback_distribution.bad
+						],
+						backgroundColor: [
+							rgba(theme.success, 0.88),
+							rgba(theme.warning, 0.88),
+							rgba(theme.error, 0.88)
+						],
+						borderColor: theme.isDark ? 'rgba(2, 6, 23, 0.5)' : 'rgba(255, 255, 255, 0.8)',
+						borderWidth: 2
+					}
+				]
+			},
+			options: {
+				...base,
+				cutout: '65%',
+				plugins: {
+					...basePlugins,
+					legend: {
+						position: 'bottom',
+						labels: { color: theme.mutedText }
+					}
+				}
+			}
+		} as unknown as ChartConfiguration<'doughnut'>);
+
+		const sessionsPerMonth = workoutStats.sessions_per_month ?? [];
+		if (sessionsPerMonth.length) {
+			monthlySessionsChart = upsertChart(monthlySessionsChart, monthlySessionsCanvas, {
+				type: 'bar',
+				data: {
+					labels: sessionsPerMonth.map((m) => formatMonthLabel(m.month)),
+					datasets: [
+						{
+							label: 'Sessions',
+							data: sessionsPerMonth.map((m) => m.count),
+							backgroundColor: rgba(theme.tertiary, theme.isDark ? 0.72 : 0.6),
+							borderColor: rgba(theme.tertiary, theme.isDark ? 0.92 : 0.85),
+							borderWidth: 1,
+							borderRadius: 8
+						}
+					]
+				},
+				options: {
+					...base,
+					scales: {
+						x: {
+							...(baseScales.x ?? {}),
+							title: { display: true, text: 'Month', color: theme.mutedText }
+						},
+						y: {
+							...(baseScales.y ?? {}),
+							beginAtZero: true,
+							title: { display: true, text: 'Sessions', color: theme.mutedText }
+						}
+					}
+				}
+			});
+		} else {
+			monthlySessionsChart?.destroy();
+			monthlySessionsChart = null;
+		}
+
+		const popularHours = [...workoutStats.popular_hours].sort(
+			(a, b) => Number(a.hour) - Number(b.hour)
+		);
+		timeDistributionChart = upsertChart(timeDistributionChart, timeCanvas, {
+			type: 'bar',
+			data: {
+				labels: popularHours.map((h) => `${h.hour}:00`),
+				datasets: [
+					{
+						label: 'Workouts',
+						data: popularHours.map((h) => h.count),
+						backgroundColor: rgba(theme.primary, theme.isDark ? 0.72 : 0.62),
+						borderColor: rgba(theme.primary, theme.isDark ? 0.92 : 0.85),
+						borderWidth: 1,
+						borderRadius: 8
+					}
+				]
+			},
+			options: {
+				...base,
+				scales: {
+					x: {
+						...(baseScales.x ?? {}),
+						title: { display: true, text: 'Hour', color: theme.mutedText }
+					},
+					y: {
+						...(baseScales.y ?? {}),
+						beginAtZero: true,
+						title: { display: true, text: 'Workouts', color: theme.mutedText }
+					}
+				}
+			}
+		});
+
+		durationDistributionChart = upsertChart(durationDistributionChart, durationCanvas, {
+			type: 'bar',
+			data: {
+				labels: workoutStats.duration_distribution.map((d) => `${d.range} min`),
+				datasets: [
+					{
+						label: 'Workouts',
+						data: workoutStats.duration_distribution.map((d) => d.count),
+						backgroundColor: rgba(theme.secondary, theme.isDark ? 0.72 : 0.62),
+						borderColor: rgba(theme.secondary, theme.isDark ? 0.92 : 0.85),
+						borderWidth: 1,
+						borderRadius: 8
+					}
+				]
+			},
+			options: {
+				...base,
+				scales: {
+					x: {
+						...(baseScales.x ?? {}),
+						title: { display: true, text: 'Duration bucket', color: theme.mutedText }
+					},
+					y: {
+						...(baseScales.y ?? {}),
+						beginAtZero: true,
+						title: { display: true, text: 'Workouts', color: theme.mutedText }
+					}
+				}
+			}
+		});
+	}
+
+	onMount(() => {
+		theme = readTheme();
+		observer = observeTheme(() => {
+			theme = readTheme();
+		});
+	});
+
+	$: render(workoutStats, feedbackCanvas, timeCanvas, durationCanvas, monthlySessionsCanvas, theme);
+
+	onDestroy(() => {
+		destroyCharts();
+		observer?.disconnect();
+		observer = null;
+	});
+</script>
+
+<div class="space-y-4 min-w-0">
+	<div class="card variant-glass-surface p-4 min-w-0">
+		<div class="flex items-start justify-between gap-3">
+			<div>
+				<h3 class="text-base font-semibold">Session feel</h3>
+				<p class="text-sm opacity-70">How sessions have been rated.</p>
+			</div>
+		</div>
+		<div class="mt-3 h-64">
+			<canvas bind:this={feedbackCanvas}></canvas>
+		</div>
+	</div>
+
+	<div class="card variant-glass-surface p-4 min-w-0">
+		<div class="flex items-start justify-between gap-3">
+			<div>
+				<h3 class="text-base font-semibold">Sessions per month</h3>
+				<p class="text-sm opacity-70">Rolling last 12 months.</p>
+			</div>
+		</div>
+		<div class="mt-3 h-64">
+			<canvas bind:this={monthlySessionsCanvas}></canvas>
+		</div>
+	</div>
+
+	<div class="card variant-glass-surface p-4 min-w-0">
+		<div class="flex items-start justify-between gap-3">
+			<div>
+				<h3 class="text-base font-semibold">Time of day</h3>
+				<p class="text-sm opacity-70">When you most often train.</p>
+			</div>
+		</div>
+		<div class="mt-3 h-64">
+			<canvas bind:this={timeCanvas}></canvas>
+		</div>
+	</div>
+
+	<div class="card variant-glass-surface p-4 min-w-0">
+		<div class="flex items-start justify-between gap-3">
+			<div>
+				<h3 class="text-base font-semibold">Duration distribution</h3>
+				<p class="text-sm opacity-70">Your typical session length.</p>
+			</div>
+		</div>
+		<div class="mt-3 h-64">
+			<canvas bind:this={durationCanvas}></canvas>
+		</div>
+	</div>
+</div>
