@@ -19,6 +19,21 @@
 	let exporting = false;
 	let exportError: string | null = null;
 
+	const AUTO_BACKUP_KEEP_COUNT = 4;
+	const AUTO_BACKUP_DAY_LABEL = 'Monday';
+	const AUTO_BACKUP_TIME_LABEL = '01:00';
+
+	function nextAutoBackupLabel(now: Date = new Date()): string {
+		const next = new Date(now);
+		const day = next.getDay(); // 0 Sun .. 1 Mon .. 6 Sat
+		const daysUntilMonday = (8 - day) % 7;
+		next.setDate(next.getDate() + daysUntilMonday);
+		next.setHours(1, 0, 0, 0);
+		if (next.getTime() <= now.getTime()) next.setDate(next.getDate() + 7);
+		const date = next.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' });
+		return `${AUTO_BACKUP_DAY_LABEL} ${date} ${AUTO_BACKUP_TIME_LABEL}`;
+	}
+
 	async function loadBackups() {
 		try {
 			loading = true;
@@ -229,6 +244,18 @@
 		</section>
 
 		<aside class="md:col-span-4 space-y-4 min-w-0">
+			<div class="card variant-glass-surface p-4 space-y-2">
+				<h2 class="text-lg font-semibold tracking-tight">Auto backup policy</h2>
+				<ul class="text-sm opacity-80 space-y-1 list-disc pl-5">
+					<li>
+						Runs every {AUTO_BACKUP_DAY_LABEL} at {AUTO_BACKUP_TIME_LABEL} (server local time).
+					</li>
+					<li>Keeps the latest {AUTO_BACKUP_KEEP_COUNT} auto backups (older ones are pruned).</li>
+					<li>Manual backups are kept until you delete them.</li>
+				</ul>
+				<div class="mt-2 text-xs opacity-70">Next auto backup: {nextAutoBackupLabel()}</div>
+			</div>
+
 			<div class="card variant-glass-surface p-4 space-y-2">
 				<h2 class="text-lg font-semibold tracking-tight">Tips</h2>
 				<ul class="text-sm opacity-80 space-y-1 list-disc pl-5">
