@@ -19,7 +19,34 @@
 	let exporting = false;
 	let exportError: string | null = null;
 
-	const AUTO_BACKUP_KEEP_COUNT = 4;
+	function formatBackupFilename(filename: string): string {
+		// New format: swolemate_YYYY-MM-DD_HH-mm_<auto|manual>(-N).tar.gz
+		const next =
+			/^swolemate_(\d{4}-\d{2}-\d{2})_(\d{2})-(\d{2})_(auto|manual)(?:-(\d+))?\.tar\.gz$/i.exec(
+				filename
+			);
+		if (next) {
+			const [, date, hh, mm, , dup] = next;
+			const suffix = dup ? ` #${Number(dup) + 1}` : '';
+			return `${date} ${hh}:${mm}${suffix}`;
+		}
+
+		// Legacy format: swolemate_backup_YYYYMMDD_HHMMSS_<auto|manual>_<timestamp>.tar.gz
+		const legacy =
+			/^swolemate_backup_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})_(auto|manual)_(\d+)\.tar\.gz$/i.exec(
+				filename
+			);
+		if (legacy) {
+			const [, yyyy, mo, dd, hh, mm, ss] = legacy;
+			return `${yyyy}-${mo}-${dd} ${hh}:${mm}:${ss}`;
+		}
+
+		return filename.replace(/\.tar\.gz$/i, '');
+	}
+
+	const AUTO_BACKUP_KEEP_WEEKLY = 6;
+	const AUTO_BACKUP_KEEP_MONTHS = 6;
+	const AUTO_BACKUP_KEEP_MAX = 12;
 	const AUTO_BACKUP_DAY_LABEL = 'Monday';
 	const AUTO_BACKUP_TIME_LABEL = '01:00';
 
@@ -213,7 +240,7 @@
 											{backup.backup_type}
 										</span>
 										<span class="text-xs opacity-70 truncate">
-											{backup.filename.replace('swolemate_backup_', '').replace('.tar.gz', '')}
+											{formatBackupFilename(backup.filename)}
 										</span>
 									</div>
 								</div>
@@ -250,7 +277,10 @@
 					<li>
 						Runs every {AUTO_BACKUP_DAY_LABEL} at {AUTO_BACKUP_TIME_LABEL} (server local time).
 					</li>
-					<li>Keeps the latest {AUTO_BACKUP_KEEP_COUNT} auto backups (older ones are pruned).</li>
+					<li>
+						Keeps up to {AUTO_BACKUP_KEEP_MAX} auto backups: last {AUTO_BACKUP_KEEP_WEEKLY} weekly, plus
+						1 per month for {AUTO_BACKUP_KEEP_MONTHS} months.
+					</li>
 					<li>Manual backups are kept until you delete them.</li>
 				</ul>
 				<div class="mt-2 text-xs opacity-70">Next auto backup: {nextAutoBackupLabel()}</div>

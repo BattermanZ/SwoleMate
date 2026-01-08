@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Datelike, Local, Utc};
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
@@ -67,13 +67,22 @@ pub async fn create_backup(backup_type: BackupType) -> Result<BackupInfo, std::i
     }
 
     let now = Utc::now();
-    let filename = format!(
-        "swolemate_backup_{}_{}_{}.tar.gz",
-        now.format("%Y%m%d_%H%M%S"),
-        backup_type,
-        now.timestamp()
+    let local = Local::now();
+    let base_filename = format!(
+        "swolemate_{}_{}_{}.tar.gz",
+        local.format("%Y-%m-%d"),
+        local.format("%H-%M"),
+        backup_type
     );
-    let backup_path = backup_dir.join(&filename);
+
+    let mut filename = base_filename.clone();
+    let mut backup_path = backup_dir.join(&filename);
+    let mut suffix = 1u32;
+    while backup_path.exists() {
+        filename = base_filename.replace(".tar.gz", &format!("-{}.tar.gz", suffix));
+        backup_path = backup_dir.join(&filename);
+        suffix += 1;
+    }
 
     let backup_info = BackupInfo {
         filename: filename.clone(),
@@ -351,24 +360,73 @@ pub async fn list_backups() -> Result<Vec<BackupInfo>, std::io::Error> {
     Ok(backups)
 }
 
+fn month_keys_backwards(now: DateTime<Local>, count: usize) -> Vec<(i32, u32)> {
+    let mut keys = Vec::with_capacity(count);
+    let mut year = now.year();
+    let mut month = now.month(); // 1..=12
+    for _ in 0..count {
+        keys.push((year, month));
+        if month == 1 {
+            year -= 1;
+            month = 12;
+        } else {
+            month -= 1;
+        }
+    }
+    keys
+}
+
 async fn cleanup_old_backups() -> Result<(), std::io::Error> {
     let mut backups = list_backups().await?;
     backups.sort_by(|a, b| b.created_at.cmp(&a.created_at));
 
     // Separate auto and manual backups
     let auto_backups: Vec<_> = backups
-        .iter()
+        .into_iter()
         .filter(|b| b.backup_type == BackupType::Auto)
         .collect();
 
-    // Keep only the last 4 auto backups
-    if auto_backups.len() > 4 {
-        for backup in auto_backups.iter().skip(4) {
-            let path = get_backup_dir()?.join(&backup.filename);
-            if path.exists() {
-                tokio_fs::remove_file(path).await?;
-                info!("Removed old backup: {}", backup.filename);
-            }
+    // Tiered retention (max 12 autos):
+    // - Keep the most recent 6 weekly auto backups (fine-grained rollback).
+    // - Keep 1 "monthly checkpoint" for each of the last 6 months (the earliest auto backup in the month).
+    const KEEP_RECENT_WEEKLY: usize = 6;
+    const KEEP_MONTHLY_MONTHS: usize = 6;
+    const KEEP_MAX_AUTOS: usize = 12;
+
+    use std::collections::HashSet;
+    let mut keep: HashSet<String> = HashSet::new();
+
+    for b in auto_backups.iter().take(KEEP_RECENT_WEEKLY) {
+        keep.insert(b.filename.clone());
+    }
+
+    let month_keys = month_keys_backwards(Local::now(), KEEP_MONTHLY_MONTHS);
+    for (year, month) in month_keys {
+        if keep.len() >= KEEP_MAX_AUTOS {
+            break;
+        }
+
+        let candidate = auto_backups
+            .iter()
+            .filter(|b| {
+                let local = b.created_at.with_timezone(&Local);
+                local.year() == year && local.month() == month
+            })
+            .min_by(|a, b| a.created_at.cmp(&b.created_at));
+
+        if let Some(b) = candidate {
+            keep.insert(b.filename.clone());
+        }
+    }
+
+    for backup in auto_backups.iter() {
+        if keep.contains(&backup.filename) {
+            continue;
+        }
+        let path = get_backup_dir()?.join(&backup.filename);
+        if path.exists() {
+            tokio_fs::remove_file(path).await?;
+            info!("Removed old backup: {}", backup.filename);
         }
     }
 
