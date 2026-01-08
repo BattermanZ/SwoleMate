@@ -318,7 +318,9 @@ async fn cancel_endpoints_remove_data() {
 async fn exercise_lookups_and_progress_endpoints_work() {
     let _env = TestEnv::new();
     let (_, app) = setup_test_app().await;
-    let now = chrono::Utc::now();
+    let now = chrono::Utc::now()
+        .with_nanosecond(0)
+        .expect("truncate nanos");
 
     let req = test::TestRequest::post()
         .uri("/api/workouts")
@@ -341,6 +343,17 @@ async fn exercise_lookups_and_progress_endpoints_work() {
         .unwrap();
 
     let req = test::TestRequest::post()
+        .uri(&format!("/api/workouts/{workout_id}/exercises"))
+        .set_json(json!({
+            "exercise_type": "Bench Press",
+            "start_time": now,
+            "notes": null
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 201);
+
+    let req = test::TestRequest::post()
         .uri(&format!("/api/exercises/{exercise_id}/sets"))
         .set_json(json!({ "reps": 5, "weight": 100.0, "notes": null }))
         .to_request();
@@ -361,6 +374,18 @@ async fn exercise_lookups_and_progress_endpoints_work() {
     assert!(body.is_array());
     assert_eq!(body.as_array().unwrap().len(), 2);
 
+    let end_time = now + chrono::Duration::minutes(40);
+    let req = test::TestRequest::put()
+        .uri(&format!("/api/workouts/{workout_id}/end"))
+        .set_json(json!({
+            "end_time": end_time,
+            "notes": null,
+            "feedback": null
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+
     let req = test::TestRequest::get()
         .uri("/api/progress/exercise/Squat")
         .to_request();
@@ -375,6 +400,26 @@ async fn exercise_lookups_and_progress_endpoints_work() {
     assert!(body.get("total_workouts").is_some());
     assert!(body.get("avg_exercise_duration_series").is_some());
     assert!(body["avg_exercise_duration_series"].is_array());
+    let series = body["avg_exercise_duration_series"]
+        .as_array()
+        .expect("avg_exercise_duration_series array");
+    assert!(!series.is_empty());
+    let point = series
+        .iter()
+        .find(|p| {
+            let Some(raw) = p["start_time"].as_str() else {
+                return false;
+            };
+            let Ok(ts) = raw.parse::<chrono::DateTime<chrono::Utc>>() else {
+                return false;
+            };
+            ts == now
+        })
+        .expect("series contains the workout point");
+    assert_eq!(point["exercise_count"], 2);
+    assert_eq!(point["duration_minutes"], 40);
+    let avg_minutes = point["avg_minutes"].as_f64().expect("avg_minutes f64");
+    assert!((avg_minutes - 20.0).abs() < 1e-6);
 
     let req = test::TestRequest::get()
         .uri("/api/progress/volume?exercise_type=Squat")
