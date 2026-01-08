@@ -4,17 +4,19 @@
 	import { logger } from '$lib/logger';
 	import { formatDateRelative } from '$lib/utils/date';
 	import WorkoutDetailsCard from '$lib/components/history/WorkoutDetailsCard.svelte';
+	import { isWithinRange, resolveDateRange, type DateRangePreset } from '$lib/history/dateRange';
 
 	export let data: { workouts: Workout[] };
 	let workouts = data.workouts;
 	let loading = false;
 	let error: string | null = null;
 
-	type RangeFilter = 'all' | '30d' | '90d' | '365d';
 	type SortOrder = 'newest' | 'oldest';
 
 	let query = '';
-	let range: RangeFilter = 'all';
+	let rangePreset: DateRangePreset = 'all';
+	let customFrom = '';
+	let customTo = '';
 	let mood: 'all' | FeedbackEmoji = 'all';
 	let sort: SortOrder = 'newest';
 	let selectedId: number | null = null;
@@ -35,15 +37,7 @@
 		return Math.round((end - start) / 60_000);
 	}
 
-	function withinRange(workout: Workout, filter: RangeFilter): boolean {
-		if (filter === 'all') return true;
-		const days = filter === '30d' ? 30 : filter === '90d' ? 90 : filter === '365d' ? 365 : 0;
-		if (!days) return true;
-		const start = new Date(workout.start_time).getTime();
-		if (!Number.isFinite(start)) return true;
-		const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
-		return start >= cutoff;
-	}
+	$: dateRange = resolveDateRange(rangePreset, customFrom, customTo);
 
 	function matchesQuery(workout: Workout, q: string): boolean {
 		const term = q.trim().toLowerCase();
@@ -62,7 +56,7 @@
 
 	$: filteredWorkouts = sortedWorkouts.filter((w) => {
 		if (mood !== 'all' && w.feedback !== mood) return false;
-		if (!withinRange(w, range)) return false;
+		if (!isWithinRange(w.start_time, dateRange)) return false;
 		if (!matchesQuery(w, query)) return false;
 		return true;
 	});
@@ -239,13 +233,49 @@
 					</label>
 					<label class="block min-w-0">
 						<span class="text-xs font-semibold opacity-70">Date range</span>
-						<select class="select w-full mt-1" bind:value={range} disabled={loading}>
+						<select class="select w-full mt-1" bind:value={rangePreset} disabled={loading}>
 							<option value="all">All</option>
 							<option value="30d">Last 30 days</option>
 							<option value="90d">Last 90 days</option>
 							<option value="365d">Last year</option>
+							<option value="custom">Custom…</option>
 						</select>
 					</label>
+					{#if rangePreset === 'custom'}
+						<div class="sm:col-span-2 grid gap-2 sm:grid-cols-2">
+							<label class="block min-w-0">
+								<span class="text-xs font-semibold opacity-70">From</span>
+								<input
+									type="date"
+									class="input w-full mt-1"
+									bind:value={customFrom}
+									disabled={loading}
+								/>
+							</label>
+							<label class="block min-w-0">
+								<span class="text-xs font-semibold opacity-70">To</span>
+								<input
+									type="date"
+									class="input w-full mt-1"
+									bind:value={customTo}
+									disabled={loading}
+								/>
+							</label>
+							<div class="sm:col-span-2 flex justify-end">
+								<button
+									type="button"
+									class="btn btn-sm variant-soft"
+									on:click={() => {
+										customFrom = '';
+										customTo = '';
+									}}
+									disabled={loading}
+								>
+									Clear
+								</button>
+							</div>
+						</div>
+					{/if}
 					<label class="block min-w-0">
 						<span class="text-xs font-semibold opacity-70">Mood</span>
 						<select class="select w-full mt-1" bind:value={mood} disabled={loading}>
