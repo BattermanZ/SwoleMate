@@ -111,12 +111,40 @@
 		});
 
 		if (exerciseProgress && exerciseProgress.length > 0) {
-			const data = exerciseProgress
+			const bestWeight = exerciseProgress
 				.map((ep) => {
 					const maxWeight = Math.max(...ep.sets.map((s) => Number(s.weight)));
 					return {
 						x: new Date(ep.exercise.start_time).getTime(),
 						y: Number.isFinite(maxWeight) ? maxWeight : 0
+					};
+				})
+				.filter((p) => p.y > 0);
+
+			const totalVolume = exerciseProgress
+				.map((ep) => {
+					const perSide = ep.exercise.per_side_weight ?? false;
+					const split = ep.exercise.split_weight ?? false;
+					const volume = ep.sets.reduce((sum, s) => {
+						const reps = Number(s.reps);
+						const baseWeight = Number(s.weight);
+						if (!Number.isFinite(reps) || !Number.isFinite(baseWeight)) return sum;
+
+						let effectiveWeight = baseWeight;
+						if (perSide) {
+							if (split && s.weight_left != null && s.weight_right != null) {
+								effectiveWeight = Number(s.weight_left) + Number(s.weight_right);
+							} else {
+								effectiveWeight = baseWeight * 2;
+							}
+						}
+
+						return sum + reps * effectiveWeight;
+					}, 0);
+
+					return {
+						x: new Date(ep.exercise.start_time).getTime(),
+						y: Number.isFinite(volume) ? volume : 0
 					};
 				})
 				.filter((p) => p.y > 0);
@@ -127,14 +155,25 @@
 					datasets: [
 						{
 							label: 'Best weight per session (kg)',
-							data,
+							data: bestWeight,
 							backgroundColor: rgba(theme.secondary, theme.isDark ? 0.28 : 0.22),
 							borderColor: theme.secondary,
 							pointBackgroundColor: theme.secondary,
 							pointBorderColor: theme.isDark ? 'rgba(2, 6, 23, 0.7)' : 'rgba(255, 255, 255, 0.9)',
 							pointBorderWidth: 1,
 							showLine: true,
-							tension: 0.25
+							tension: 0.25,
+							yAxisID: 'y'
+						},
+						{
+							label: 'Total volume per session (kg)',
+							data: totalVolume,
+							backgroundColor: rgba(theme.primary, theme.isDark ? 0.22 : 0.16),
+							borderColor: rgba(theme.primary, theme.isDark ? 0.85 : 0.75),
+							pointRadius: 2,
+							showLine: true,
+							tension: 0.25,
+							yAxisID: 'y1'
 						}
 					]
 				},
@@ -154,6 +193,13 @@
 							...(baseScales.y ?? {}),
 							beginAtZero: true,
 							title: { display: true, text: 'Weight (kg)', color: theme.mutedText }
+						},
+						y1: {
+							position: 'right',
+							beginAtZero: true,
+							ticks: { color: theme.mutedText },
+							grid: { drawOnChartArea: false },
+							title: { display: true, text: 'Volume (kg)', color: theme.mutedText }
 						}
 					}
 				}
