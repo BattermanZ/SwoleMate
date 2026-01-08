@@ -1,8 +1,9 @@
 <script lang="ts">
-	import { getWorkout, getWorkouts, cancelWorkout } from '$lib/api';
+	import { getWorkout, getWorkouts, cancelWorkout, updateWorkoutTimes } from '$lib/api';
 	import type { FeedbackEmoji, Workout, WorkoutWithExercises } from '$lib/types';
 	import { logger } from '$lib/logger';
 	import { formatDateRelative } from '$lib/utils/date';
+	import EditWorkoutTimesModal from '$lib/components/history/EditWorkoutTimesModal.svelte';
 	import WorkoutDetailsCard from '$lib/components/history/WorkoutDetailsCard.svelte';
 	import { isWithinRange, resolveDateRange, type DateRangePreset } from '$lib/history/dateRange';
 
@@ -115,6 +116,10 @@
 	$: selectedError = selectedState?.status === 'error' ? selectedState.message : null;
 	$: loadingSelected = selectedState?.status === 'loading';
 
+	let editTimesOpen = false;
+	let editTimesError: string | null = null;
+	let editTimesSaving = false;
+
 	async function refreshWorkouts() {
 		try {
 			loading = true;
@@ -126,6 +131,29 @@
 			logger.error('workout', 'Failed to load workouts', { error: e });
 		} finally {
 			loading = false;
+		}
+	}
+
+	function openEditTimes() {
+		editTimesError = null;
+		editTimesOpen = true;
+	}
+
+	async function handleSaveTimes(e: CustomEvent<{ start_time: string; end_time: string }>) {
+		if (!selectedId) return;
+		editTimesSaving = true;
+		editTimesError = null;
+		try {
+			await updateWorkoutTimes(selectedId, {
+				start_time: e.detail.start_time,
+				end_time: e.detail.end_time
+			});
+			editTimesOpen = false;
+			await refreshWorkouts();
+		} catch (err) {
+			editTimesError = err instanceof Error ? err.message : 'Failed to update times';
+		} finally {
+			editTimesSaving = false;
 		}
 	}
 
@@ -346,6 +374,14 @@
 					{#if selectedId !== null}
 						<button
 							type="button"
+							class="btn btn-sm variant-soft"
+							on:click={openEditTimes}
+							disabled={loading || loadingSelected}
+						>
+							Edit times
+						</button>
+						<button
+							type="button"
 							class="btn btn-sm variant-soft-error"
 							on:click={() => handleDeleteWorkout(selectedId)}
 							disabled={loading}
@@ -359,6 +395,15 @@
 		</aside>
 	</div>
 </div>
+
+<EditWorkoutTimesModal
+	open={editTimesOpen}
+	workout={selectedWorkout}
+	disabled={editTimesSaving}
+	error={editTimesError}
+	on:cancel={() => (editTimesOpen = false)}
+	on:submit={handleSaveTimes}
+/>
 
 <style>
 	.line-clamp-2 {

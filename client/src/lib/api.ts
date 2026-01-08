@@ -4,6 +4,7 @@ import type {
 	Set,
 	CreateWorkoutRequest,
 	UpdateWorkoutRequest,
+	UpdateWorkoutTimesRequest,
 	CreateExerciseRequest,
 	UpdateExerciseRequest,
 	CreateSetRequest,
@@ -76,6 +77,21 @@ export async function endWorkout(
 			'Content-Type': 'application/json'
 		},
 		body: JSON.stringify(endTime)
+	});
+	return handleResponse(response);
+}
+
+export async function updateWorkoutTimes(
+	id: number,
+	times: UpdateWorkoutTimesRequest,
+	fetcher: Fetcher = fetch
+): Promise<void> {
+	const response = await fetcher(`${API_BASE}/api/workouts/${id}/times`, {
+		method: 'PUT',
+		headers: {
+			'Content-Type': 'application/json'
+		},
+		body: JSON.stringify(times)
 	});
 	return handleResponse(response);
 }

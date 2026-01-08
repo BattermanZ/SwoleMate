@@ -74,6 +74,12 @@ pub struct UpdateWorkoutRequest {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct UpdateWorkoutTimesRequest {
+    pub start_time: DateTime<Utc>,
+    pub end_time: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct CreateExerciseRequest {
     pub exercise_type: String,
     pub start_time: DateTime<Utc>,

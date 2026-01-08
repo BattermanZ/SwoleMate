@@ -62,6 +62,43 @@ impl Database {
         Ok(())
     }
 
+    pub async fn update_workout_times(
+        &self,
+        id: i64,
+        start_time: DateTime<Utc>,
+        end_time: DateTime<Utc>,
+    ) -> Result<(), AppError> {
+        debug!(
+            target: "database",
+            "Updating workout #{} times: start={} end={}",
+            id,
+            start_time,
+            end_time
+        );
+
+        let pool = self.pool().await;
+        sqlx::query!(
+            r#"
+            UPDATE workouts
+            SET date = ?, start_time = ?, end_time = ?
+            WHERE id = ?
+            "#,
+            start_time,
+            start_time,
+            end_time,
+            id,
+        )
+        .execute(&pool)
+        .await
+        .map_err(|e| {
+            error!(target: "database", "Failed to update workout times: {}", e);
+            AppError::DatabaseError(e)
+        })?;
+
+        info!(target: "database", "Updated workout #{} times", id);
+        Ok(())
+    }
+
     pub async fn get_workout(&self, id: i64) -> Result<Workout, AppError> {
         debug!(target: "database", "Fetching workout #{}", id);
 

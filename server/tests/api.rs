@@ -1,4 +1,5 @@
 use actix_web::{test, web, App};
+use chrono::Timelike;
 use once_cell::sync::Lazy;
 use serde_json::{json, Value};
 use sqlx::sqlite::SqlitePoolOptions;
@@ -380,6 +381,76 @@ async fn exercise_lookups_and_progress_endpoints_work() {
     assert!(body.get("weekly_volume").is_some());
     assert!(body.get("monthly_volume").is_some());
     assert!(body.get("personal_records").is_some());
+}
+
+#[actix_web::test]
+async fn workout_times_can_be_edited_and_date_tracks_start_time() {
+    let _env = TestEnv::new();
+    let (_, app) = setup_test_app().await;
+
+    let start = chrono::Utc::now()
+        .with_nanosecond(0)
+        .expect("truncate nanos");
+
+    let req = test::TestRequest::post()
+        .uri("/api/workouts")
+        .set_json(json!({
+            "date": start,
+            "start_time": start,
+            "notes": "times test",
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 201);
+    let workout_id = json_body(resp).await["id"].as_i64().expect("workout id");
+
+    let new_start = start + chrono::Duration::hours(36);
+    let new_end = new_start + chrono::Duration::minutes(55);
+
+    let req = test::TestRequest::put()
+        .uri(&format!("/api/workouts/{workout_id}/times"))
+        .set_json(json!({
+            "start_time": new_start,
+            "end_time": new_end,
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+
+    let req = test::TestRequest::get()
+        .uri(&format!("/api/workouts/{workout_id}"))
+        .to_request();
+    let body = json_body(test::call_service(&app, req).await).await;
+
+    let returned_start: chrono::DateTime<chrono::Utc> = body["workout"]["start_time"]
+        .as_str()
+        .expect("start_time string")
+        .parse()
+        .expect("parse start_time");
+    let returned_end: chrono::DateTime<chrono::Utc> = body["workout"]["end_time"]
+        .as_str()
+        .expect("end_time string")
+        .parse()
+        .expect("parse end_time");
+    let returned_date: chrono::DateTime<chrono::Utc> = body["workout"]["date"]
+        .as_str()
+        .expect("date string")
+        .parse()
+        .expect("parse date");
+
+    assert_eq!(returned_start, new_start);
+    assert_eq!(returned_end, new_end);
+    assert_eq!(returned_date, new_start);
+
+    let bad_req = test::TestRequest::put()
+        .uri(&format!("/api/workouts/{workout_id}/times"))
+        .set_json(json!({
+            "start_time": new_end,
+            "end_time": new_start,
+        }))
+        .to_request();
+    let resp = test::call_service(&app, bad_req).await;
+    assert_eq!(resp.status(), 400);
 }
 
 #[actix_web::test]

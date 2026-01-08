@@ -51,6 +51,26 @@ pub async fn end_workout(
     })))
 }
 
+#[put("/api/workouts/{id}/times")]
+pub async fn update_workout_times(
+    db: web::Data<Database>,
+    id: web::Path<i64>,
+    req: web::Json<UpdateWorkoutTimesRequest>,
+) -> Result<HttpResponse, AppError> {
+    if req.end_time < req.start_time {
+        return Err(AppError::BadRequest(
+            "end_time must be greater than or equal to start_time".to_string(),
+        ));
+    }
+
+    db.update_workout_times(*id, req.start_time, req.end_time)
+        .await?;
+
+    Ok(HttpResponse::Ok().json(json!({
+        "message": "Workout times updated successfully"
+    })))
+}
+
 #[get("/api/workouts/{id}")]
 pub async fn get_workout(
     db: web::Data<Database>,
@@ -404,6 +424,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(health_check)
         .service(create_workout)
         .service(end_workout)
+        .service(update_workout_times)
         .service(get_workout)
         .service(get_workouts)
         .service(create_exercise)
