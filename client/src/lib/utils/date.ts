@@ -32,6 +32,18 @@ export function formatTime(dateString: string): string {
 	return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+const DMY = new Intl.DateTimeFormat('en-GB', {
+	day: '2-digit',
+	month: '2-digit',
+	year: 'numeric'
+});
+
+export function formatDateShort(dateString: string): string {
+	const date = new Date(dateString);
+	if (!Number.isFinite(date.getTime())) return dateString;
+	return DMY.format(date);
+}
+
 export function formatDateRelative(dateString: string): string {
 	const date = new Date(dateString);
 	const now = new Date();

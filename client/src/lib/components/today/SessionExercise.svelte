@@ -2,6 +2,7 @@
 	import { createEventDispatcher } from 'svelte';
 	import type { UiExercise } from '$lib/today/types';
 	import SetPillsHybrid from '$lib/components/ui/SetPillsHybrid.svelte';
+	import { formatDateShort } from '$lib/utils/date';
 
 	export let exercise: UiExercise;
 	export let isOpen = false;
@@ -199,7 +200,7 @@
 				>
 					<div class="flex flex-wrap items-center gap-2">
 						<span class="font-semibold opacity-80">Last time</span>
-						<span class="opacity-60">({new Date(lastTime.startedAt).toLocaleDateString()})</span>
+						<span class="opacity-60">({formatDateShort(lastTime.startedAt)})</span>
 						<SetPillsHybrid
 							sets={lastTime.sets}
 							perSideWeight={lastTime.perSideWeight}
