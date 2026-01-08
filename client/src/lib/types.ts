@@ -8,6 +8,7 @@ export interface Workout {
 	notes?: string | null;
 	feedback?: FeedbackEmoji | null;
 	exercise_count?: number;
+	timezone_offset_minutes?: number | null;
 }
 
 export interface Exercise {
@@ -33,6 +34,7 @@ export interface CreateWorkoutRequest {
 	date: string; // ISO date string
 	start_time: string; // ISO date string
 	notes?: string | null;
+	timezone_offset_minutes?: number | null;
 }
 
 export interface UpdateWorkoutRequest {
@@ -121,6 +123,10 @@ export interface WorkoutStats {
 		avg_minutes: number;
 	}>;
 	session_start_times?: string[];
+	session_start_samples?: Array<{
+		start_time: string;
+		timezone_offset_minutes?: number | null;
+	}>;
 }
 
 export interface VolumeStats {

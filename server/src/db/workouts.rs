@@ -10,14 +10,15 @@ impl Database {
         let pool = self.pool().await;
         let result = sqlx::query!(
             r#"
-            INSERT INTO workouts (date, start_time, end_time, notes)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO workouts (date, start_time, end_time, notes, timezone_offset_minutes)
+            VALUES (?, ?, ?, ?, ?)
             RETURNING id
             "#,
             req.date,
             req.start_time,
             req.start_time, // Initially set end_time to start_time
             req.notes,
+            req.timezone_offset_minutes,
         )
         .fetch_one(&pool)
         .await
@@ -111,7 +112,8 @@ impl Database {
                 start_time as "start_time: DateTime<Utc>",
                 end_time as "end_time: DateTime<Utc>",
                 notes,
-                feedback
+                feedback,
+                timezone_offset_minutes
             FROM workouts
             WHERE id = ?
             "#,
@@ -133,6 +135,7 @@ impl Database {
             notes: result.notes,
             feedback: result.feedback,
             exercise_count: None,
+            timezone_offset_minutes: result.timezone_offset_minutes,
         })
     }
 
@@ -149,6 +152,7 @@ impl Database {
                 end_time as "end_time: DateTime<Utc>",
                 notes,
                 feedback,
+                timezone_offset_minutes,
                 (
                     SELECT COUNT(*)
                     FROM exercises e
@@ -175,6 +179,7 @@ impl Database {
                 notes: row.notes,
                 feedback: row.feedback,
                 exercise_count: Some(row.exercise_count),
+                timezone_offset_minutes: row.timezone_offset_minutes,
             })
             .collect();
 

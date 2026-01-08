@@ -107,6 +107,7 @@ export type SyncApi = {
 		date: string;
 		start_time: string;
 		notes?: string;
+		timezone_offset_minutes?: number;
 	}) => Promise<{ id: number }>;
 	endExercise: (
 		id: number,
@@ -154,7 +155,8 @@ export async function syncOne(record: OfflineSessionRecord, api: SyncApi) {
 		const created = await api.createWorkout({
 			date: record.session.startedAt,
 			start_time: record.session.startedAt,
-			notes: record.session.notes.trim() || undefined
+			notes: record.session.notes.trim() || undefined,
+			timezone_offset_minutes: record.session.timezoneOffsetMinutes
 		});
 		workoutId = created.id;
 	}

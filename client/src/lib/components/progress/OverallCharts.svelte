@@ -184,64 +184,87 @@
 			avgExerciseDurationChart = null;
 		}
 
+		const sessionStartSamples = workoutStats.session_start_samples ?? [];
 		const sessionStartTimes = workoutStats.session_start_times ?? [];
-		if (sessionStartTimes.length) {
+		const hasSamples = sessionStartSamples.length > 0;
+
+		if (hasSamples || sessionStartTimes.length) {
 			const labels = Array.from({ length: 48 }, (_, i) => {
 				const hour = String(Math.floor(i / 2)).padStart(2, '0');
 				const minute = i % 2 === 0 ? '00' : '30';
 				return `${hour}:${minute}`;
 			});
 			const bins = Array.from({ length: 48 }, () => 0);
-			for (const iso of sessionStartTimes) {
-				const ms = new Date(iso).getTime();
-				if (!Number.isFinite(ms)) continue;
-				const date = new Date(ms);
-				const hour = date.getHours();
-				const minute = date.getMinutes();
-				const idx = hour * 2 + (minute >= 30 ? 1 : 0);
-				if (idx < 0 || idx >= bins.length) continue;
-				bins[idx] += 1;
+
+			if (hasSamples) {
+				for (const sample of sessionStartSamples) {
+					const msUtc = new Date(sample.start_time).getTime();
+					if (!Number.isFinite(msUtc)) continue;
+
+					const offsetMinutes = sample.timezone_offset_minutes;
+					const hasOffset = typeof offsetMinutes === 'number' && Number.isFinite(offsetMinutes);
+					const msForWorkoutLocal = hasOffset ? msUtc - offsetMinutes * 60_000 : msUtc;
+
+					const date = new Date(msForWorkoutLocal);
+					const hour = hasOffset ? date.getUTCHours() : date.getHours();
+					const minute = hasOffset ? date.getUTCMinutes() : date.getMinutes();
+
+					const idx = hour * 2 + (minute >= 30 ? 1 : 0);
+					if (idx < 0 || idx >= bins.length) continue;
+					bins[idx] += 1;
+				}
+			} else {
+				for (const iso of sessionStartTimes) {
+					const ms = new Date(iso).getTime();
+					if (!Number.isFinite(ms)) continue;
+					const date = new Date(ms);
+					const hour = date.getHours();
+					const minute = date.getMinutes();
+					const idx = hour * 2 + (minute >= 30 ? 1 : 0);
+					if (idx < 0 || idx >= bins.length) continue;
+					bins[idx] += 1;
+				}
 			}
 
 			const nonEmpty = bins
 				.map((count, index) => ({ label: labels[index], count }))
 				.filter((point) => point.count > 0);
-			if (!nonEmpty.length) {
-				timeDistributionChart?.destroy();
-				timeDistributionChart = null;
-				return;
-			}
 
-			timeDistributionChart = upsertChart(timeDistributionChart, timeCanvas, {
-				type: 'bar',
-				data: {
-					labels: nonEmpty.map((p) => p.label),
-					datasets: [
-						{
-							label: 'Workouts',
-							data: nonEmpty.map((p) => p.count),
-							backgroundColor: rgba(theme.primary, theme.isDark ? 0.72 : 0.62),
-							borderColor: rgba(theme.primary, theme.isDark ? 0.92 : 0.85),
-							borderWidth: 1,
-							borderRadius: 8
-						}
-					]
-				},
-				options: {
-					...base,
-					scales: {
-						x: {
-							...(baseScales.x ?? {}),
-							title: { display: true, text: 'Local time', color: theme.mutedText }
-						},
-						y: {
-							...(baseScales.y ?? {}),
-							beginAtZero: true,
-							title: { display: true, text: 'Workouts', color: theme.mutedText }
+			if (nonEmpty.length) {
+				timeDistributionChart = upsertChart(timeDistributionChart, timeCanvas, {
+					type: 'bar',
+					data: {
+						labels: nonEmpty.map((p) => p.label),
+						datasets: [
+							{
+								label: 'Workouts',
+								data: nonEmpty.map((p) => p.count),
+								backgroundColor: rgba(theme.primary, theme.isDark ? 0.72 : 0.62),
+								borderColor: rgba(theme.primary, theme.isDark ? 0.92 : 0.85),
+								borderWidth: 1,
+								borderRadius: 8
+							}
+						]
+					},
+					options: {
+						...base,
+						scales: {
+							x: {
+								...(baseScales.x ?? {}),
+								title: { display: true, text: 'Workout local time', color: theme.mutedText }
+							},
+							y: {
+								...(baseScales.y ?? {}),
+								beginAtZero: true,
+								title: { display: true, text: 'Workouts', color: theme.mutedText }
+							}
 						}
 					}
-				}
-			});
+				});
+			} else {
+				timeDistributionChart?.destroy();
+				timeDistributionChart = null;
+			}
 		} else {
 			timeDistributionChart?.destroy();
 			timeDistributionChart = null;

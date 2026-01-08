@@ -3,6 +3,7 @@ use chrono::Timelike;
 use once_cell::sync::Lazy;
 use serde_json::{json, Value};
 use sqlx::sqlite::SqlitePoolOptions;
+use sqlx::Row;
 use std::path::Path;
 use std::sync::Mutex;
 use tempfile::TempDir;
@@ -218,7 +219,12 @@ async fn replace_sets_overwrites_existing_sets() {
 
     let req = test::TestRequest::post()
         .uri("/api/workouts")
-        .set_json(json!({ "date": now, "start_time": now, "notes": null }))
+        .set_json(json!({
+            "date": now,
+            "start_time": now,
+            "notes": null,
+            "timezone_offset_minutes": -60
+        }))
         .to_request();
     let workout_id = json_body(test::call_service(&app, req).await).await["id"]
         .as_i64()
@@ -324,7 +330,12 @@ async fn exercise_lookups_and_progress_endpoints_work() {
 
     let req = test::TestRequest::post()
         .uri("/api/workouts")
-        .set_json(json!({ "date": now, "start_time": now, "notes": null }))
+        .set_json(json!({
+            "date": now,
+            "start_time": now,
+            "notes": null,
+            "timezone_offset_minutes": -60
+        }))
         .to_request();
     let workout_id = json_body(test::call_service(&app, req).await).await["id"]
         .as_i64()
@@ -435,6 +446,25 @@ async fn exercise_lookups_and_progress_endpoints_work() {
         };
         ts == now
     }));
+
+    assert!(body.get("session_start_samples").is_some());
+    assert!(body["session_start_samples"].is_array());
+    let samples = body["session_start_samples"]
+        .as_array()
+        .expect("session_start_samples array");
+    let sample = samples
+        .iter()
+        .find(|item| {
+            let Some(raw) = item.get("start_time").and_then(|v| v.as_str()) else {
+                return false;
+            };
+            let Ok(ts) = raw.parse::<chrono::DateTime<chrono::Utc>>() else {
+                return false;
+            };
+            ts == now
+        })
+        .expect("session_start_samples contains the workout");
+    assert_eq!(sample["timezone_offset_minutes"], -60);
 
     let req = test::TestRequest::get()
         .uri("/api/progress/volume?exercise_type=Squat")
@@ -580,6 +610,78 @@ async fn logs_endpoints_work_and_enforce_limits() {
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 413);
+}
+
+#[actix_web::test]
+async fn schema_migration_backfills_amsterdam_timezone_offsets_dst_aware() {
+    let _env = TestEnv::new();
+
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite:database/swolemate.db")
+        .await
+        .expect("connect sqlite");
+
+    schema::setup_schema(&pool).await.expect("setup_schema");
+
+    let summer: chrono::DateTime<chrono::Utc> = "2025-07-01T08:00:00Z".parse().unwrap();
+    let winter: chrono::DateTime<chrono::Utc> = "2025-01-15T08:00:00Z".parse().unwrap();
+
+    for started_at in [summer, winter] {
+        sqlx::query(
+            r#"
+            INSERT INTO workouts (date, start_time, end_time, notes, feedback, timezone_offset_minutes)
+            VALUES (?, ?, ?, NULL, NULL, NULL)
+            "#,
+        )
+        .bind(started_at)
+        .bind(started_at)
+        .bind(started_at + chrono::Duration::minutes(1))
+        .execute(&pool)
+        .await
+        .expect("insert workout");
+    }
+
+    sqlx::query("DELETE FROM schema_version WHERE version = 4")
+        .execute(&pool)
+        .await
+        .expect("delete schema v4 marker");
+
+    sqlx::query("UPDATE workouts SET timezone_offset_minutes = NULL")
+        .execute(&pool)
+        .await
+        .expect("clear offsets");
+
+    schema::setup_schema(&pool)
+        .await
+        .expect("setup_schema applies v4 backfill");
+
+    let rows = sqlx::query(
+        r#"
+        SELECT start_time, timezone_offset_minutes
+        FROM workouts
+        WHERE start_time IN (?, ?)
+        "#,
+    )
+    .bind(summer)
+    .bind(winter)
+    .fetch_all(&pool)
+    .await
+    .expect("select backfilled offsets");
+
+    assert_eq!(rows.len(), 2);
+
+    for row in rows {
+        let start_time: chrono::DateTime<chrono::Utc> = row.try_get("start_time").unwrap();
+        let offset: i64 = row.try_get("timezone_offset_minutes").unwrap();
+        if start_time == summer {
+            assert_eq!(offset, -120);
+        } else if start_time == winter {
+            assert_eq!(offset, -60);
+        } else {
+            panic!("unexpected start_time: {start_time}");
+        }
+    }
 }
 
 #[actix_web::test]

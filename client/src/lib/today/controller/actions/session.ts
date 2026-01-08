@@ -40,18 +40,21 @@ export function createSessionActions(args: {
 		try {
 			const demo = mode === 'demo' ? createDemoSession() : null;
 			const startIso = demo?.startedAt ?? new Date().toISOString();
+			const timezoneOffsetMinutes = new Date(startIso).getTimezoneOffset();
 
 			state.loading.set(true);
 			const payload = {
 				date: startIso,
 				start_time: startIso,
-				notes: demo?.notes?.trim() || undefined
+				notes: demo?.notes?.trim() || undefined,
+				timezone_offset_minutes: timezoneOffsetMinutes
 			};
 			const created = await createWorkout(payload);
 
 			state.currentSession.set({
 				id: created.id,
 				startedAt: startIso,
+				timezoneOffsetMinutes,
 				notes: demo?.notes ?? '',
 				exercises: []
 			});
@@ -80,10 +83,12 @@ export function createSessionActions(args: {
 				setOffline(state, 'Offline mode: started a local session (will sync when back online).');
 				const demo = mode === 'demo' ? createDemoSession() : null;
 				const startIso = demo?.startedAt ?? new Date().toISOString();
+				const timezoneOffsetMinutes = new Date(startIso).getTimezoneOffset();
 				const localId = makeLocalNumericId();
 				state.currentSession.set({
 					id: localId,
 					startedAt: startIso,
+					timezoneOffsetMinutes,
 					notes: demo?.notes ?? '',
 					exercises: []
 				});

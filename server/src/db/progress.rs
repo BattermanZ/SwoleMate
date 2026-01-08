@@ -333,10 +333,11 @@ impl Database {
             })
             .collect::<Vec<_>>();
 
-        let session_start_times = sqlx::query!(
+        let session_start_rows = sqlx::query!(
             r#"
             SELECT
-                start_time as "start_time: DateTime<Utc>"
+                start_time as "start_time: DateTime<Utc>",
+                timezone_offset_minutes
             FROM workouts
             WHERE end_time > start_time
               AND date(start_time) >= date('now', 'start of month', '-11 months')
@@ -352,10 +353,22 @@ impl Database {
                 e
             );
             AppError::DatabaseError(e)
-        })?
-        .into_iter()
-        .map(|row| row.start_time)
-        .collect::<Vec<_>>();
+        })?;
+
+        let session_start_times = session_start_rows
+            .iter()
+            .map(|row| row.start_time)
+            .collect::<Vec<_>>();
+
+        let session_start_samples = session_start_rows
+            .into_iter()
+            .map(|row| {
+                json!({
+                    "start_time": row.start_time,
+                    "timezone_offset_minutes": row.timezone_offset_minutes
+                })
+            })
+            .collect::<Vec<_>>();
 
         Ok(json!({
             "total_workouts": stats.total_workouts,
@@ -374,7 +387,8 @@ impl Database {
             "duration_distribution": duration_distribution,
             "sessions_per_month": monthly_sessions,
             "avg_exercise_duration_series": avg_exercise_duration_series,
-            "session_start_times": session_start_times
+            "session_start_times": session_start_times,
+            "session_start_samples": session_start_samples
         }))
     }
 

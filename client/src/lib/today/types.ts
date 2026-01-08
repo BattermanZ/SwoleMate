@@ -30,6 +30,7 @@ export type UiExercise = {
 export type UiSession = {
 	id: number;
 	startedAt: string;
+	timezoneOffsetMinutes?: number;
 	endedAt?: string;
 	notes: string;
 	mood?: UiMood;

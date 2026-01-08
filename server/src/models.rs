@@ -13,6 +13,8 @@ pub struct Workout {
     pub feedback: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub exercise_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timezone_offset_minutes: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
@@ -66,6 +68,8 @@ pub struct CreateWorkoutRequest {
     pub date: DateTime<Utc>,
     pub start_time: DateTime<Utc>,
     pub notes: Option<String>,
+    #[serde(default)]
+    pub timezone_offset_minutes: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
