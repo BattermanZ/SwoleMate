@@ -26,6 +26,9 @@ pub async fn create_workout(
     db: web::Data<Database>,
     workout_req: web::Json<CreateWorkoutRequest>,
 ) -> Result<HttpResponse, AppError> {
+    workout_req
+        .validate()
+        .map_err(|e| AppError::BadRequest(e))?;
     let workout_id = db.create_workout(&workout_req.0).await?;
     Ok(HttpResponse::Created().json(json!({
         "id": workout_id,
@@ -39,6 +42,7 @@ pub async fn end_workout(
     id: web::Path<i64>,
     end_req: web::Json<UpdateWorkoutRequest>,
 ) -> Result<HttpResponse, AppError> {
+    end_req.validate().map_err(|e| AppError::BadRequest(e))?;
     db.update_workout_end_time(
         *id,
         end_req.end_time,
@@ -57,11 +61,7 @@ pub async fn update_workout_times(
     id: web::Path<i64>,
     req: web::Json<UpdateWorkoutTimesRequest>,
 ) -> Result<HttpResponse, AppError> {
-    if req.end_time < req.start_time {
-        return Err(AppError::BadRequest(
-            "end_time must be greater than or equal to start_time".to_string(),
-        ));
-    }
+    req.validate().map_err(|e| AppError::BadRequest(e))?;
 
     db.update_workout_times(*id, req.start_time, req.end_time)
         .await?;
@@ -109,6 +109,9 @@ pub async fn create_exercise(
     workout_id: web::Path<i64>,
     exercise_req: web::Json<CreateExerciseRequest>,
 ) -> Result<HttpResponse, AppError> {
+    exercise_req
+        .validate()
+        .map_err(|e| AppError::BadRequest(e))?;
     let exercise_id = db.create_exercise(*workout_id, &exercise_req.0).await?;
     Ok(HttpResponse::Created().json(json!({
         "id": exercise_id,
@@ -122,6 +125,7 @@ pub async fn end_exercise(
     id: web::Path<i64>,
     end_req: web::Json<UpdateExerciseRequest>,
 ) -> Result<HttpResponse, AppError> {
+    end_req.validate().map_err(|e| AppError::BadRequest(e))?;
     db.update_exercise(*id, &end_req.0).await?;
     Ok(HttpResponse::Ok().json(json!({
         "message": "Exercise ended successfully"
@@ -134,6 +138,7 @@ pub async fn create_set(
     exercise_id: web::Path<i64>,
     set_req: web::Json<CreateSetRequest>,
 ) -> Result<HttpResponse, AppError> {
+    set_req.validate().map_err(|e| AppError::BadRequest(e))?;
     let set_id = db.create_set(*exercise_id, &set_req.0).await?;
     Ok(HttpResponse::Created().json(json!({
         "id": set_id,
@@ -147,6 +152,9 @@ pub async fn replace_sets(
     exercise_id: web::Path<i64>,
     sets_req: web::Json<Vec<CreateSetRequest>>,
 ) -> Result<HttpResponse, AppError> {
+    for s in sets_req.iter() {
+        s.validate().map_err(|e| AppError::BadRequest(e))?;
+    }
     let sets = db
         .replace_sets_for_exercise(*exercise_id, &sets_req.0)
         .await?;
@@ -276,6 +284,10 @@ pub async fn restore_backup(
     filename: web::Path<String>,
     db: web::Data<Database>,
 ) -> Result<HttpResponse, AppError> {
+    if !is_safe_backup_filename(&filename) {
+        return Err(AppError::BadRequest("Invalid backup filename".to_string()));
+    }
+
     // Close all existing connections in the pool
     let current_pool = db.pool().await;
     current_pool.close().await;
@@ -372,6 +384,10 @@ pub async fn restore_backup(
 
 #[delete("/api/backups/{filename}")]
 pub async fn delete_backup(filename: web::Path<String>) -> Result<HttpResponse, AppError> {
+    if !is_safe_backup_filename(&filename) {
+        return Err(AppError::BadRequest("Invalid backup filename".to_string()));
+    }
+
     backup::delete_backup(&filename).await.map_err(|e| {
         error!("Failed to delete backup: {}", e);
         AppError::InternalError(e.to_string())
@@ -444,4 +460,19 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(get_exercise_progress)
         .service(get_workout_stats)
         .service(get_volume_stats);
+}
+
+fn is_safe_backup_filename(filename: &str) -> bool {
+    if filename.is_empty() || filename.len() > 200 {
+        return false;
+    }
+    if !filename.ends_with(".tar.gz") {
+        return false;
+    }
+    if filename.contains('/') || filename.contains('\\') || filename.contains("..") {
+        return false;
+    }
+    filename
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
 }

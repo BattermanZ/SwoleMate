@@ -1,5 +1,5 @@
 use actix_cors::Cors;
-use actix_web::{App, HttpServer};
+use actix_web::{middleware::DefaultHeaders, web, App, HttpServer};
 use chrono::{Datelike, Local, NaiveDate, TimeZone, Weekday};
 use log::{error, info, LevelFilter};
 use sqlx::sqlite::SqlitePoolOptions;
@@ -187,6 +187,27 @@ async fn main() -> std::io::Result<()> {
 
     info!("Starting SwoleMate server...");
 
+    let app_env = env::var("APP_ENV")
+        .unwrap_or_else(|_| "development".to_string())
+        .to_lowercase();
+    let auth = middleware::ApiAuth::from_env();
+    let enable_hsts = app_env == "production"
+        && env::var("ENABLE_HSTS")
+            .ok()
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+    let hsts_max_age = env::var("HSTS_MAX_AGE")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(31536000);
+    if app_env == "production" && !auth.is_configured() {
+        error!("APP_ENV=production requires SWOLEMATE_API_TOKEN and/or SWOLEMATE_ADMIN_TOKEN");
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Missing API token configuration",
+        ));
+    }
+
     // Get database URL from environment
     let database_url =
         env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:database/swolemate.db".to_string());
@@ -259,6 +280,23 @@ async fn main() -> std::io::Result<()> {
         env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:2470".to_string());
     info!("Allowing CORS for frontend URL: {}", frontend_url);
 
+    let cors_allowed_origins = env::var("CORS_ALLOWED_ORIGINS")
+        .ok()
+        .map(|raw| {
+            raw.split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>()
+        })
+        .filter(|v| !v.is_empty());
+
+    let json_body_limit = env::var("JSON_BODY_LIMIT_BYTES")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(512 * 1024);
+
+    let concurrency = middleware::ApiConcurrency::from_env();
+
     info!("Server starting on port {}", port);
 
     // Start the backup scheduler in a separate task
@@ -267,9 +305,8 @@ async fn main() -> std::io::Result<()> {
     // Create and start HTTP server
     HttpServer::new(move || {
         // Configure CORS
-        let cors = Cors::default()
-            .allowed_origin(&frontend_url)
-            .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
+        let mut cors = Cors::default()
+            .allowed_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])
             .allowed_headers(vec![
                 actix_web::http::header::AUTHORIZATION,
                 actix_web::http::header::ACCEPT,
@@ -277,13 +314,43 @@ async fn main() -> std::io::Result<()> {
             ])
             .max_age(3600);
 
+        if let Some(origins) = cors_allowed_origins.as_ref() {
+            for origin in origins {
+                cors = cors.allowed_origin(origin);
+            }
+        } else {
+            cors = cors.allowed_origin(&frontend_url);
+        }
+
+        let mut headers = DefaultHeaders::new()
+            .add(("X-Content-Type-Options", "nosniff"))
+            .add(("X-Frame-Options", "DENY"))
+            .add(("Referrer-Policy", "no-referrer"))
+            .add((
+                "Permissions-Policy",
+                "camera=(), microphone=(), geolocation=()",
+            ));
+        if enable_hsts {
+            headers = headers.add((
+                "Strict-Transport-Security",
+                format!("max-age={hsts_max_age}; includeSubDomains"),
+            ));
+        }
+
         App::new()
-            .wrap(cors)
+            .wrap(auth.clone())
+            .wrap(headers)
             .wrap(middleware::RequestLogger)
+            .wrap(cors)
+            .wrap(concurrency.clone())
+            .app_data(web::JsonConfig::default().limit(json_body_limit))
             .app_data(actix_web::web::Data::new(database.clone()))
             .configure(routes::config)
     })
     .bind(("0.0.0.0", port))?
+    .client_request_timeout(Duration::from_secs(15))
+    .client_disconnect_timeout(Duration::from_secs(5))
+    .keep_alive(Duration::from_secs(75))
     .run()
     .await
 }

@@ -1,7 +1,7 @@
 use crate::backup;
 use chrono::{Datelike, Duration, NaiveDate, TimeZone, Utc};
-use sqlx::{Pool, Sqlite};
 use sqlx::Row;
+use sqlx::{Pool, Sqlite};
 
 pub const INITIAL_SCHEMA: &str = r#"
 -- Enable foreign key support
@@ -43,9 +43,10 @@ CREATE INDEX IF NOT EXISTS idx_exercises_workout_id_composite ON exercises(worko
 CREATE INDEX IF NOT EXISTS idx_sets_exercise_id_composite ON sets(exercise_id, id);
 "#;
 
-pub const SCHEMA_UPDATES: &[(i64, &str)] = &[(
-    2,
-    r#"
+pub const SCHEMA_UPDATES: &[(i64, &str)] = &[
+    (
+        2,
+        r#"
         ALTER TABLE exercises ADD COLUMN per_side_weight INTEGER NOT NULL DEFAULT 0;
         ALTER TABLE exercises ADD COLUMN split_weight INTEGER NOT NULL DEFAULT 0;
         ALTER TABLE sets ADD COLUMN weight_left REAL;
@@ -62,19 +63,22 @@ pub const SCHEMA_UPDATES: &[(i64, &str)] = &[(
         CREATE INDEX IF NOT EXISTS idx_exercise_settings_exercise_id_composite
             ON exercise_settings(exercise_id, id);
         "#,
-),(
-    3,
-    r#"
+    ),
+    (
+        3,
+        r#"
         ALTER TABLE workouts ADD COLUMN timezone_offset_minutes INTEGER;
         "#,
-),(
-    4,
-    r#"
+    ),
+    (
+        4,
+        r#"
         -- Backfill workout timezone offsets for legacy data (Europe/Amsterdam).
         -- Applied via Rust migration logic in `setup_schema` (kept as a placeholder for versioning).
         SELECT 1;
         "#,
-)];
+    ),
+];
 
 pub const SCHEMA_VERSION_TABLE: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -237,9 +241,10 @@ fn amsterdam_timezone_offset_minutes_utc(utc: chrono::DateTime<Utc>) -> i64 {
 async fn backfill_amsterdam_timezone_offsets(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
     let mut tx = pool.begin().await?;
 
-    let rows = sqlx::query("SELECT id, start_time FROM workouts WHERE timezone_offset_minutes IS NULL")
-        .fetch_all(&mut *tx)
-        .await?;
+    let rows =
+        sqlx::query("SELECT id, start_time FROM workouts WHERE timezone_offset_minutes IS NULL")
+            .fetch_all(&mut *tx)
+            .await?;
 
     for row in rows {
         let id: i64 = row.try_get("id")?;

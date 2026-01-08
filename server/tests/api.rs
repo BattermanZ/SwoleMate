@@ -8,15 +8,26 @@ use std::path::Path;
 use std::sync::Mutex;
 use tempfile::TempDir;
 
-use swolemate_server::{db::Database, routes, schema};
+use swolemate_server::{db::Database, middleware, routes, schema};
 
 static TEST_ENV_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+
+const TEST_API_TOKEN: &str = "test-token";
+
+fn with_auth(req: test::TestRequest) -> test::TestRequest {
+    req.insert_header((
+        actix_web::http::header::AUTHORIZATION,
+        format!("Bearer {TEST_API_TOKEN}"),
+    ))
+}
 
 struct TestEnv {
     _lock: std::sync::MutexGuard<'static, ()>,
     prev_dir: std::path::PathBuf,
     _temp_dir: TempDir,
     prev_database_url: Option<String>,
+    prev_api_token: Option<String>,
+    prev_admin_token: Option<String>,
 }
 
 impl TestEnv {
@@ -39,11 +50,18 @@ impl TestEnv {
         let prev_database_url = std::env::var("DATABASE_URL").ok();
         std::env::set_var("DATABASE_URL", "sqlite:database/swolemate.db");
 
+        let prev_api_token = std::env::var("SWOLEMATE_API_TOKEN").ok();
+        let prev_admin_token = std::env::var("SWOLEMATE_ADMIN_TOKEN").ok();
+        std::env::set_var("SWOLEMATE_API_TOKEN", TEST_API_TOKEN);
+        std::env::remove_var("SWOLEMATE_ADMIN_TOKEN");
+
         Self {
             _lock: lock,
             prev_dir,
             _temp_dir: temp_dir,
             prev_database_url,
+            prev_api_token,
+            prev_admin_token,
         }
     }
 }
@@ -55,6 +73,18 @@ impl Drop for TestEnv {
             std::env::set_var("DATABASE_URL", prev);
         } else {
             std::env::remove_var("DATABASE_URL");
+        }
+
+        if let Some(prev) = self.prev_api_token.take() {
+            std::env::set_var("SWOLEMATE_API_TOKEN", prev);
+        } else {
+            std::env::remove_var("SWOLEMATE_API_TOKEN");
+        }
+
+        if let Some(prev) = self.prev_admin_token.take() {
+            std::env::set_var("SWOLEMATE_ADMIN_TOKEN", prev);
+        } else {
+            std::env::remove_var("SWOLEMATE_ADMIN_TOKEN");
         }
     }
 }
@@ -87,6 +117,7 @@ async fn setup_test_app() -> (
     let database = Database::new(pool);
     let app = test::init_service(
         App::new()
+            .wrap(middleware::ApiAuth::from_env())
             .app_data(web::Data::new(database.clone()))
             .configure(routes::config),
     )
@@ -115,13 +146,97 @@ async fn health_check_works() {
 }
 
 #[actix_web::test]
+async fn auth_is_required_for_api_endpoints_when_configured() {
+    let _env = TestEnv::new();
+    let (_, app) = setup_test_app().await;
+
+    let req = test::TestRequest::get().uri("/api/workouts").to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 401);
+    let body = json_body(resp).await;
+    assert_eq!(body["error"], "Unauthorized");
+}
+
+#[actix_web::test]
+async fn validation_rejects_invalid_set_payloads() {
+    let _env = TestEnv::new();
+    let (_, app) = setup_test_app().await;
+
+    let now = chrono::Utc::now();
+    let req = with_auth(test::TestRequest::post())
+        .uri("/api/workouts")
+        .set_json(json!({
+            "date": now,
+            "start_time": now,
+            "notes": null,
+        }))
+        .to_request();
+    let workout_id = json_body(test::call_service(&app, req).await).await["id"]
+        .as_i64()
+        .unwrap();
+
+    let req = with_auth(test::TestRequest::post())
+        .uri(&format!("/api/workouts/{workout_id}/exercises"))
+        .set_json(json!({
+            "exercise_type": "Bench Press",
+            "start_time": now,
+            "notes": null,
+        }))
+        .to_request();
+    let exercise_id = json_body(test::call_service(&app, req).await).await["id"]
+        .as_i64()
+        .unwrap();
+
+    let req = with_auth(test::TestRequest::post())
+        .uri(&format!("/api/exercises/{exercise_id}/sets"))
+        .set_json(json!({
+            "reps": 10,
+            "weight": -1.0,
+            "notes": null
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+
+    let req = with_auth(test::TestRequest::post())
+        .uri(&format!("/api/exercises/{exercise_id}/sets"))
+        .set_json(json!({
+            "reps": 10,
+            "weight": 20.0,
+            "weight_left": 10.0,
+            "notes": null
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+}
+
+#[actix_web::test]
+async fn invalid_backup_filenames_are_rejected_before_io() {
+    let _env = TestEnv::new();
+    let (_, app) = setup_test_app().await;
+
+    let req = with_auth(test::TestRequest::post())
+        .uri("/api/backups/..tar.gz/restore")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+
+    let req = with_auth(test::TestRequest::delete())
+        .uri("/api/backups/not-a-backup.zip")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+}
+
+#[actix_web::test]
 async fn workout_and_exercise_flow_works() {
     let _env = TestEnv::new();
     let (_, app) = setup_test_app().await;
 
     let now = chrono::Utc::now();
 
-    let req = test::TestRequest::post()
+    let req = with_auth(test::TestRequest::post())
         .uri("/api/workouts")
         .set_json(json!({
             "date": now,
@@ -134,7 +249,7 @@ async fn workout_and_exercise_flow_works() {
     let body = json_body(resp).await;
     let workout_id = body["id"].as_i64().expect("workout id");
 
-    let req = test::TestRequest::put()
+    let req = with_auth(test::TestRequest::put())
         .uri(&format!("/api/workouts/{workout_id}/end"))
         .set_json(json!({
             "end_time": now + chrono::Duration::minutes(45),
@@ -145,7 +260,7 @@ async fn workout_and_exercise_flow_works() {
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success());
 
-    let req = test::TestRequest::post()
+    let req = with_auth(test::TestRequest::post())
         .uri(&format!("/api/workouts/{workout_id}/exercises"))
         .set_json(json!({
             "exercise_type": "Bench Press",
@@ -163,7 +278,7 @@ async fn workout_and_exercise_flow_works() {
     let body = json_body(resp).await;
     let exercise_id = body["id"].as_i64().expect("exercise id");
 
-    let req = test::TestRequest::post()
+    let req = with_auth(test::TestRequest::post())
         .uri(&format!("/api/exercises/{exercise_id}/sets"))
         .set_json(json!({
             "reps": 10,
@@ -176,7 +291,7 @@ async fn workout_and_exercise_flow_works() {
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 201);
 
-    let req = test::TestRequest::put()
+    let req = with_auth(test::TestRequest::put())
         .uri(&format!("/api/exercises/{exercise_id}/end"))
         .set_json(json!({
             "end_time": now + chrono::Duration::minutes(10),
@@ -187,7 +302,7 @@ async fn workout_and_exercise_flow_works() {
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success());
 
-    let req = test::TestRequest::get()
+    let req = with_auth(test::TestRequest::get())
         .uri(&format!("/api/workouts/{workout_id}"))
         .to_request();
     let resp = test::call_service(&app, req).await;
@@ -217,7 +332,7 @@ async fn replace_sets_overwrites_existing_sets() {
     let (_, app) = setup_test_app().await;
     let now = chrono::Utc::now();
 
-    let req = test::TestRequest::post()
+    let req = with_auth(test::TestRequest::post())
         .uri("/api/workouts")
         .set_json(json!({
             "date": now,
@@ -230,7 +345,7 @@ async fn replace_sets_overwrites_existing_sets() {
         .as_i64()
         .unwrap();
 
-    let req = test::TestRequest::post()
+    let req = with_auth(test::TestRequest::post())
         .uri(&format!("/api/workouts/{workout_id}/exercises"))
         .set_json(json!({
             "exercise_type": "Dumbbell Press",
@@ -243,14 +358,14 @@ async fn replace_sets_overwrites_existing_sets() {
         .as_i64()
         .unwrap();
 
-    let req = test::TestRequest::post()
+    let req = with_auth(test::TestRequest::post())
         .uri(&format!("/api/exercises/{exercise_id}/sets"))
         .set_json(json!({ "reps": 8, "weight": 22.5, "notes": null }))
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 201);
 
-    let req = test::TestRequest::put()
+    let req = with_auth(test::TestRequest::put())
         .uri(&format!("/api/exercises/{exercise_id}/sets"))
         .set_json(json!([
             { "reps": 10, "weight": 20.0, "weight_left": 20.0, "weight_right": 22.5, "notes": null },
@@ -263,7 +378,7 @@ async fn replace_sets_overwrites_existing_sets() {
     assert_eq!(replaced.as_array().unwrap().len(), 2);
     assert!(replaced[0]["id"].is_number());
 
-    let req = test::TestRequest::get()
+    let req = with_auth(test::TestRequest::get())
         .uri(&format!("/api/workouts/{workout_id}"))
         .to_request();
     let body = json_body(test::call_service(&app, req).await).await;
@@ -281,7 +396,7 @@ async fn cancel_endpoints_remove_data() {
     let (_, app) = setup_test_app().await;
     let now = chrono::Utc::now();
 
-    let req = test::TestRequest::post()
+    let req = with_auth(test::TestRequest::post())
         .uri("/api/workouts")
         .set_json(json!({ "date": now, "start_time": now, "notes": "to delete" }))
         .to_request();
@@ -289,7 +404,7 @@ async fn cancel_endpoints_remove_data() {
         .as_i64()
         .unwrap();
 
-    let req = test::TestRequest::post()
+    let req = with_auth(test::TestRequest::post())
         .uri(&format!("/api/workouts/{workout_id}/exercises"))
         .set_json(json!({ "exercise_type": "Row", "start_time": now, "notes": null }))
         .to_request();
@@ -297,25 +412,27 @@ async fn cancel_endpoints_remove_data() {
         .as_i64()
         .unwrap();
 
-    let req = test::TestRequest::delete()
+    let req = with_auth(test::TestRequest::delete())
         .uri(&format!("/api/exercises/{exercise_id}"))
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success());
 
-    let req = test::TestRequest::get()
+    let req = with_auth(test::TestRequest::get())
         .uri(&format!("/api/workouts/{workout_id}"))
         .to_request();
     let body = json_body(test::call_service(&app, req).await).await;
     assert!(body["exercises"].as_array().unwrap().is_empty());
 
-    let req = test::TestRequest::delete()
+    let req = with_auth(test::TestRequest::delete())
         .uri(&format!("/api/workouts/{workout_id}"))
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success());
 
-    let req = test::TestRequest::get().uri("/api/workouts").to_request();
+    let req = with_auth(test::TestRequest::get())
+        .uri("/api/workouts")
+        .to_request();
     let workouts = json_body(test::call_service(&app, req).await).await;
     assert!(workouts.as_array().unwrap().is_empty());
 }
@@ -328,7 +445,7 @@ async fn exercise_lookups_and_progress_endpoints_work() {
         .with_nanosecond(0)
         .expect("truncate nanos");
 
-    let req = test::TestRequest::post()
+    let req = with_auth(test::TestRequest::post())
         .uri("/api/workouts")
         .set_json(json!({
             "date": now,
@@ -341,7 +458,7 @@ async fn exercise_lookups_and_progress_endpoints_work() {
         .as_i64()
         .unwrap();
 
-    let req = test::TestRequest::post()
+    let req = with_auth(test::TestRequest::post())
         .uri(&format!("/api/workouts/{workout_id}/exercises"))
         .set_json(json!({
             "exercise_type": "Squat",
@@ -353,7 +470,7 @@ async fn exercise_lookups_and_progress_endpoints_work() {
         .as_i64()
         .unwrap();
 
-    let req = test::TestRequest::post()
+    let req = with_auth(test::TestRequest::post())
         .uri(&format!("/api/workouts/{workout_id}/exercises"))
         .set_json(json!({
             "exercise_type": "Bench Press",
@@ -364,21 +481,21 @@ async fn exercise_lookups_and_progress_endpoints_work() {
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 201);
 
-    let req = test::TestRequest::post()
+    let req = with_auth(test::TestRequest::post())
         .uri(&format!("/api/exercises/{exercise_id}/sets"))
         .set_json(json!({ "reps": 5, "weight": 100.0, "notes": null }))
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 201);
 
-    let req = test::TestRequest::get()
+    let req = with_auth(test::TestRequest::get())
         .uri("/api/exercises/types")
         .to_request();
     let body = json_body(test::call_service(&app, req).await).await;
     let types = body.as_array().unwrap();
     assert!(types.iter().any(|t| t == "Squat"));
 
-    let req = test::TestRequest::get()
+    let req = with_auth(test::TestRequest::get())
         .uri("/api/exercises/last/Squat")
         .to_request();
     let body = json_body(test::call_service(&app, req).await).await;
@@ -386,7 +503,7 @@ async fn exercise_lookups_and_progress_endpoints_work() {
     assert_eq!(body.as_array().unwrap().len(), 2);
 
     let end_time = now + chrono::Duration::minutes(40);
-    let req = test::TestRequest::put()
+    let req = with_auth(test::TestRequest::put())
         .uri(&format!("/api/workouts/{workout_id}/end"))
         .set_json(json!({
             "end_time": end_time,
@@ -397,14 +514,14 @@ async fn exercise_lookups_and_progress_endpoints_work() {
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success());
 
-    let req = test::TestRequest::get()
+    let req = with_auth(test::TestRequest::get())
         .uri("/api/progress/exercise/Squat")
         .to_request();
     let body = json_body(test::call_service(&app, req).await).await;
     assert!(body.is_array());
     assert!(!body.as_array().unwrap().is_empty());
 
-    let req = test::TestRequest::get()
+    let req = with_auth(test::TestRequest::get())
         .uri("/api/progress/workout-stats")
         .to_request();
     let body = json_body(test::call_service(&app, req).await).await;
@@ -466,7 +583,7 @@ async fn exercise_lookups_and_progress_endpoints_work() {
         .expect("session_start_samples contains the workout");
     assert_eq!(sample["timezone_offset_minutes"], -60);
 
-    let req = test::TestRequest::get()
+    let req = with_auth(test::TestRequest::get())
         .uri("/api/progress/volume?exercise_type=Squat")
         .to_request();
     let body = json_body(test::call_service(&app, req).await).await;
@@ -484,7 +601,7 @@ async fn workout_times_can_be_edited_and_date_tracks_start_time() {
         .with_nanosecond(0)
         .expect("truncate nanos");
 
-    let req = test::TestRequest::post()
+    let req = with_auth(test::TestRequest::post())
         .uri("/api/workouts")
         .set_json(json!({
             "date": start,
@@ -499,7 +616,7 @@ async fn workout_times_can_be_edited_and_date_tracks_start_time() {
     let new_start = start + chrono::Duration::hours(36);
     let new_end = new_start + chrono::Duration::minutes(55);
 
-    let req = test::TestRequest::put()
+    let req = with_auth(test::TestRequest::put())
         .uri(&format!("/api/workouts/{workout_id}/times"))
         .set_json(json!({
             "start_time": new_start,
@@ -509,7 +626,7 @@ async fn workout_times_can_be_edited_and_date_tracks_start_time() {
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success());
 
-    let req = test::TestRequest::get()
+    let req = with_auth(test::TestRequest::get())
         .uri(&format!("/api/workouts/{workout_id}"))
         .to_request();
     let body = json_body(test::call_service(&app, req).await).await;
@@ -534,7 +651,7 @@ async fn workout_times_can_be_edited_and_date_tracks_start_time() {
     assert_eq!(returned_end, new_end);
     assert_eq!(returned_date, new_start);
 
-    let bad_req = test::TestRequest::put()
+    let bad_req = with_auth(test::TestRequest::put())
         .uri(&format!("/api/workouts/{workout_id}/times"))
         .set_json(json!({
             "start_time": new_end,
@@ -550,9 +667,11 @@ async fn workouts_list_includes_exercise_count() {
     let _env = TestEnv::new();
     let (_, app) = setup_test_app().await;
 
-    let now = chrono::Utc::now().with_nanosecond(0).expect("truncate nanos");
+    let now = chrono::Utc::now()
+        .with_nanosecond(0)
+        .expect("truncate nanos");
 
-    let req = test::TestRequest::post()
+    let req = with_auth(test::TestRequest::post())
         .uri("/api/workouts")
         .set_json(json!({ "date": now, "start_time": now, "notes": null }))
         .to_request();
@@ -560,7 +679,7 @@ async fn workouts_list_includes_exercise_count() {
         .as_i64()
         .unwrap();
 
-    let req = test::TestRequest::post()
+    let req = with_auth(test::TestRequest::post())
         .uri(&format!("/api/workouts/{workout_id}/exercises"))
         .set_json(json!({
             "exercise_type": "Bench Press",
@@ -571,7 +690,9 @@ async fn workouts_list_includes_exercise_count() {
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 201);
 
-    let req = test::TestRequest::get().uri("/api/workouts").to_request();
+    let req = with_auth(test::TestRequest::get())
+        .uri("/api/workouts")
+        .to_request();
     let workouts = json_body(test::call_service(&app, req).await).await;
     let items = workouts.as_array().expect("workouts array");
     let selected = items
@@ -587,12 +708,14 @@ async fn logs_endpoints_work_and_enforce_limits() {
     let _env = TestEnv::new();
     let (_, app) = setup_test_app().await;
 
-    let req = test::TestRequest::post().uri("/api/logs/init").to_request();
+    let req = with_auth(test::TestRequest::post())
+        .uri("/api/logs/init")
+        .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success());
     assert!(Path::new("logs").exists());
 
-    let req = test::TestRequest::post()
+    let req = with_auth(test::TestRequest::post())
         .uri("/api/logs")
         .set_json(json!([
             {"level": "info", "msg": "hello"},
@@ -604,7 +727,7 @@ async fn logs_endpoints_work_and_enforce_limits() {
     assert!(Path::new("logs/client.log").exists());
 
     let too_many = (0..1001).map(|i| json!({ "idx": i })).collect::<Vec<_>>();
-    let req = test::TestRequest::post()
+    let req = with_auth(test::TestRequest::post())
         .uri("/api/logs")
         .set_json(too_many)
         .to_request();
@@ -690,20 +813,24 @@ async fn backups_endpoints_create_list_restore_delete() {
     let (_, app) = setup_test_app().await;
     let now = chrono::Utc::now();
 
-    let req = test::TestRequest::post()
+    let req = with_auth(test::TestRequest::post())
         .uri("/api/workouts")
         .set_json(json!({ "date": now, "start_time": now, "notes": "before" }))
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 201);
 
-    let req = test::TestRequest::post().uri("/api/backups").to_request();
+    let req = with_auth(test::TestRequest::post())
+        .uri("/api/backups")
+        .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 201);
     let backup = json_body(resp).await;
     let filename = backup["filename"].as_str().expect("filename").to_string();
 
-    let req = test::TestRequest::get().uri("/api/backups").to_request();
+    let req = with_auth(test::TestRequest::get())
+        .uri("/api/backups")
+        .to_request();
     let backups = json_body(test::call_service(&app, req).await).await;
     assert!(backups
         .as_array()
@@ -711,28 +838,32 @@ async fn backups_endpoints_create_list_restore_delete() {
         .iter()
         .any(|b| b["filename"] == filename));
 
-    let req = test::TestRequest::post()
+    let req = with_auth(test::TestRequest::post())
         .uri("/api/workouts")
         .set_json(json!({ "date": now, "start_time": now, "notes": "after" }))
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 201);
 
-    let req = test::TestRequest::get().uri("/api/workouts").to_request();
+    let req = with_auth(test::TestRequest::get())
+        .uri("/api/workouts")
+        .to_request();
     let workouts = json_body(test::call_service(&app, req).await).await;
     assert_eq!(workouts.as_array().unwrap().len(), 2);
 
-    let req = test::TestRequest::post()
+    let req = with_auth(test::TestRequest::post())
         .uri(&format!("/api/backups/{filename}/restore"))
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success());
 
-    let req = test::TestRequest::get().uri("/api/workouts").to_request();
+    let req = with_auth(test::TestRequest::get())
+        .uri("/api/workouts")
+        .to_request();
     let workouts = json_body(test::call_service(&app, req).await).await;
     assert_eq!(workouts.as_array().unwrap().len(), 1);
 
-    let req = test::TestRequest::delete()
+    let req = with_auth(test::TestRequest::delete())
         .uri(&format!("/api/backups/{filename}"))
         .to_request();
     let resp = test::call_service(&app, req).await;
@@ -744,7 +875,7 @@ async fn not_found_is_mapped_and_unknown_exercise_returns_null() {
     let _env = TestEnv::new();
     let (_, app) = setup_test_app().await;
 
-    let req = test::TestRequest::get()
+    let req = with_auth(test::TestRequest::get())
         .uri("/api/workouts/999999")
         .to_request();
     let resp = test::call_service(&app, req).await;
@@ -752,7 +883,7 @@ async fn not_found_is_mapped_and_unknown_exercise_returns_null() {
     let body = json_body(resp).await;
     assert!(body.get("error").is_some());
 
-    let req = test::TestRequest::get()
+    let req = with_auth(test::TestRequest::get())
         .uri("/api/exercises/last/Definitely%20Not%20A%20Real%20Exercise")
         .to_request();
     let resp = test::call_service(&app, req).await;
