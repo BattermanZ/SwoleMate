@@ -39,10 +39,35 @@
 	let newSettingValue = '';
 	let editing = false;
 	let locked = false;
+	let didPrefillFromLast = false;
 
 	$: notesDraft = exercise.notes;
 	$: locked = disabled || (exercise.status === 'done' && !editing);
 	$: if (exercise.status !== 'done') editing = false;
+	$: if (exercise.sets.length > 0) didPrefillFromLast = true;
+
+	$: if (
+		isOpen &&
+		!didPrefillFromLast &&
+		!locked &&
+		exercise.status === 'active' &&
+		lastTime?.sets?.length
+	) {
+		const first = lastTime.sets[0];
+		if (first) {
+			setReps = first.reps;
+			if (!exercise.perSideWeight) {
+				setWeight = first.weight;
+			} else if (!exercise.splitWeight) {
+				setWeight = first.weight;
+			} else {
+				setWeightLeft = first.weightLeft ?? first.weight;
+				setWeightRight = first.weightRight ?? first.weight;
+			}
+		}
+
+		didPrefillFromLast = true;
+	}
 
 	function toggleEditing() {
 		if (disabled) return;

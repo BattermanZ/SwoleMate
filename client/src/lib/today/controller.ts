@@ -30,6 +30,7 @@ type LastTime = {
 	startedAt: string;
 	notes: string;
 	sets: UiSession['exercises'][number]['sets'];
+	settings: UiSession['exercises'][number]['settings'];
 	perSideWeight: boolean;
 	splitWeight: boolean;
 };
@@ -327,10 +328,13 @@ export function createTodayController() {
 		error.set(null);
 
 		try {
+			const last = getLastTimeForExercise(trimmed);
 			const startIso = new Date().toISOString();
-			const perSideWeight = options?.perSideWeight ?? false;
-			const splitWeight = options?.splitWeight ?? false;
-			const settings = options?.settings ?? [];
+			const perSideWeight = options?.perSideWeight ?? last?.perSideWeight ?? false;
+			const requestedSplit = options?.splitWeight ?? last?.splitWeight ?? false;
+			const splitWeight = perSideWeight ? requestedSplit : false;
+			const settings =
+				options?.settings ?? last?.settings.map((s) => ({ key: s.key, value: s.value })) ?? [];
 
 			const created = await createExercise(session.id, {
 				exercise_type: trimmed,
@@ -745,6 +749,7 @@ export function createTodayController() {
 				startedAt: session.startedAt,
 				notes: match.notes,
 				sets: match.sets,
+				settings: match.settings,
 				perSideWeight: match.perSideWeight,
 				splitWeight: match.splitWeight
 			};
