@@ -3,11 +3,14 @@
 	import { AppBar } from '@skeletonlabs/skeleton-svelte';
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { auth } from '$lib/auth';
 	import { logger } from '$lib/logger';
 
 	let drawerOpen = false;
 	let darkMode = false;
 	const THEME_KEY = 'theme';
+	const authState = auth.state;
 
 	// Navigation items
 	const navItems = [
@@ -17,6 +20,13 @@
 		{ href: '/settings', label: 'Help', icon: '❓' },
 		{ href: '/backups', label: 'Backups', icon: '💾' }
 	];
+
+	$: isLogin = $page.url.pathname === '/login';
+	$: canSeeBackups =
+		$authState.status === 'authenticated' &&
+		$authState.user?.role === 'admin' &&
+		!$authState.offline;
+	$: visibleNavItems = navItems.filter((item) => item.href !== '/backups' || canSeeBackups);
 
 	function toggleDrawer(): void {
 		drawerOpen = !drawerOpen;
@@ -40,6 +50,8 @@
 
 	// Add service worker registration
 	onMount(() => {
+		void auth.refresh();
+
 		if (typeof document !== 'undefined') {
 			try {
 				const stored = localStorage.getItem(THEME_KEY);
@@ -79,6 +91,19 @@
 				});
 		}
 	});
+
+	$: if ($authState.status === 'unauthenticated' && !isLogin) {
+		void goto('/login');
+	}
+
+	$: if ($authState.status === 'authenticated' && isLogin) {
+		void goto('/');
+	}
+
+	$: {
+		const shouldEnableRemoteLogs = $authState.status === 'authenticated' && !$authState.offline;
+		logger.setRemoteEnabled(shouldEnableRemoteLogs);
+	}
 </script>
 
 <div class="app-shell">
@@ -91,29 +116,33 @@
 				</a>
 			</AppBar.Lead>
 			<AppBar.Trail class="flex items-center gap-2">
-				<nav class="hidden md:block">
-					<ul class="list-nav flex space-x-4">
-						{#each navItems as item}
-							<li>
-								<a
-									href={item.href}
-									class="btn btn-sm {$page.url.pathname === item.href
-										? 'variant-filled-primary'
-										: 'variant-ghost-primary'}"
-								>
-									<span>{item.icon}</span>
-									<span>{item.label}</span>
-								</a>
-							</li>
-						{/each}
-					</ul>
-				</nav>
+				{#if !isLogin}
+					<nav class="hidden md:block">
+						<ul class="list-nav flex space-x-4">
+							{#each visibleNavItems as item}
+								<li>
+									<a
+										href={item.href}
+										class="btn btn-sm {$page.url.pathname === item.href
+											? 'variant-filled-primary'
+											: 'variant-ghost-primary'}"
+									>
+										<span>{item.icon}</span>
+										<span>{item.label}</span>
+									</a>
+								</li>
+							{/each}
+						</ul>
+					</nav>
+				{/if}
 
-				<div class="md:hidden">
-					<button class="btn btn-sm variant-ghost-primary" on:click={toggleDrawer}>
-						<span>☰</span>
-					</button>
-				</div>
+				{#if !isLogin}
+					<div class="md:hidden">
+						<button class="btn btn-sm variant-ghost-primary" on:click={toggleDrawer}>
+							<span>☰</span>
+						</button>
+					</div>
+				{/if}
 
 				<button
 					type="button"
@@ -123,11 +152,15 @@
 				>
 					<span aria-hidden="true">{darkMode ? '🌙' : '☀️'}</span>
 				</button>
+
+				{#if !isLogin && $authState.offline}
+					<span class="badge variant-soft-warning hidden sm:inline-flex">Offline</span>
+				{/if}
 			</AppBar.Trail>
 		</AppBar.Toolbar>
 	</AppBar>
 
-	{#if drawerOpen}
+	{#if drawerOpen && !isLogin}
 		<div class="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
 			<button
 				class="absolute inset-0 bg-black/50"
@@ -138,7 +171,7 @@
 				class="absolute right-0 top-0 h-full w-72 bg-surface-50-900-token shadow-lg overflow-y-auto drawer-content p-4 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pr-[env(safe-area-inset-right)]"
 			>
 				<ul class="list-nav flex flex-col space-y-4">
-					{#each navItems as item}
+					{#each visibleNavItems as item}
 						<li>
 							<a
 								href={item.href}

@@ -13,6 +13,7 @@ vi.mock('$app/stores', () => {
 vi.mock('$lib/logger', () => {
 	return {
 		logger: {
+			setRemoteEnabled: vi.fn(),
 			debug: vi.fn(),
 			info: vi.fn(),
 			error: vi.fn()

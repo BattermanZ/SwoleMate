@@ -14,6 +14,7 @@ class Logger {
 	private static instance: Logger;
 	private logQueue: LogEntry[] = [];
 	private isProcessing: boolean = false;
+	private remoteEnabled: boolean = false;
 	private readonly API_BASE = config.apiUrl;
 	private isBrowser: boolean;
 
@@ -21,9 +22,6 @@ class Logger {
 		this.isBrowser = typeof window !== 'undefined';
 
 		if (this.isBrowser) {
-			// Create logs directory if it doesn't exist
-			this.createLogsDirectory();
-
 			// Process queued logs periodically
 			setInterval(() => this.processLogQueue(), 1000);
 
@@ -47,12 +45,26 @@ class Logger {
 		return Logger.instance;
 	}
 
+	public setRemoteEnabled(enabled: boolean) {
+		if (!this.isBrowser) return;
+		if (enabled && !this.remoteEnabled) {
+			this.remoteEnabled = true;
+			this.createLogsDirectory();
+			void this.processLogQueue();
+			return;
+		}
+
+		this.remoteEnabled = enabled;
+	}
+
 	private async createLogsDirectory() {
 		if (!this.isBrowser) return;
+		if (!this.remoteEnabled) return;
 
 		try {
 			const response = await fetch(`${this.API_BASE}/api/logs/init`, {
-				method: 'POST'
+				method: 'POST',
+				credentials: 'include'
 			});
 			if (!response.ok) {
 				console.error('Failed to create logs directory');
@@ -99,6 +111,7 @@ class Logger {
 
 	private async processLogQueue() {
 		if (!this.isBrowser || this.isProcessing || this.logQueue.length === 0) return;
+		if (!this.remoteEnabled) return;
 
 		this.isProcessing = true;
 		const logs = [...this.logQueue];
@@ -107,6 +120,7 @@ class Logger {
 		try {
 			const response = await fetch(`${this.API_BASE}/api/logs`, {
 				method: 'POST',
+				credentials: 'include',
 				headers: {
 					'Content-Type': 'application/json'
 				},
@@ -114,14 +128,17 @@ class Logger {
 			});
 
 			if (!response.ok) {
+				if (response.status === 401 || response.status === 403) {
+					// Don't retry until explicitly enabled again.
+					this.remoteEnabled = false;
+					return;
+				}
 				// If failed, add logs back to queue
 				this.logQueue.unshift(...logs);
-				console.error('Failed to send logs to server');
 			}
-		} catch (error) {
+		} catch {
 			// If failed, add logs back to queue
 			this.logQueue.unshift(...logs);
-			console.error('Failed to write logs:', error);
 		} finally {
 			this.isProcessing = false;
 		}

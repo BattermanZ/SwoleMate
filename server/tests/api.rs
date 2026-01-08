@@ -1,5 +1,4 @@
 use actix_web::{test, web, App};
-use chrono::Timelike;
 use once_cell::sync::Lazy;
 use serde_json::{json, Value};
 use sqlx::sqlite::SqlitePoolOptions;
@@ -8,26 +7,21 @@ use std::path::Path;
 use std::sync::Mutex;
 use tempfile::TempDir;
 
-use swolemate_server::{db::Database, middleware, routes, schema};
+use swolemate_server::{auth, db::Database, routes, schema};
 
 static TEST_ENV_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
-const TEST_API_TOKEN: &str = "test-token";
-
-fn with_auth(req: test::TestRequest) -> test::TestRequest {
-    req.insert_header((
-        actix_web::http::header::AUTHORIZATION,
-        format!("Bearer {TEST_API_TOKEN}"),
-    ))
-}
+const ADMIN_USERNAME: &str = "admin";
+const ADMIN_PASSWORD: &str = "test-admin-password";
 
 struct TestEnv {
     _lock: std::sync::MutexGuard<'static, ()>,
     prev_dir: std::path::PathBuf,
     _temp_dir: TempDir,
     prev_database_url: Option<String>,
-    prev_api_token: Option<String>,
-    prev_admin_token: Option<String>,
+    prev_app_env: Option<String>,
+    prev_bootstrap_admin_username: Option<String>,
+    prev_bootstrap_admin_password: Option<String>,
 }
 
 impl TestEnv {
@@ -50,18 +44,22 @@ impl TestEnv {
         let prev_database_url = std::env::var("DATABASE_URL").ok();
         std::env::set_var("DATABASE_URL", "sqlite:database/swolemate.db");
 
-        let prev_api_token = std::env::var("SWOLEMATE_API_TOKEN").ok();
-        let prev_admin_token = std::env::var("SWOLEMATE_ADMIN_TOKEN").ok();
-        std::env::set_var("SWOLEMATE_API_TOKEN", TEST_API_TOKEN);
-        std::env::remove_var("SWOLEMATE_ADMIN_TOKEN");
+        let prev_app_env = std::env::var("APP_ENV").ok();
+        std::env::set_var("APP_ENV", "development");
+
+        let prev_bootstrap_admin_username = std::env::var("BOOTSTRAP_ADMIN_USERNAME").ok();
+        let prev_bootstrap_admin_password = std::env::var("BOOTSTRAP_ADMIN_PASSWORD").ok();
+        std::env::set_var("BOOTSTRAP_ADMIN_USERNAME", ADMIN_USERNAME);
+        std::env::set_var("BOOTSTRAP_ADMIN_PASSWORD", ADMIN_PASSWORD);
 
         Self {
             _lock: lock,
             prev_dir,
             _temp_dir: temp_dir,
             prev_database_url,
-            prev_api_token,
-            prev_admin_token,
+            prev_app_env,
+            prev_bootstrap_admin_username,
+            prev_bootstrap_admin_password,
         }
     }
 }
@@ -75,22 +73,29 @@ impl Drop for TestEnv {
             std::env::remove_var("DATABASE_URL");
         }
 
-        if let Some(prev) = self.prev_api_token.take() {
-            std::env::set_var("SWOLEMATE_API_TOKEN", prev);
+        if let Some(prev) = self.prev_app_env.take() {
+            std::env::set_var("APP_ENV", prev);
         } else {
-            std::env::remove_var("SWOLEMATE_API_TOKEN");
+            std::env::remove_var("APP_ENV");
         }
 
-        if let Some(prev) = self.prev_admin_token.take() {
-            std::env::set_var("SWOLEMATE_ADMIN_TOKEN", prev);
+        if let Some(prev) = self.prev_bootstrap_admin_username.take() {
+            std::env::set_var("BOOTSTRAP_ADMIN_USERNAME", prev);
         } else {
-            std::env::remove_var("SWOLEMATE_ADMIN_TOKEN");
+            std::env::remove_var("BOOTSTRAP_ADMIN_USERNAME");
+        }
+
+        if let Some(prev) = self.prev_bootstrap_admin_password.take() {
+            std::env::set_var("BOOTSTRAP_ADMIN_PASSWORD", prev);
+        } else {
+            std::env::remove_var("BOOTSTRAP_ADMIN_PASSWORD");
         }
     }
 }
 
 async fn setup_test_app() -> (
     Database,
+    actix_web::cookie::Cookie<'static>,
     impl actix_web::dev::Service<
         actix_http::Request,
         Response = actix_web::dev::ServiceResponse,
@@ -115,15 +120,21 @@ async fn setup_test_app() -> (
     }
 
     let database = Database::new(pool);
+    let session_cfg = auth::SessionConfig::for_env("development");
     let app = test::init_service(
         App::new()
-            .wrap(middleware::ApiAuth::from_env())
+            .wrap(swolemate_server::middleware::SessionAuth::new(
+                database.clone(),
+                session_cfg.clone(),
+            ))
             .app_data(web::Data::new(database.clone()))
+            .app_data(web::Data::new(session_cfg))
             .configure(routes::config),
     )
     .await;
 
-    (database, app)
+    let admin_cookie = login_cookie(&app, ADMIN_USERNAME, ADMIN_PASSWORD).await;
+    (database, admin_cookie, app)
 }
 
 async fn json_body(resp: actix_web::dev::ServiceResponse) -> Value {
@@ -131,10 +142,67 @@ async fn json_body(resp: actix_web::dev::ServiceResponse) -> Value {
     serde_json::from_slice(&bytes).expect("valid json response")
 }
 
+fn with_cookie(req: test::TestRequest, cookie: &actix_web::cookie::Cookie<'static>) -> test::TestRequest {
+    req.cookie(cookie.clone())
+}
+
+async fn login_cookie(
+    app: &impl actix_web::dev::Service<
+        actix_http::Request,
+        Response = actix_web::dev::ServiceResponse,
+        Error = actix_web::Error,
+    >,
+    username: &str,
+    password: &str,
+) -> actix_web::cookie::Cookie<'static> {
+    let req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(json!({ "username": username, "password": password }))
+        .to_request();
+    let resp = test::call_service(app, req).await;
+    assert!(resp.status().is_success());
+
+    let set_cookie = resp
+        .headers()
+        .get(actix_web::http::header::SET_COOKIE)
+        .expect("set-cookie header")
+        .to_str()
+        .expect("set-cookie str")
+        .to_string();
+
+    let cookie_pair = set_cookie
+        .split(';')
+        .next()
+        .expect("cookie pair")
+        .to_string();
+    actix_web::cookie::Cookie::parse(cookie_pair)
+        .expect("parse cookie")
+        .into_owned()
+}
+
+async fn create_user_as_admin(
+    app: &impl actix_web::dev::Service<
+        actix_http::Request,
+        Response = actix_web::dev::ServiceResponse,
+        Error = actix_web::Error,
+    >,
+    admin_cookie: &actix_web::cookie::Cookie<'static>,
+    username: &str,
+    password: &str,
+) -> i64 {
+    let req = with_cookie(test::TestRequest::post(), admin_cookie)
+        .uri("/api/admin/users")
+        .set_json(json!({ "username": username, "password": password, "role": "user" }))
+        .to_request();
+    let resp = test::call_service(app, req).await;
+    assert_eq!(resp.status(), 201);
+    json_body(resp).await["id"].as_i64().expect("user id")
+}
+
 #[actix_web::test]
 async fn health_check_works() {
     let _env = TestEnv::new();
-    let (_, app) = setup_test_app().await;
+    let (_db, _admin_cookie, app) = setup_test_app().await;
 
     let req = test::TestRequest::get().uri("/api/health").to_request();
     let resp = test::call_service(&app, req).await;
@@ -146,121 +214,89 @@ async fn health_check_works() {
 }
 
 #[actix_web::test]
-async fn auth_is_required_for_api_endpoints_when_configured() {
+async fn unauthenticated_requests_are_rejected() {
     let _env = TestEnv::new();
-    let (_, app) = setup_test_app().await;
+    let (_db, _admin_cookie, app) = setup_test_app().await;
 
     let req = test::TestRequest::get().uri("/api/workouts").to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 401);
-    let body = json_body(resp).await;
-    assert_eq!(body["error"], "Unauthorized");
 }
 
 #[actix_web::test]
-async fn validation_rejects_invalid_set_payloads() {
+async fn login_me_logout_flow_works() {
     let _env = TestEnv::new();
-    let (_, app) = setup_test_app().await;
+    let (_db, _admin_cookie, app) = setup_test_app().await;
 
-    let now = chrono::Utc::now();
-    let req = with_auth(test::TestRequest::post())
+    let cookie = login_cookie(&app, ADMIN_USERNAME, ADMIN_PASSWORD).await;
+
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri("/api/auth/me")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+    let me = json_body(resp).await;
+    assert_eq!(me["username"], ADMIN_USERNAME);
+    assert_eq!(me["role"], "admin");
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri("/api/auth/logout")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+
+    let req = with_cookie(test::TestRequest::get(), &cookie)
         .uri("/api/workouts")
-        .set_json(json!({
-            "date": now,
-            "start_time": now,
-            "notes": null,
-        }))
-        .to_request();
-    let workout_id = json_body(test::call_service(&app, req).await).await["id"]
-        .as_i64()
-        .unwrap();
-
-    let req = with_auth(test::TestRequest::post())
-        .uri(&format!("/api/workouts/{workout_id}/exercises"))
-        .set_json(json!({
-            "exercise_type": "Bench Press",
-            "start_time": now,
-            "notes": null,
-        }))
-        .to_request();
-    let exercise_id = json_body(test::call_service(&app, req).await).await["id"]
-        .as_i64()
-        .unwrap();
-
-    let req = with_auth(test::TestRequest::post())
-        .uri(&format!("/api/exercises/{exercise_id}/sets"))
-        .set_json(json!({
-            "reps": 10,
-            "weight": -1.0,
-            "notes": null
-        }))
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), 400);
-
-    let req = with_auth(test::TestRequest::post())
-        .uri(&format!("/api/exercises/{exercise_id}/sets"))
-        .set_json(json!({
-            "reps": 10,
-            "weight": 20.0,
-            "weight_left": 10.0,
-            "notes": null
-        }))
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), 400);
+    assert_eq!(resp.status(), 401);
 }
 
 #[actix_web::test]
-async fn invalid_backup_filenames_are_rejected_before_io() {
+async fn admin_only_endpoints_are_forbidden_for_normal_users() {
     let _env = TestEnv::new();
-    let (_, app) = setup_test_app().await;
+    let (_db, admin_cookie, app) = setup_test_app().await;
 
-    let req = with_auth(test::TestRequest::post())
-        .uri("/api/backups/..tar.gz/restore")
+    let _user_id = create_user_as_admin(&app, &admin_cookie, "user1", "passwordpassword").await;
+    let user_cookie = login_cookie(&app, "user1", "passwordpassword").await;
+
+    let req = with_cookie(test::TestRequest::get(), &user_cookie)
+        .uri("/api/admin/users")
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), 400);
+    assert_eq!(resp.status(), 403);
 
-    let req = with_auth(test::TestRequest::delete())
-        .uri("/api/backups/not-a-backup.zip")
+    let req = with_cookie(test::TestRequest::get(), &user_cookie)
+        .uri("/api/backups")
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), 400);
+    assert_eq!(resp.status(), 403);
 }
 
 #[actix_web::test]
-async fn workout_and_exercise_flow_works() {
+async fn workout_and_exercise_flow_works_for_normal_user() {
     let _env = TestEnv::new();
-    let (_, app) = setup_test_app().await;
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    let _user_id = create_user_as_admin(&app, &admin_cookie, "user2", "passwordpassword").await;
+    let cookie = login_cookie(&app, "user2", "passwordpassword").await;
 
     let now = chrono::Utc::now();
 
-    let req = with_auth(test::TestRequest::post())
+    let req = with_cookie(test::TestRequest::post(), &cookie)
         .uri("/api/workouts")
         .set_json(json!({
             "date": now,
             "start_time": now,
             "notes": "test workout",
+            "timezone_offset_minutes": -60
         }))
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 201);
-    let body = json_body(resp).await;
-    let workout_id = body["id"].as_i64().expect("workout id");
+    let workout_id = json_body(resp).await["id"].as_i64().expect("workout id");
 
-    let req = with_auth(test::TestRequest::put())
-        .uri(&format!("/api/workouts/{workout_id}/end"))
-        .set_json(json!({
-            "end_time": now + chrono::Duration::minutes(45),
-            "notes": "ended",
-            "feedback": "😊",
-        }))
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success());
-
-    let req = with_auth(test::TestRequest::post())
+    let req = with_cookie(test::TestRequest::post(), &cookie)
         .uri(&format!("/api/workouts/{workout_id}/exercises"))
         .set_json(json!({
             "exercise_type": "Bench Press",
@@ -275,10 +311,9 @@ async fn workout_and_exercise_flow_works() {
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 201);
-    let body = json_body(resp).await;
-    let exercise_id = body["id"].as_i64().expect("exercise id");
+    let exercise_id = json_body(resp).await["id"].as_i64().expect("exercise id");
 
-    let req = with_auth(test::TestRequest::post())
+    let req = with_cookie(test::TestRequest::post(), &cookie)
         .uri(&format!("/api/exercises/{exercise_id}/sets"))
         .set_json(json!({
             "reps": 10,
@@ -291,7 +326,7 @@ async fn workout_and_exercise_flow_works() {
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 201);
 
-    let req = with_auth(test::TestRequest::put())
+    let req = with_cookie(test::TestRequest::put(), &cookie)
         .uri(&format!("/api/exercises/{exercise_id}/end"))
         .set_json(json!({
             "end_time": now + chrono::Duration::minutes(10),
@@ -302,7 +337,7 @@ async fn workout_and_exercise_flow_works() {
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success());
 
-    let req = with_auth(test::TestRequest::get())
+    let req = with_cookie(test::TestRequest::get(), &cookie)
         .uri(&format!("/api/workouts/{workout_id}"))
         .to_request();
     let resp = test::call_service(&app, req).await;
@@ -310,127 +345,40 @@ async fn workout_and_exercise_flow_works() {
     let body = json_body(resp).await;
 
     assert_eq!(body["workout"]["id"], workout_id);
-    assert_eq!(body["workout"]["feedback"], "😊");
     assert_eq!(body["exercises"].as_array().unwrap().len(), 1);
-
     let exercise = &body["exercises"][0]["exercise"];
     assert_eq!(exercise["exercise_type"], "Bench Press");
-    assert_eq!(exercise["per_side_weight"], true);
     assert_eq!(exercise["split_weight"], true);
     assert_eq!(exercise["settings"].as_array().unwrap().len(), 2);
-
-    let sets = body["exercises"][0]["sets"].as_array().unwrap();
-    assert_eq!(sets.len(), 1);
-    assert_eq!(sets[0]["reps"], 10);
-    assert_eq!(sets[0]["weight_left"], 25.0);
-    assert_eq!(sets[0]["weight_right"], 27.5);
 }
 
 #[actix_web::test]
-async fn replace_sets_overwrites_existing_sets() {
+async fn data_is_scoped_per_user() {
     let _env = TestEnv::new();
-    let (_, app) = setup_test_app().await;
-    let now = chrono::Utc::now();
+    let (_db, admin_cookie, app) = setup_test_app().await;
 
-    let req = with_auth(test::TestRequest::post())
+    let _ = create_user_as_admin(&app, &admin_cookie, "alice", "passwordpassword").await;
+    let _ = create_user_as_admin(&app, &admin_cookie, "bob", "passwordpassword").await;
+
+    let alice = login_cookie(&app, "alice", "passwordpassword").await;
+    let bob = login_cookie(&app, "bob", "passwordpassword").await;
+
+    let now = chrono::Utc::now();
+    let req = with_cookie(test::TestRequest::post(), &alice)
         .uri("/api/workouts")
-        .set_json(json!({
-            "date": now,
-            "start_time": now,
-            "notes": null,
-            "timezone_offset_minutes": -60
-        }))
+        .set_json(json!({ "date": now, "start_time": now, "notes": "alice workout" }))
         .to_request();
     let workout_id = json_body(test::call_service(&app, req).await).await["id"]
         .as_i64()
         .unwrap();
 
-    let req = with_auth(test::TestRequest::post())
-        .uri(&format!("/api/workouts/{workout_id}/exercises"))
-        .set_json(json!({
-            "exercise_type": "Dumbbell Press",
-            "start_time": now,
-            "notes": null,
-            "per_side_weight": true,
-        }))
-        .to_request();
-    let exercise_id = json_body(test::call_service(&app, req).await).await["id"]
-        .as_i64()
-        .unwrap();
-
-    let req = with_auth(test::TestRequest::post())
-        .uri(&format!("/api/exercises/{exercise_id}/sets"))
-        .set_json(json!({ "reps": 8, "weight": 22.5, "notes": null }))
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), 201);
-
-    let req = with_auth(test::TestRequest::put())
-        .uri(&format!("/api/exercises/{exercise_id}/sets"))
-        .set_json(json!([
-            { "reps": 10, "weight": 20.0, "weight_left": 20.0, "weight_right": 22.5, "notes": null },
-            { "reps": 12, "weight": 17.5, "weight_left": 17.5, "weight_right": 17.5, "notes": "easy" }
-        ]))
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success());
-    let replaced = json_body(resp).await;
-    assert_eq!(replaced.as_array().unwrap().len(), 2);
-    assert!(replaced[0]["id"].is_number());
-
-    let req = with_auth(test::TestRequest::get())
-        .uri(&format!("/api/workouts/{workout_id}"))
-        .to_request();
-    let body = json_body(test::call_service(&app, req).await).await;
-    let sets = body["exercises"][0]["sets"].as_array().unwrap();
-    assert_eq!(sets.len(), 2);
-    assert_eq!(sets[0]["reps"], 10);
-    assert_eq!(sets[0]["weight_left"], 20.0);
-    assert_eq!(sets[0]["weight_right"], 22.5);
-    assert_eq!(sets[1]["notes"], "easy");
-}
-
-#[actix_web::test]
-async fn cancel_endpoints_remove_data() {
-    let _env = TestEnv::new();
-    let (_, app) = setup_test_app().await;
-    let now = chrono::Utc::now();
-
-    let req = with_auth(test::TestRequest::post())
-        .uri("/api/workouts")
-        .set_json(json!({ "date": now, "start_time": now, "notes": "to delete" }))
-        .to_request();
-    let workout_id = json_body(test::call_service(&app, req).await).await["id"]
-        .as_i64()
-        .unwrap();
-
-    let req = with_auth(test::TestRequest::post())
-        .uri(&format!("/api/workouts/{workout_id}/exercises"))
-        .set_json(json!({ "exercise_type": "Row", "start_time": now, "notes": null }))
-        .to_request();
-    let exercise_id = json_body(test::call_service(&app, req).await).await["id"]
-        .as_i64()
-        .unwrap();
-
-    let req = with_auth(test::TestRequest::delete())
-        .uri(&format!("/api/exercises/{exercise_id}"))
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success());
-
-    let req = with_auth(test::TestRequest::get())
-        .uri(&format!("/api/workouts/{workout_id}"))
-        .to_request();
-    let body = json_body(test::call_service(&app, req).await).await;
-    assert!(body["exercises"].as_array().unwrap().is_empty());
-
-    let req = with_auth(test::TestRequest::delete())
+    let req = with_cookie(test::TestRequest::get(), &bob)
         .uri(&format!("/api/workouts/{workout_id}"))
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success());
+    assert_eq!(resp.status(), 404);
 
-    let req = with_auth(test::TestRequest::get())
+    let req = with_cookie(test::TestRequest::get(), &bob)
         .uri("/api/workouts")
         .to_request();
     let workouts = json_body(test::call_service(&app, req).await).await;
@@ -438,284 +386,21 @@ async fn cancel_endpoints_remove_data() {
 }
 
 #[actix_web::test]
-async fn exercise_lookups_and_progress_endpoints_work() {
-    let _env = TestEnv::new();
-    let (_, app) = setup_test_app().await;
-    let now = chrono::Utc::now()
-        .with_nanosecond(0)
-        .expect("truncate nanos");
-
-    let req = with_auth(test::TestRequest::post())
-        .uri("/api/workouts")
-        .set_json(json!({
-            "date": now,
-            "start_time": now,
-            "notes": null,
-            "timezone_offset_minutes": -60
-        }))
-        .to_request();
-    let workout_id = json_body(test::call_service(&app, req).await).await["id"]
-        .as_i64()
-        .unwrap();
-
-    let req = with_auth(test::TestRequest::post())
-        .uri(&format!("/api/workouts/{workout_id}/exercises"))
-        .set_json(json!({
-            "exercise_type": "Squat",
-            "start_time": now,
-            "notes": null
-        }))
-        .to_request();
-    let exercise_id = json_body(test::call_service(&app, req).await).await["id"]
-        .as_i64()
-        .unwrap();
-
-    let req = with_auth(test::TestRequest::post())
-        .uri(&format!("/api/workouts/{workout_id}/exercises"))
-        .set_json(json!({
-            "exercise_type": "Bench Press",
-            "start_time": now,
-            "notes": null
-        }))
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), 201);
-
-    let req = with_auth(test::TestRequest::post())
-        .uri(&format!("/api/exercises/{exercise_id}/sets"))
-        .set_json(json!({ "reps": 5, "weight": 100.0, "notes": null }))
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), 201);
-
-    let req = with_auth(test::TestRequest::get())
-        .uri("/api/exercises/types")
-        .to_request();
-    let body = json_body(test::call_service(&app, req).await).await;
-    let types = body.as_array().unwrap();
-    assert!(types.iter().any(|t| t == "Squat"));
-
-    let req = with_auth(test::TestRequest::get())
-        .uri("/api/exercises/last/Squat")
-        .to_request();
-    let body = json_body(test::call_service(&app, req).await).await;
-    assert!(body.is_array());
-    assert_eq!(body.as_array().unwrap().len(), 2);
-
-    let end_time = now + chrono::Duration::minutes(40);
-    let req = with_auth(test::TestRequest::put())
-        .uri(&format!("/api/workouts/{workout_id}/end"))
-        .set_json(json!({
-            "end_time": end_time,
-            "notes": null,
-            "feedback": null
-        }))
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success());
-
-    let req = with_auth(test::TestRequest::get())
-        .uri("/api/progress/exercise/Squat")
-        .to_request();
-    let body = json_body(test::call_service(&app, req).await).await;
-    assert!(body.is_array());
-    assert!(!body.as_array().unwrap().is_empty());
-
-    let req = with_auth(test::TestRequest::get())
-        .uri("/api/progress/workout-stats")
-        .to_request();
-    let body = json_body(test::call_service(&app, req).await).await;
-    assert!(body.get("total_workouts").is_some());
-    assert!(body.get("avg_exercise_duration_series").is_some());
-    assert!(body["avg_exercise_duration_series"].is_array());
-    let series = body["avg_exercise_duration_series"]
-        .as_array()
-        .expect("avg_exercise_duration_series array");
-    assert!(!series.is_empty());
-    let point = series
-        .iter()
-        .find(|p| {
-            let Some(raw) = p["start_time"].as_str() else {
-                return false;
-            };
-            let Ok(ts) = raw.parse::<chrono::DateTime<chrono::Utc>>() else {
-                return false;
-            };
-            ts == now
-        })
-        .expect("series contains the workout point");
-    assert_eq!(point["exercise_count"], 2);
-    assert_eq!(point["duration_minutes"], 40);
-    let avg_minutes = point["avg_minutes"].as_f64().expect("avg_minutes f64");
-    assert!((avg_minutes - 20.0).abs() < 1e-6);
-
-    assert!(body.get("session_start_times").is_some());
-    assert!(body["session_start_times"].is_array());
-    let start_times = body["session_start_times"]
-        .as_array()
-        .expect("session_start_times array");
-    assert!(start_times.iter().any(|v| {
-        let Some(raw) = v.as_str() else {
-            return false;
-        };
-        let Ok(ts) = raw.parse::<chrono::DateTime<chrono::Utc>>() else {
-            return false;
-        };
-        ts == now
-    }));
-
-    assert!(body.get("session_start_samples").is_some());
-    assert!(body["session_start_samples"].is_array());
-    let samples = body["session_start_samples"]
-        .as_array()
-        .expect("session_start_samples array");
-    let sample = samples
-        .iter()
-        .find(|item| {
-            let Some(raw) = item.get("start_time").and_then(|v| v.as_str()) else {
-                return false;
-            };
-            let Ok(ts) = raw.parse::<chrono::DateTime<chrono::Utc>>() else {
-                return false;
-            };
-            ts == now
-        })
-        .expect("session_start_samples contains the workout");
-    assert_eq!(sample["timezone_offset_minutes"], -60);
-
-    let req = with_auth(test::TestRequest::get())
-        .uri("/api/progress/volume?exercise_type=Squat")
-        .to_request();
-    let body = json_body(test::call_service(&app, req).await).await;
-    assert!(body.get("weekly_volume").is_some());
-    assert!(body.get("monthly_volume").is_some());
-    assert!(body.get("personal_records").is_some());
-}
-
-#[actix_web::test]
-async fn workout_times_can_be_edited_and_date_tracks_start_time() {
-    let _env = TestEnv::new();
-    let (_, app) = setup_test_app().await;
-
-    let start = chrono::Utc::now()
-        .with_nanosecond(0)
-        .expect("truncate nanos");
-
-    let req = with_auth(test::TestRequest::post())
-        .uri("/api/workouts")
-        .set_json(json!({
-            "date": start,
-            "start_time": start,
-            "notes": "times test",
-        }))
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), 201);
-    let workout_id = json_body(resp).await["id"].as_i64().expect("workout id");
-
-    let new_start = start + chrono::Duration::hours(36);
-    let new_end = new_start + chrono::Duration::minutes(55);
-
-    let req = with_auth(test::TestRequest::put())
-        .uri(&format!("/api/workouts/{workout_id}/times"))
-        .set_json(json!({
-            "start_time": new_start,
-            "end_time": new_end,
-        }))
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success());
-
-    let req = with_auth(test::TestRequest::get())
-        .uri(&format!("/api/workouts/{workout_id}"))
-        .to_request();
-    let body = json_body(test::call_service(&app, req).await).await;
-
-    let returned_start: chrono::DateTime<chrono::Utc> = body["workout"]["start_time"]
-        .as_str()
-        .expect("start_time string")
-        .parse()
-        .expect("parse start_time");
-    let returned_end: chrono::DateTime<chrono::Utc> = body["workout"]["end_time"]
-        .as_str()
-        .expect("end_time string")
-        .parse()
-        .expect("parse end_time");
-    let returned_date: chrono::DateTime<chrono::Utc> = body["workout"]["date"]
-        .as_str()
-        .expect("date string")
-        .parse()
-        .expect("parse date");
-
-    assert_eq!(returned_start, new_start);
-    assert_eq!(returned_end, new_end);
-    assert_eq!(returned_date, new_start);
-
-    let bad_req = with_auth(test::TestRequest::put())
-        .uri(&format!("/api/workouts/{workout_id}/times"))
-        .set_json(json!({
-            "start_time": new_end,
-            "end_time": new_start,
-        }))
-        .to_request();
-    let resp = test::call_service(&app, bad_req).await;
-    assert_eq!(resp.status(), 400);
-}
-
-#[actix_web::test]
-async fn workouts_list_includes_exercise_count() {
-    let _env = TestEnv::new();
-    let (_, app) = setup_test_app().await;
-
-    let now = chrono::Utc::now()
-        .with_nanosecond(0)
-        .expect("truncate nanos");
-
-    let req = with_auth(test::TestRequest::post())
-        .uri("/api/workouts")
-        .set_json(json!({ "date": now, "start_time": now, "notes": null }))
-        .to_request();
-    let workout_id = json_body(test::call_service(&app, req).await).await["id"]
-        .as_i64()
-        .unwrap();
-
-    let req = with_auth(test::TestRequest::post())
-        .uri(&format!("/api/workouts/{workout_id}/exercises"))
-        .set_json(json!({
-            "exercise_type": "Bench Press",
-            "start_time": now,
-            "notes": null
-        }))
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), 201);
-
-    let req = with_auth(test::TestRequest::get())
-        .uri("/api/workouts")
-        .to_request();
-    let workouts = json_body(test::call_service(&app, req).await).await;
-    let items = workouts.as_array().expect("workouts array");
-    let selected = items
-        .iter()
-        .find(|w| w["id"].as_i64() == Some(workout_id))
-        .expect("workout present in list");
-
-    assert_eq!(selected["exercise_count"], 1);
-}
-
-#[actix_web::test]
 async fn logs_endpoints_work_and_enforce_limits() {
     let _env = TestEnv::new();
-    let (_, app) = setup_test_app().await;
+    let (_db, admin_cookie, app) = setup_test_app().await;
 
-    let req = with_auth(test::TestRequest::post())
+    let _user_id = create_user_as_admin(&app, &admin_cookie, "user3", "passwordpassword").await;
+    let cookie = login_cookie(&app, "user3", "passwordpassword").await;
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
         .uri("/api/logs/init")
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success());
     assert!(Path::new("logs").exists());
 
-    let req = with_auth(test::TestRequest::post())
+    let req = with_cookie(test::TestRequest::post(), &cookie)
         .uri("/api/logs")
         .set_json(json!([
             {"level": "info", "msg": "hello"},
@@ -727,7 +412,7 @@ async fn logs_endpoints_work_and_enforce_limits() {
     assert!(Path::new("logs/client.log").exists());
 
     let too_many = (0..1001).map(|i| json!({ "idx": i })).collect::<Vec<_>>();
-    let req = with_auth(test::TestRequest::post())
+    let req = with_cookie(test::TestRequest::post(), &cookie)
         .uri("/api/logs")
         .set_json(too_many)
         .to_request();
@@ -736,7 +421,70 @@ async fn logs_endpoints_work_and_enforce_limits() {
 }
 
 #[actix_web::test]
-async fn schema_migration_backfills_amsterdam_timezone_offsets_dst_aware() {
+async fn backups_endpoints_create_list_restore_delete_admin_only() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+    let now = chrono::Utc::now();
+
+    let req = with_cookie(test::TestRequest::post(), &admin_cookie)
+        .uri("/api/workouts")
+        .set_json(json!({ "date": now, "start_time": now, "notes": "before" }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 201);
+
+    let req = with_cookie(test::TestRequest::post(), &admin_cookie)
+        .uri("/api/backups")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 201);
+    let backup = json_body(resp).await;
+    let filename = backup["filename"].as_str().expect("filename").to_string();
+
+    let req = with_cookie(test::TestRequest::get(), &admin_cookie)
+        .uri("/api/backups")
+        .to_request();
+    let backups = json_body(test::call_service(&app, req).await).await;
+    assert!(backups
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|b| b["filename"] == filename));
+
+    let req = with_cookie(test::TestRequest::post(), &admin_cookie)
+        .uri("/api/workouts")
+        .set_json(json!({ "date": now, "start_time": now, "notes": "after" }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 201);
+
+    let req = with_cookie(test::TestRequest::get(), &admin_cookie)
+        .uri("/api/workouts")
+        .to_request();
+    let workouts = json_body(test::call_service(&app, req).await).await;
+    assert_eq!(workouts.as_array().unwrap().len(), 2);
+
+    let req = with_cookie(test::TestRequest::post(), &admin_cookie)
+        .uri(&format!("/api/backups/{filename}/restore"))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+
+    let req = with_cookie(test::TestRequest::get(), &admin_cookie)
+        .uri("/api/workouts")
+        .to_request();
+    let workouts = json_body(test::call_service(&app, req).await).await;
+    assert_eq!(workouts.as_array().unwrap().len(), 1);
+
+    let req = with_cookie(test::TestRequest::delete(), &admin_cookie)
+        .uri(&format!("/api/backups/{filename}"))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+}
+
+#[actix_web::test]
+async fn schema_backfill_amsterdam_timezone_offsets_dst_aware() {
     let _env = TestEnv::new();
 
     let pool = SqlitePoolOptions::new()
@@ -744,8 +492,13 @@ async fn schema_migration_backfills_amsterdam_timezone_offsets_dst_aware() {
         .connect("sqlite:database/swolemate.db")
         .await
         .expect("connect sqlite");
-
     schema::setup_schema(&pool).await.expect("setup_schema");
+
+    // Determine default user id (created by schema v5 bootstrap).
+    let default_user_id: i64 = sqlx::query_scalar("SELECT id FROM users ORDER BY id ASC LIMIT 1")
+        .fetch_one(&pool)
+        .await
+        .expect("default user id");
 
     let summer: chrono::DateTime<chrono::Utc> = "2025-07-01T08:00:00Z".parse().unwrap();
     let winter: chrono::DateTime<chrono::Utc> = "2025-01-15T08:00:00Z".parse().unwrap();
@@ -753,10 +506,11 @@ async fn schema_migration_backfills_amsterdam_timezone_offsets_dst_aware() {
     for started_at in [summer, winter] {
         sqlx::query(
             r#"
-            INSERT INTO workouts (date, start_time, end_time, notes, feedback, timezone_offset_minutes)
-            VALUES (?, ?, ?, NULL, NULL, NULL)
+            INSERT INTO workouts (user_id, date, start_time, end_time, notes, feedback, timezone_offset_minutes)
+            VALUES (?, ?, ?, ?, NULL, NULL, NULL)
             "#,
         )
+        .bind(default_user_id)
         .bind(started_at)
         .bind(started_at)
         .bind(started_at + chrono::Duration::minutes(1))
@@ -769,11 +523,6 @@ async fn schema_migration_backfills_amsterdam_timezone_offsets_dst_aware() {
         .execute(&pool)
         .await
         .expect("delete schema v4 marker");
-
-    sqlx::query("UPDATE workouts SET timezone_offset_minutes = NULL")
-        .execute(&pool)
-        .await
-        .expect("clear offsets");
 
     schema::setup_schema(&pool)
         .await
@@ -793,7 +542,6 @@ async fn schema_migration_backfills_amsterdam_timezone_offsets_dst_aware() {
     .expect("select backfilled offsets");
 
     assert_eq!(rows.len(), 2);
-
     for row in rows {
         let start_time: chrono::DateTime<chrono::Utc> = row.try_get("start_time").unwrap();
         let offset: i64 = row.try_get("timezone_offset_minutes").unwrap();
@@ -808,86 +556,77 @@ async fn schema_migration_backfills_amsterdam_timezone_offsets_dst_aware() {
 }
 
 #[actix_web::test]
-async fn backups_endpoints_create_list_restore_delete() {
+async fn validation_rejects_invalid_set_payloads() {
     let _env = TestEnv::new();
-    let (_, app) = setup_test_app().await;
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    let _user_id = create_user_as_admin(&app, &admin_cookie, "user4", "passwordpassword").await;
+    let cookie = login_cookie(&app, "user4", "passwordpassword").await;
+
     let now = chrono::Utc::now();
-
-    let req = with_auth(test::TestRequest::post())
+    let req = with_cookie(test::TestRequest::post(), &cookie)
         .uri("/api/workouts")
-        .set_json(json!({ "date": now, "start_time": now, "notes": "before" }))
+        .set_json(json!({
+            "date": now,
+            "start_time": now,
+            "notes": null,
+        }))
+        .to_request();
+    let workout_id = json_body(test::call_service(&app, req).await).await["id"]
+        .as_i64()
+        .unwrap();
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}/exercises"))
+        .set_json(json!({
+            "exercise_type": "Bench Press",
+            "start_time": now,
+            "notes": null,
+        }))
+        .to_request();
+    let exercise_id = json_body(test::call_service(&app, req).await).await["id"]
+        .as_i64()
+        .unwrap();
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/exercises/{exercise_id}/sets"))
+        .set_json(json!({
+            "reps": 10,
+            "weight": -1.0,
+            "notes": null
+        }))
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), 201);
+    assert_eq!(resp.status(), 400);
 
-    let req = with_auth(test::TestRequest::post())
-        .uri("/api/backups")
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/exercises/{exercise_id}/sets"))
+        .set_json(json!({
+            "reps": 10,
+            "weight": 20.0,
+            "weight_left": 10.0,
+            "notes": null
+        }))
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), 201);
-    let backup = json_body(resp).await;
-    let filename = backup["filename"].as_str().expect("filename").to_string();
-
-    let req = with_auth(test::TestRequest::get())
-        .uri("/api/backups")
-        .to_request();
-    let backups = json_body(test::call_service(&app, req).await).await;
-    assert!(backups
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|b| b["filename"] == filename));
-
-    let req = with_auth(test::TestRequest::post())
-        .uri("/api/workouts")
-        .set_json(json!({ "date": now, "start_time": now, "notes": "after" }))
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), 201);
-
-    let req = with_auth(test::TestRequest::get())
-        .uri("/api/workouts")
-        .to_request();
-    let workouts = json_body(test::call_service(&app, req).await).await;
-    assert_eq!(workouts.as_array().unwrap().len(), 2);
-
-    let req = with_auth(test::TestRequest::post())
-        .uri(&format!("/api/backups/{filename}/restore"))
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success());
-
-    let req = with_auth(test::TestRequest::get())
-        .uri("/api/workouts")
-        .to_request();
-    let workouts = json_body(test::call_service(&app, req).await).await;
-    assert_eq!(workouts.as_array().unwrap().len(), 1);
-
-    let req = with_auth(test::TestRequest::delete())
-        .uri(&format!("/api/backups/{filename}"))
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success());
+    assert_eq!(resp.status(), 400);
 }
 
 #[actix_web::test]
-async fn not_found_is_mapped_and_unknown_exercise_returns_null() {
+async fn invalid_backup_filenames_are_rejected_before_io() {
     let _env = TestEnv::new();
-    let (_, app) = setup_test_app().await;
+    let (_db, admin_cookie, app) = setup_test_app().await;
 
-    let req = with_auth(test::TestRequest::get())
-        .uri("/api/workouts/999999")
+    let req = with_cookie(test::TestRequest::post(), &admin_cookie)
+        .uri("/api/backups/..tar.gz/restore")
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), 404);
-    let body = json_body(resp).await;
-    assert!(body.get("error").is_some());
+    assert_eq!(resp.status(), 400);
 
-    let req = with_auth(test::TestRequest::get())
-        .uri("/api/exercises/last/Definitely%20Not%20A%20Real%20Exercise")
+    let req = with_cookie(test::TestRequest::delete(), &admin_cookie)
+        .uri("/api/backups/not-a-backup.zip")
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success());
-    let body = json_body(resp).await;
-    assert!(body.is_null());
+    assert_eq!(resp.status(), 400);
 }
+

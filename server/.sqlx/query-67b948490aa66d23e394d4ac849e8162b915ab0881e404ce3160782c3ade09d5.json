@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE workouts\n            SET end_time = ?, notes = ?, feedback = ?\n            WHERE id = ? AND user_id = ?\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "67b948490aa66d23e394d4ac849e8162b915ab0881e404ce3160782c3ade09d5"
+}

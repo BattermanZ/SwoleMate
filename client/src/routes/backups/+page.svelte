@@ -1,5 +1,8 @@
 <script lang="ts">
 	import {
+		adminCreateUser,
+		adminDisableUser,
+		adminListUsers,
 		getBackups,
 		createBackup,
 		restoreBackup,
@@ -8,7 +11,9 @@
 		getWorkout
 	} from '$lib/api';
 	import type { BackupInfo } from '$lib/api';
+	import type { AdminUserListItem } from '$lib/api';
 	import { browser } from '$app/environment';
+	import { auth } from '$lib/auth';
 	import { logger } from '$lib/logger';
 	import { formatDateLongWithTime } from '$lib/utils/date';
 
@@ -18,6 +23,17 @@
 	let error: string | null = null;
 	let exporting = false;
 	let exportError: string | null = null;
+
+	const authState = auth.state;
+	$: isAdmin = $authState.user?.role === 'admin';
+	$: canUseAdminEndpoints = isAdmin && !$authState.offline;
+
+	let users: AdminUserListItem[] = [];
+	let usersLoading = false;
+	let usersError: string | null = null;
+	let createUsername = '';
+	let createPassword = '';
+	let createRole: 'user' | 'admin' = 'user';
 
 	function formatBackupFilename(filename: string): string {
 		// New format: swolemate_YYYY-MM-DD_HH-mm_<auto|manual>(-N).tar.gz
@@ -62,6 +78,7 @@
 	}
 
 	async function loadBackups() {
+		if (!canUseAdminEndpoints) return;
 		try {
 			loading = true;
 			error = null;
@@ -75,7 +92,60 @@
 		}
 	}
 
+	async function loadUsers() {
+		if (!canUseAdminEndpoints) return;
+		try {
+			usersLoading = true;
+			usersError = null;
+			users = await adminListUsers();
+		} catch (e) {
+			usersError = e instanceof Error ? e.message : 'Failed to load users';
+		} finally {
+			usersLoading = false;
+		}
+	}
+
+	async function handleCreateUser() {
+		if (!canUseAdminEndpoints) return;
+		usersError = null;
+		if (!createUsername.trim() || !createPassword) {
+			usersError = 'Username and password are required.';
+			return;
+		}
+		try {
+			usersLoading = true;
+			await adminCreateUser({
+				username: createUsername,
+				password: createPassword,
+				role: createRole
+			});
+			createUsername = '';
+			createPassword = '';
+			createRole = 'user';
+			await loadUsers();
+		} catch (e) {
+			usersError = e instanceof Error ? e.message : 'Failed to create user';
+		} finally {
+			usersLoading = false;
+		}
+	}
+
+	async function handleDisableUser(id: number, username: string) {
+		if (!canUseAdminEndpoints) return;
+		if (!confirm(`Disable ${username}? This revokes all sessions for that user.`)) return;
+		try {
+			usersLoading = true;
+			await adminDisableUser(id);
+			await loadUsers();
+		} catch (e) {
+			usersError = e instanceof Error ? e.message : 'Failed to disable user';
+		} finally {
+			usersLoading = false;
+		}
+	}
+
 	async function handleCreateBackup() {
+		if (!canUseAdminEndpoints) return;
 		try {
 			loading = true;
 			error = null;
@@ -91,6 +161,7 @@
 	}
 
 	async function handleRestore(filename: string) {
+		if (!canUseAdminEndpoints) return;
 		if (
 			!confirm(
 				'Are you sure you want to restore this backup? This will replace your current database.'
@@ -114,6 +185,7 @@
 	}
 
 	async function handleDelete(filename: string) {
+		if (!canUseAdminEndpoints) return;
 		if (!confirm('Are you sure you want to delete this backup? This cannot be undone.')) {
 			return;
 		}
@@ -135,6 +207,7 @@
 	async function exportAllData() {
 		if (!browser) return;
 		if (exporting) return;
+		if (!canUseAdminEndpoints) return;
 
 		try {
 			exporting = true;
@@ -170,6 +243,11 @@
 			exporting = false;
 		}
 	}
+
+	$: if (canUseAdminEndpoints) {
+		void loadBackups();
+		void loadUsers();
+	}
 </script>
 
 <div class="space-y-6">
@@ -196,7 +274,7 @@
 						type="button"
 						class="btn variant-filled-primary w-full sm:w-auto"
 						on:click={handleCreateBackup}
-						disabled={loading}
+						disabled={loading || !canUseAdminEndpoints}
 					>
 						Create backup
 					</button>
@@ -204,11 +282,18 @@
 						type="button"
 						class="btn variant-soft w-full sm:w-auto"
 						on:click={exportAllData}
-						disabled={exporting}
+						disabled={exporting || !canUseAdminEndpoints}
 					>
 						{exporting ? 'Exporting…' : 'Export JSON'}
 					</button>
 				</div>
+				{#if $authState.offline}
+					<div class="text-sm text-warning-500">Offline: backups are unavailable.</div>
+				{:else if $authState.status === 'unauthenticated'}
+					<div class="text-sm text-warning-500">Sign in to manage backups.</div>
+				{:else if !isAdmin}
+					<div class="text-sm text-warning-500">Admin only.</div>
+				{/if}
 				{#if error || exportError}
 					<div class="text-sm text-error-500">{error ?? exportError}</div>
 				{/if}
@@ -218,7 +303,11 @@
 
 	<div class="grid gap-6 md:grid-cols-12">
 		<section class="md:col-span-8 space-y-4 min-w-0">
-			{#if loading}
+			{#if !canUseAdminEndpoints}
+				<div class="card variant-ghost p-4 text-center opacity-80">
+					Backups are available only to admin accounts.
+				</div>
+			{:else if loading}
 				<div class="card variant-ghost p-4 text-center opacity-80">Loading backups…</div>
 			{:else if backups.length === 0}
 				<div class="card variant-ghost p-4 text-center opacity-80">No backups available yet.</div>
@@ -251,7 +340,7 @@
 									type="button"
 									class="btn variant-filled-warning flex-1"
 									on:click={() => handleRestore(backup.filename)}
-									disabled={loading}
+									disabled={loading || !canUseAdminEndpoints}
 								>
 									Restore
 								</button>
@@ -259,7 +348,7 @@
 									type="button"
 									class="btn variant-soft-error flex-1"
 									on:click={() => handleDelete(backup.filename)}
-									disabled={loading}
+									disabled={loading || !canUseAdminEndpoints}
 								>
 									Delete
 								</button>
@@ -271,6 +360,89 @@
 		</section>
 
 		<aside class="md:col-span-4 space-y-4 min-w-0">
+			{#if canUseAdminEndpoints}
+				<div class="card variant-glass-surface p-4 space-y-3">
+					<h2 class="text-lg font-semibold tracking-tight">Users (admin)</h2>
+					<p class="text-sm opacity-70">
+						Create accounts for additional devices. Each device typically uses one account.
+					</p>
+
+					<form
+						class="space-y-3"
+						on:submit|preventDefault={() => {
+							void handleCreateUser();
+						}}
+					>
+						<div class="grid gap-3 sm:grid-cols-2">
+							<label class="space-y-1 block">
+								<span class="text-sm font-semibold">Username</span>
+								<input
+									class="input w-full"
+									bind:value={createUsername}
+									disabled={usersLoading}
+									autocomplete="username"
+								/>
+							</label>
+							<label class="space-y-1 block">
+								<span class="text-sm font-semibold">Password</span>
+								<input
+									type="password"
+									class="input w-full"
+									bind:value={createPassword}
+									disabled={usersLoading}
+									autocomplete="new-password"
+								/>
+							</label>
+						</div>
+
+						<label class="space-y-1 block">
+							<span class="text-sm font-semibold">Role</span>
+							<select class="select w-full" bind:value={createRole} disabled={usersLoading}>
+								<option value="user">User</option>
+								<option value="admin">Admin</option>
+							</select>
+						</label>
+
+						<button type="submit" class="btn variant-filled-primary w-full" disabled={usersLoading}>
+							{usersLoading ? 'Working…' : 'Create user'}
+						</button>
+					</form>
+
+					{#if usersError}
+						<div class="text-sm text-error-500">{usersError}</div>
+					{/if}
+
+					<div class="space-y-2">
+						{#if usersLoading}
+							<div class="text-sm opacity-70">Loading users…</div>
+						{:else if users.length === 0}
+							<div class="text-sm opacity-70">No users found.</div>
+						{:else}
+							{#each users as u}
+								<div
+									class="flex items-center justify-between gap-2 rounded-xl border border-surface-200/50 bg-surface-50/60 p-3 dark:border-surface-700/50 dark:bg-surface-950/30"
+								>
+									<div class="min-w-0">
+										<div class="font-semibold truncate">{u.username}</div>
+										<div class="text-xs opacity-70">
+											{u.role}{u.disabled_at ? ' • disabled' : ''}
+										</div>
+									</div>
+									<button
+										type="button"
+										class="btn btn-sm variant-soft-error"
+										disabled={usersLoading || !!u.disabled_at}
+										on:click={() => handleDisableUser(u.id, u.username)}
+									>
+										Disable
+									</button>
+								</div>
+							{/each}
+						{/if}
+					</div>
+				</div>
+			{/if}
+
 			<div class="card variant-glass-surface p-4 space-y-2">
 				<h2 class="text-lg font-semibold tracking-tight">Auto backup policy</h2>
 				<ul class="text-sm opacity-80 space-y-1 list-disc pl-5">

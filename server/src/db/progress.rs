@@ -8,6 +8,7 @@ use sqlx::Row;
 impl Database {
     pub async fn get_exercise_progress(
         &self,
+        user_id: i64,
         exercise_type: &str,
     ) -> Result<Vec<(Exercise, Vec<Set>)>, AppError> {
         debug!(target: "database", "Fetching progress data for exercise type: {}", exercise_type);
@@ -25,9 +26,11 @@ impl Database {
                 per_side_weight as "per_side_weight: bool",
                 split_weight as "split_weight: bool"
             FROM exercises
-            WHERE LOWER(exercise_type) = LOWER(?)
+            WHERE user_id = ?
+              AND LOWER(exercise_type) = LOWER(?)
             ORDER BY start_time ASC
             "#,
+            user_id,
             exercise_type
         )
         .fetch_all(&pool)
@@ -44,7 +47,7 @@ impl Database {
                     "Exercise row missing id for progress sets lookup".to_string(),
                 )
             })?;
-            let sets = self.get_sets_for_exercise(exercise_id).await?;
+            let sets = self.get_sets_for_exercise(user_id, exercise_id).await?;
 
             let mut exercise = Exercise {
                 id: row.id,
@@ -58,7 +61,7 @@ impl Database {
                 settings: Vec::new(),
             };
 
-            exercise.settings = self.get_settings_for_exercise(exercise_id).await?;
+            exercise.settings = self.get_settings_for_exercise(user_id, exercise_id).await?;
             result.push((exercise, sets));
         }
 
@@ -66,7 +69,7 @@ impl Database {
         Ok(result)
     }
 
-    pub async fn get_workout_stats(&self) -> Result<serde_json::Value, AppError> {
+    pub async fn get_workout_stats(&self, user_id: i64) -> Result<serde_json::Value, AppError> {
         debug!(target: "database", "Calculating workout statistics");
 
         let pool = self.pool().await;
@@ -80,6 +83,7 @@ impl Database {
                     strftime('%Y-%W', start_time) as week,
                     feedback
                 FROM workouts
+                WHERE user_id = ?
             ),
             feedback_counts AS (
                 SELECT 
@@ -184,6 +188,8 @@ impl Database {
                 ) as duration_trend
             FROM workout_times
             "#
+            ,
+            user_id
         )
         .fetch_one(&pool)
         .await
@@ -250,7 +256,8 @@ impl Database {
                     strftime('%Y-%m', start_time) as month,
                     COUNT(*) as count
                 FROM workouts
-                WHERE date(start_time) >= date('now', 'start of month', '-11 months')
+                WHERE user_id = ?
+                  AND date(start_time) >= date('now', 'start of month', '-11 months')
                 GROUP BY strftime('%Y-%m', start_time)
             )
             SELECT
@@ -261,6 +268,7 @@ impl Database {
             ORDER BY months.month_start ASC
             "#,
         )
+        .bind(user_id)
         .fetch_all(&pool)
         .await
         .map_err(|e| {
@@ -291,9 +299,11 @@ impl Database {
                         SELECT COUNT(*)
                         FROM exercises e
                         WHERE e.workout_id = workouts.id
+                          AND e.user_id = workouts.user_id
                     ) as exercise_count
                 FROM workouts
-                WHERE end_time > start_time
+                WHERE user_id = ?
+                  AND end_time > start_time
                 ORDER BY start_time DESC
                 LIMIT 60
             )
@@ -307,6 +317,8 @@ impl Database {
             WHERE exercise_count > 0
             ORDER BY start_time ASC
             "#
+            ,
+            user_id
         )
         .fetch_all(&pool)
         .await
@@ -340,9 +352,12 @@ impl Database {
                 timezone_offset_minutes
             FROM workouts
             WHERE end_time > start_time
+              AND user_id = ?
               AND date(start_time) >= date('now', 'start of month', '-11 months')
             ORDER BY start_time ASC
             "#
+            ,
+            user_id
         )
         .fetch_all(&pool)
         .await
@@ -394,6 +409,7 @@ impl Database {
 
     pub async fn get_volume_stats(
         &self,
+        user_id: i64,
         exercise_type: &str,
     ) -> Result<serde_json::Value, AppError> {
         debug!(target: "database", "Calculating volume statistics for {}", exercise_type);
@@ -441,7 +457,8 @@ impl Database {
                     ) as estimated_1rm
                 FROM exercises e
                 JOIN sets s ON e.id = s.exercise_id
-                WHERE LOWER(e.exercise_type) = LOWER(?)
+                WHERE e.user_id = ?
+                  AND LOWER(e.exercise_type) = LOWER(?)
             ),
             weekly_stats AS (
                 SELECT 
@@ -466,6 +483,7 @@ impl Database {
             FROM weekly_stats
             ORDER BY week ASC
             "#,
+            user_id,
             exercise_type
         )
         .fetch_all(&pool)
@@ -507,10 +525,12 @@ impl Database {
                 COUNT(*) as total_sets
             FROM exercises e
             JOIN sets s ON e.id = s.exercise_id
-            WHERE LOWER(e.exercise_type) = LOWER(?)
+            WHERE e.user_id = ?
+              AND LOWER(e.exercise_type) = LOWER(?)
             GROUP BY strftime('%Y-%m', e.start_time)
             ORDER BY month ASC
             "#,
+            user_id,
             exercise_type
         )
         .fetch_all(&pool)
@@ -561,7 +581,8 @@ impl Database {
                     ) as estimated_1rm
                 FROM exercises e
                 JOIN sets s ON e.id = s.exercise_id
-                WHERE LOWER(e.exercise_type) = LOWER(?)
+                WHERE e.user_id = ?
+                  AND LOWER(e.exercise_type) = LOWER(?)
             )
             SELECT 
                 COALESCE(MAX(weight), 0.0) as "all_time_max_weight!: f64",
@@ -570,6 +591,7 @@ impl Database {
                 COALESCE(GROUP_CONCAT(CAST(reps AS TEXT) || ':' || CAST(weight AS TEXT)), '') as "rep_prs!: String"
             FROM exercise_stats
             "#,
+            user_id,
             exercise_type
         )
         .fetch_one(&pool)

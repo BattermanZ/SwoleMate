@@ -1,0 +1,44 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT \n                strftime('%Y-%m', e.start_time) as month,\n                SUM(\n                    s.reps * (\n                        CASE\n                            WHEN e.per_side_weight = 1 THEN\n                                CASE\n                                    WHEN e.split_weight = 1 AND s.weight_left IS NOT NULL AND s.weight_right IS NOT NULL\n                                        THEN (s.weight_left + s.weight_right)\n                                    ELSE (s.weight * 2)\n                                END\n                            ELSE s.weight\n                        END\n                    )\n                ) as total_volume,\n                MAX(\n                    CASE\n                        WHEN e.per_side_weight = 1 THEN\n                            CASE\n                                WHEN e.split_weight = 1 AND s.weight_left IS NOT NULL AND s.weight_right IS NOT NULL\n                                    THEN (s.weight_left + s.weight_right)\n                                ELSE (s.weight * 2)\n                            END\n                        ELSE s.weight\n                    END\n                ) as max_weight,\n                SUM(s.reps) as total_reps,\n                COUNT(*) as total_sets\n            FROM exercises e\n            JOIN sets s ON e.id = s.exercise_id\n            WHERE e.user_id = ?\n              AND LOWER(e.exercise_type) = LOWER(?)\n            GROUP BY strftime('%Y-%m', e.start_time)\n            ORDER BY month ASC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "month",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "total_volume",
+        "ordinal": 1,
+        "type_info": "Float"
+      },
+      {
+        "name": "max_weight",
+        "ordinal": 2,
+        "type_info": "Float"
+      },
+      {
+        "name": "total_reps",
+        "ordinal": 3,
+        "type_info": "Int64"
+      },
+      {
+        "name": "total_sets",
+        "ordinal": 4,
+        "type_info": "Int64"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "6b840973c5615db08a619f9c2d8965f4227963186a5f0a53e82f6ae4af955598"
+}

@@ -15,6 +15,11 @@ use std::{
 use tokio::sync::Semaphore;
 use uuid::Uuid;
 
+mod session_auth;
+
+pub use session_auth::{AdminUser, CurrentUser, SessionAuth};
+pub use session_auth::logout_response;
+
 pub struct RequestLogger;
 
 impl<S, B> Transform<S, ServiceRequest> for RequestLogger

@@ -1,4 +1,5 @@
 use crate::backup;
+use crate::auth::password;
 use chrono::{Datelike, Duration, NaiveDate, TimeZone, Utc};
 use sqlx::Row;
 use sqlx::{Pool, Sqlite};
@@ -74,6 +75,14 @@ pub const SCHEMA_UPDATES: &[(i64, &str)] = &[
         4,
         r#"
         -- Backfill workout timezone offsets for legacy data (Europe/Amsterdam).
+        -- Applied via Rust migration logic in `setup_schema` (kept as a placeholder for versioning).
+        SELECT 1;
+        "#,
+    ),
+    (
+        5,
+        r#"
+        -- Add multi-user auth tables and scope workout data by user.
         -- Applied via Rust migration logic in `setup_schema` (kept as a placeholder for versioning).
         SELECT 1;
         "#,
@@ -164,6 +173,15 @@ pub async fn setup_schema(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<(), sqlx::E
                         "schema v4 requires workouts.timezone_offset_minutes column".into(),
                     ));
                 }
+            }
+
+            if *version == 5 {
+                migrate_multi_user_schema(pool).await?;
+                sqlx::query("INSERT INTO schema_version (version) VALUES (?)")
+                    .bind(*version)
+                    .execute(pool)
+                    .await?;
+                continue;
             }
 
             let has_workouts_table = sqlx::query_scalar!(
@@ -259,6 +277,269 @@ async fn backfill_amsterdam_timezone_offsets(pool: &Pool<Sqlite>) -> Result<(), 
         .execute(&mut *tx)
         .await?;
     }
+
+    tx.commit().await?;
+    Ok(())
+}
+
+async fn migrate_multi_user_schema(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
+    let app_env = std::env::var("APP_ENV")
+        .unwrap_or_else(|_| "development".to_string())
+        .to_lowercase();
+
+    let bootstrap_username = std::env::var("BOOTSTRAP_ADMIN_USERNAME")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or_else(|| "admin".to_string());
+    let bootstrap_password = std::env::var("BOOTSTRAP_ADMIN_PASSWORD")
+        .ok()
+        .filter(|v| !v.trim().is_empty());
+
+    if app_env == "production" && bootstrap_password.is_none() {
+        return Err(sqlx::Error::Protocol(
+            "schema v5 requires BOOTSTRAP_ADMIN_PASSWORD in production".into(),
+        ));
+    }
+
+    let password_plain = bootstrap_password.unwrap_or_else(|| "admin".to_string());
+    let password_hash = password::hash_password(&password_plain)
+        .map_err(|e| sqlx::Error::Protocol(format!("Failed to hash bootstrap admin password: {e}")))?;
+
+    let mut tx = pool.begin().await?;
+
+    sqlx::query("PRAGMA foreign_keys = OFF")
+        .execute(&mut *tx)
+        .await?;
+
+    // Auth tables
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL CHECK(role IN ('admin','user')),
+            failed_login_count INTEGER NOT NULL DEFAULT 0,
+            locked_until DATETIME,
+            disabled_at DATETIME,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_lower ON users(LOWER(username));
+
+        CREATE TRIGGER IF NOT EXISTS trg_users_updated_at
+        AFTER UPDATE ON users
+        BEGIN
+            UPDATE users SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+        END;
+
+        CREATE TABLE IF NOT EXISTS sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            session_hash TEXT NOT NULL UNIQUE,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at DATETIME NOT NULL,
+            revoked_at DATETIME,
+            rotated_from_session_id INTEGER,
+            user_agent TEXT,
+            ip TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+        CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
+        "#,
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    let user_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
+        .fetch_one(&mut *tx)
+        .await?;
+
+    if user_count == 0 {
+        sqlx::query(
+            r#"
+            INSERT INTO users (username, password_hash, role)
+            VALUES (?, ?, 'admin')
+            "#,
+        )
+        .bind(bootstrap_username)
+        .bind(password_hash)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    let default_user_id: i64 = sqlx::query_scalar("SELECT id FROM users ORDER BY id ASC LIMIT 1")
+        .fetch_one(&mut *tx)
+        .await?;
+
+    // Rebuild domain tables to add NOT NULL user_id with FKs.
+    // Workouts
+    sqlx::query("ALTER TABLE workouts RENAME TO workouts_old")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query(
+        r#"
+        CREATE TABLE workouts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            date DATETIME NOT NULL,
+            start_time DATETIME NOT NULL,
+            end_time DATETIME NOT NULL,
+            notes TEXT,
+            feedback TEXT CHECK(feedback IN ('😊', '😐', '😞') OR feedback IS NULL),
+            timezone_offset_minutes INTEGER,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_workouts_user_date ON workouts(user_id, date DESC);
+        "#,
+    )
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        r#"
+        INSERT INTO workouts (id, user_id, date, start_time, end_time, notes, feedback, timezone_offset_minutes)
+        SELECT id, ?, date, start_time, end_time, notes, feedback, timezone_offset_minutes
+        FROM workouts_old
+        "#,
+    )
+    .bind(default_user_id)
+    .execute(&mut *tx)
+    .await?;
+
+    // Exercises
+    sqlx::query("ALTER TABLE exercises RENAME TO exercises_old")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query(
+        r#"
+        CREATE TABLE exercises (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            workout_id INTEGER NOT NULL,
+            exercise_type TEXT NOT NULL,
+            start_time DATETIME NOT NULL,
+            end_time DATETIME NOT NULL,
+            notes TEXT,
+            per_side_weight INTEGER NOT NULL DEFAULT 0,
+            split_weight INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (workout_id) REFERENCES workouts(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_exercises_user_workout_id_composite ON exercises(user_id, workout_id, id);
+        "#,
+    )
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        r#"
+        INSERT INTO exercises (id, user_id, workout_id, exercise_type, start_time, end_time, notes, per_side_weight, split_weight)
+        SELECT id, ?, workout_id, exercise_type, start_time, end_time, notes, per_side_weight, split_weight
+        FROM exercises_old
+        "#,
+    )
+    .bind(default_user_id)
+    .execute(&mut *tx)
+    .await?;
+
+    // Sets
+    sqlx::query("ALTER TABLE sets RENAME TO sets_old")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query(
+        r#"
+        CREATE TABLE sets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            exercise_id INTEGER NOT NULL,
+            reps INTEGER NOT NULL,
+            weight REAL NOT NULL,
+            weight_left REAL,
+            weight_right REAL,
+            notes TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_sets_user_exercise_id_composite ON sets(user_id, exercise_id, id);
+        "#,
+    )
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        r#"
+        INSERT INTO sets (id, user_id, exercise_id, reps, weight, weight_left, weight_right, notes)
+        SELECT id, ?, exercise_id, reps, weight, weight_left, weight_right, notes
+        FROM sets_old
+        "#,
+    )
+    .bind(default_user_id)
+    .execute(&mut *tx)
+    .await?;
+
+    // Exercise settings (may not exist on very old DBs, but v2 should have created it).
+    let has_settings: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='exercise_settings'",
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+    if has_settings > 0 {
+        sqlx::query("ALTER TABLE exercise_settings RENAME TO exercise_settings_old")
+            .execute(&mut *tx)
+            .await?;
+    }
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS exercise_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            exercise_id INTEGER NOT NULL,
+            setting_key TEXT NOT NULL,
+            setting_value TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_exercise_settings_user_exercise_id_composite
+            ON exercise_settings(user_id, exercise_id, id);
+        "#,
+    )
+    .execute(&mut *tx)
+    .await?;
+    if has_settings > 0 {
+        sqlx::query(
+            r#"
+            INSERT INTO exercise_settings (id, user_id, exercise_id, setting_key, setting_value)
+            SELECT id, ?, exercise_id, setting_key, setting_value
+            FROM exercise_settings_old
+            "#,
+        )
+        .bind(default_user_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    // Drop old tables
+    sqlx::query(
+        r#"
+        DROP TABLE workouts_old;
+        DROP TABLE exercises_old;
+        DROP TABLE sets_old;
+        "#,
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    if has_settings > 0 {
+        sqlx::query("DROP TABLE exercise_settings_old")
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    sqlx::query("PRAGMA foreign_keys = ON")
+        .execute(&mut *tx)
+        .await?;
 
     tx.commit().await?;
     Ok(())

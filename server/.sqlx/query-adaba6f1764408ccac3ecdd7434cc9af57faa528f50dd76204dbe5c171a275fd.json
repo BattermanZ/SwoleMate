@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            WITH exercise_stats AS (\n                SELECT \n                    s.reps,\n                    CASE\n                        WHEN e.per_side_weight = 1 THEN\n                            CASE\n                                WHEN e.split_weight = 1 AND s.weight_left IS NOT NULL AND s.weight_right IS NOT NULL\n                                    THEN (s.weight_left + s.weight_right)\n                                ELSE (s.weight * 2)\n                            END\n                        ELSE s.weight\n                    END as weight,\n                    s.reps * (\n                        CASE\n                            WHEN e.per_side_weight = 1 THEN\n                                CASE\n                                    WHEN e.split_weight = 1 AND s.weight_left IS NOT NULL AND s.weight_right IS NOT NULL\n                                        THEN (s.weight_left + s.weight_right)\n                                    ELSE (s.weight * 2)\n                                END\n                            ELSE s.weight\n                        END\n                    ) as volume,\n                    ROUND(\n                        (\n                            CASE\n                                WHEN e.per_side_weight = 1 THEN\n                                    CASE\n                                        WHEN e.split_weight = 1 AND s.weight_left IS NOT NULL AND s.weight_right IS NOT NULL\n                                            THEN (s.weight_left + s.weight_right)\n                                        ELSE (s.weight * 2)\n                                    END\n                                ELSE s.weight\n                            END\n                        ) * (36.0 / (37.0 - CAST(s.reps AS FLOAT))),\n                        2\n                    ) as estimated_1rm\n                FROM exercises e\n                JOIN sets s ON e.id = s.exercise_id\n                WHERE e.user_id = ?\n                  AND LOWER(e.exercise_type) = LOWER(?)\n            )\n            SELECT \n                COALESCE(MAX(weight), 0.0) as \"all_time_max_weight!: f64\",\n                COALESCE(MAX(volume), 0.0) as \"max_volume!: f64\",\n                COALESCE(MAX(estimated_1rm), 0.0) as \"estimated_max_1rm!: f64\",\n                COALESCE(GROUP_CONCAT(CAST(reps AS TEXT) || ':' || CAST(weight AS TEXT)), '') as \"rep_prs!: String\"\n            FROM exercise_stats\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "all_time_max_weight!: f64",
+        "ordinal": 0,
+        "type_info": "Float"
+      },
+      {
+        "name": "max_volume!: f64",
+        "ordinal": 1,
+        "type_info": "Float"
+      },
+      {
+        "name": "estimated_max_1rm!: f64",
+        "ordinal": 2,
+        "type_info": "Float"
+      },
+      {
+        "name": "rep_prs!: String",
+        "ordinal": 3,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "adaba6f1764408ccac3ecdd7434cc9af57faa528f50dd76204dbe5c171a275fd"
+}

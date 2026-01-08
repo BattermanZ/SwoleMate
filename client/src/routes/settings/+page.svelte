@@ -1,5 +1,14 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
+	import { auth } from '$lib/auth';
+
+	const authState = auth.state;
+	let currentPassword = '';
+	let newPassword = '';
+	let confirmPassword = '';
+	let accountLoading = false;
+	let accountError: string | null = null;
+	let accountNotice: string | null = null;
 
 	function resetUiPreferences() {
 		if (!browser) return;
@@ -24,6 +33,32 @@
 			}
 		}
 		window.location.reload();
+	}
+
+	async function handleChangePassword() {
+		accountError = null;
+		accountNotice = null;
+		if (!currentPassword || !newPassword) {
+			accountError = 'Current and new password are required.';
+			return;
+		}
+		if (newPassword !== confirmPassword) {
+			accountError = 'New passwords do not match.';
+			return;
+		}
+
+		accountLoading = true;
+		try {
+			await auth.changePassword(currentPassword, newPassword);
+			currentPassword = '';
+			newPassword = '';
+			confirmPassword = '';
+			accountNotice = 'Password updated.';
+		} catch (e) {
+			accountError = e instanceof Error ? e.message : 'Failed to change password';
+		} finally {
+			accountLoading = false;
+		}
 	}
 </script>
 
@@ -102,6 +137,94 @@
 				<button type="button" class="btn variant-soft-error w-full" on:click={resetUiPreferences}>
 					Reset local UI preferences
 				</button>
+			</div>
+
+			<div class="card variant-glass-surface p-4 space-y-3">
+				<div>
+					<h2 class="text-lg font-semibold tracking-tight">Account</h2>
+					<p class="text-sm opacity-70">
+						Sessions stay signed in for a long time so offline mode keeps working. You can still log
+						out manually.
+					</p>
+				</div>
+
+				{#if $authState.user}
+					<div class="flex flex-wrap items-center gap-2">
+						<span class="badge variant-filled-primary">{$authState.user.username}</span>
+						<span class="badge variant-soft">{$authState.user.role}</span>
+						{#if $authState.offline}
+							<span class="badge variant-soft-warning">Offline</span>
+						{/if}
+					</div>
+				{:else}
+					<div class="text-sm opacity-75">Not signed in.</div>
+				{/if}
+
+				<form
+					class="space-y-3"
+					on:submit|preventDefault={() => {
+						void handleChangePassword();
+					}}
+				>
+					<div class="grid gap-3 sm:grid-cols-2">
+						<label class="space-y-1 block">
+							<span class="text-sm font-semibold">Current password</span>
+							<input
+								type="password"
+								class="input w-full"
+								autocomplete="current-password"
+								bind:value={currentPassword}
+								disabled={accountLoading || !$authState.user}
+							/>
+						</label>
+						<label class="space-y-1 block">
+							<span class="text-sm font-semibold">New password</span>
+							<input
+								type="password"
+								class="input w-full"
+								autocomplete="new-password"
+								bind:value={newPassword}
+								disabled={accountLoading || !$authState.user}
+							/>
+						</label>
+					</div>
+
+					<label class="space-y-1 block">
+						<span class="text-sm font-semibold">Confirm new password</span>
+						<input
+							type="password"
+							class="input w-full"
+							autocomplete="new-password"
+							bind:value={confirmPassword}
+							disabled={accountLoading || !$authState.user}
+						/>
+					</label>
+
+					{#if accountError}
+						<div class="text-sm text-error-500">{accountError}</div>
+					{/if}
+					{#if accountNotice}
+						<div class="text-sm text-success-500">{accountNotice}</div>
+					{/if}
+
+					<div class="flex flex-col sm:flex-row gap-2">
+						<button
+							type="submit"
+							class="btn variant-filled-primary flex-1"
+							disabled={accountLoading || !$authState.user}
+						>
+							{accountLoading ? 'Updating…' : 'Change password'}
+						</button>
+						<button
+							type="button"
+							class="btn variant-soft-error flex-1"
+							disabled={accountLoading || !$authState.user}
+							on:click={() => auth.logout()}
+						>
+							Log out
+						</button>
+					</div>
+				</form>
 			</div>
 		</section>
 

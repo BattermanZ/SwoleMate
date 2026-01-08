@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                DELETE FROM exercise_settings\n                WHERE exercise_id = ? AND user_id = ?\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "6e1edebdc4b5e59bcb49b77d61a2e3c61f04ded48c20989d0546af295d59bc99"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE sessions\n            SET revoked_at = COALESCE(revoked_at, CURRENT_TIMESTAMP)\n            WHERE id = ? AND session_hash = ?\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "47dbf9dfc96925d3e949e7d2c81cbd3098c8559eeef15c3eb383dd806d28bd9c"
+}

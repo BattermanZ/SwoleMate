@@ -17,6 +17,35 @@ import { config } from './config';
 const API_BASE = config.apiUrl;
 type Fetcher = typeof fetch;
 
+export class ApiError extends Error {
+	readonly status: number;
+
+	constructor(status: number, message: string) {
+		super(message);
+		this.name = 'ApiError';
+		this.status = status;
+	}
+}
+
+export function isApiError(e: unknown): e is ApiError {
+	return e instanceof ApiError;
+}
+
+export function isUnauthorized(e: unknown): boolean {
+	return isApiError(e) && e.status === 401;
+}
+
+type UnauthorizedHandler = () => void;
+let unauthorizedHandler: UnauthorizedHandler | null = null;
+
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null) {
+	unauthorizedHandler = handler;
+}
+
+function withCredentials(init: RequestInit | undefined): RequestInit {
+	return { credentials: 'include', ...init };
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
 	if (!response.ok) {
 		const contentType = response.headers.get('content-type') ?? '';
@@ -33,7 +62,8 @@ async function handleResponse<T>(response: Response): Promise<T> {
 			if (text.trim()) message = text;
 		}
 
-		throw new Error(message);
+		if (response.status === 401) unauthorizedHandler?.();
+		throw new ApiError(response.status, message);
 	}
 
 	if (response.status === 204) {
@@ -56,13 +86,16 @@ export async function createWorkout(
 	workout: CreateWorkoutRequest,
 	fetcher: Fetcher = fetch
 ): Promise<{ id: number }> {
-	const response = await fetcher(`${API_BASE}/api/workouts`, {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json'
-		},
-		body: JSON.stringify(workout)
-	});
+	const response = await fetcher(
+		`${API_BASE}/api/workouts`,
+		withCredentials({
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify(workout)
+		})
+	);
 	return handleResponse(response);
 }
 
@@ -71,13 +104,16 @@ export async function endWorkout(
 	endTime: UpdateWorkoutRequest,
 	fetcher: Fetcher = fetch
 ): Promise<void> {
-	const response = await fetcher(`${API_BASE}/api/workouts/${id}/end`, {
-		method: 'PUT',
-		headers: {
-			'Content-Type': 'application/json'
-		},
-		body: JSON.stringify(endTime)
-	});
+	const response = await fetcher(
+		`${API_BASE}/api/workouts/${id}/end`,
+		withCredentials({
+			method: 'PUT',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify(endTime)
+		})
+	);
 	return handleResponse(response);
 }
 
@@ -86,13 +122,16 @@ export async function updateWorkoutTimes(
 	times: UpdateWorkoutTimesRequest,
 	fetcher: Fetcher = fetch
 ): Promise<void> {
-	const response = await fetcher(`${API_BASE}/api/workouts/${id}/times`, {
-		method: 'PUT',
-		headers: {
-			'Content-Type': 'application/json'
-		},
-		body: JSON.stringify(times)
-	});
+	const response = await fetcher(
+		`${API_BASE}/api/workouts/${id}/times`,
+		withCredentials({
+			method: 'PUT',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify(times)
+		})
+	);
 	return handleResponse(response);
 }
 
@@ -100,7 +139,7 @@ export async function getWorkout(
 	id: number,
 	fetcher: Fetcher = fetch
 ): Promise<{ workout: Workout; exercises: Array<{ exercise: Exercise; sets: Set[] }> }> {
-	const response = await fetcher(`${API_BASE}/api/workouts/${id}`);
+	const response = await fetcher(`${API_BASE}/api/workouts/${id}`, withCredentials(undefined));
 	return handleResponse(response);
 }
 
@@ -109,13 +148,16 @@ export async function createExercise(
 	exercise: CreateExerciseRequest,
 	fetcher: Fetcher = fetch
 ): Promise<{ id: number }> {
-	const response = await fetcher(`${API_BASE}/api/workouts/${workoutId}/exercises`, {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json'
-		},
-		body: JSON.stringify(exercise)
-	});
+	const response = await fetcher(
+		`${API_BASE}/api/workouts/${workoutId}/exercises`,
+		withCredentials({
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify(exercise)
+		})
+	);
 	return handleResponse(response);
 }
 
@@ -124,13 +166,16 @@ export async function endExercise(
 	endTime: UpdateExerciseRequest,
 	fetcher: Fetcher = fetch
 ): Promise<void> {
-	const response = await fetcher(`${API_BASE}/api/exercises/${id}/end`, {
-		method: 'PUT',
-		headers: {
-			'Content-Type': 'application/json'
-		},
-		body: JSON.stringify(endTime)
-	});
+	const response = await fetcher(
+		`${API_BASE}/api/exercises/${id}/end`,
+		withCredentials({
+			method: 'PUT',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify(endTime)
+		})
+	);
 	return handleResponse(response);
 }
 
@@ -139,13 +184,16 @@ export async function createSet(
 	set: CreateSetRequest,
 	fetcher: Fetcher = fetch
 ): Promise<{ id: number }> {
-	const response = await fetcher(`${API_BASE}/api/exercises/${exerciseId}/sets`, {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json'
-		},
-		body: JSON.stringify(set)
-	});
+	const response = await fetcher(
+		`${API_BASE}/api/exercises/${exerciseId}/sets`,
+		withCredentials({
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify(set)
+		})
+	);
 	return handleResponse(response);
 }
 
@@ -154,23 +202,26 @@ export async function replaceSets(
 	sets: CreateSetRequest[],
 	fetcher: Fetcher = fetch
 ): Promise<Set[]> {
-	const response = await fetcher(`${API_BASE}/api/exercises/${exerciseId}/sets`, {
-		method: 'PUT',
-		headers: {
-			'Content-Type': 'application/json'
-		},
-		body: JSON.stringify(sets)
-	});
+	const response = await fetcher(
+		`${API_BASE}/api/exercises/${exerciseId}/sets`,
+		withCredentials({
+			method: 'PUT',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify(sets)
+		})
+	);
 	return handleResponse(response);
 }
 
 export async function getWorkouts(fetcher: Fetcher = fetch): Promise<Workout[]> {
-	const response = await fetcher(`${API_BASE}/api/workouts`);
+	const response = await fetcher(`${API_BASE}/api/workouts`, withCredentials(undefined));
 	return handleResponse(response);
 }
 
 export async function getExerciseTypes(fetcher: Fetcher = fetch): Promise<string[]> {
-	const response = await fetcher(`${API_BASE}/api/exercises/types`);
+	const response = await fetcher(`${API_BASE}/api/exercises/types`, withCredentials(undefined));
 	return handleResponse(response);
 }
 
@@ -179,7 +230,8 @@ export async function getLastExerciseData(
 	fetcher: Fetcher = fetch
 ): Promise<{ exercise: Exercise; sets: Set[] } | null> {
 	const response = await fetcher(
-		`${API_BASE}/api/exercises/last/${encodeURIComponent(exerciseType)}`
+		`${API_BASE}/api/exercises/last/${encodeURIComponent(exerciseType)}`,
+		withCredentials(undefined)
 	);
 	const data = await handleResponse<[Exercise, Set[]]>(response);
 	if (!data) return null;
@@ -188,22 +240,28 @@ export async function getLastExerciseData(
 }
 
 export async function cancelExercise(id: number, fetcher: Fetcher = fetch): Promise<void> {
-	const response = await fetcher(`${API_BASE}/api/exercises/${id}`, {
-		method: 'DELETE',
-		headers: {
-			'Content-Type': 'application/json'
-		}
-	});
+	const response = await fetcher(
+		`${API_BASE}/api/exercises/${id}`,
+		withCredentials({
+			method: 'DELETE',
+			headers: {
+				'Content-Type': 'application/json'
+			}
+		})
+	);
 	return handleResponse(response);
 }
 
 export async function cancelWorkout(id: number, fetcher: Fetcher = fetch): Promise<void> {
-	const response = await fetcher(`${API_BASE}/api/workouts/${id}`, {
-		method: 'DELETE',
-		headers: {
-			'Content-Type': 'application/json'
-		}
-	});
+	const response = await fetcher(
+		`${API_BASE}/api/workouts/${id}`,
+		withCredentials({
+			method: 'DELETE',
+			headers: {
+				'Content-Type': 'application/json'
+			}
+		})
+	);
 	return handleResponse(response);
 }
 
@@ -214,45 +272,54 @@ export interface BackupInfo {
 }
 
 export async function getBackups(fetcher: Fetcher = fetch): Promise<BackupInfo[]> {
-	const response = await fetcher(`${API_BASE}/api/backups`);
+	const response = await fetcher(`${API_BASE}/api/backups`, withCredentials(undefined));
 	return handleResponse(response);
 }
 
 export async function createBackup(fetcher: Fetcher = fetch): Promise<BackupInfo> {
-	const response = await fetcher(`${API_BASE}/api/backups`, {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json'
-		}
-	});
+	const response = await fetcher(
+		`${API_BASE}/api/backups`,
+		withCredentials({
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			}
+		})
+	);
 	return handleResponse(response);
 }
 
 export async function restoreBackup(filename: string, fetcher: Fetcher = fetch): Promise<void> {
 	const response = await fetcher(
 		`${API_BASE}/api/backups/${encodeURIComponent(filename)}/restore`,
-		{
+		withCredentials({
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json'
 			}
-		}
+		})
 	);
 	return handleResponse(response);
 }
 
 export async function deleteBackup(filename: string, fetcher: Fetcher = fetch): Promise<void> {
-	const response = await fetcher(`${API_BASE}/api/backups/${encodeURIComponent(filename)}`, {
-		method: 'DELETE',
-		headers: {
-			'Content-Type': 'application/json'
-		}
-	});
+	const response = await fetcher(
+		`${API_BASE}/api/backups/${encodeURIComponent(filename)}`,
+		withCredentials({
+			method: 'DELETE',
+			headers: {
+				'Content-Type': 'application/json'
+			}
+		})
+	);
 	return handleResponse(response);
 }
 
 export async function getWorkoutStats(fetcher: Fetcher = fetch): Promise<WorkoutStats> {
-	const response = await fetcher(`${API_BASE}/api/progress/workout-stats`);
+	const response = await fetcher(
+		`${API_BASE}/api/progress/workout-stats`,
+		withCredentials(undefined)
+	);
 	return handleResponse(response);
 }
 
@@ -261,7 +328,8 @@ export async function getExerciseProgress(
 	fetcher: Fetcher = fetch
 ): Promise<ExerciseProgress[]> {
 	const response = await fetcher(
-		`${API_BASE}/api/progress/exercise/${encodeURIComponent(exerciseType)}`
+		`${API_BASE}/api/progress/exercise/${encodeURIComponent(exerciseType)}`,
+		withCredentials(undefined)
 	);
 	return handleResponse(response);
 }
@@ -271,7 +339,106 @@ export async function getVolumeStats(
 	fetcher: Fetcher = fetch
 ): Promise<VolumeStats> {
 	const response = await fetcher(
-		`${API_BASE}/api/progress/volume?exercise_type=${encodeURIComponent(exerciseType)}`
+		`${API_BASE}/api/progress/volume?exercise_type=${encodeURIComponent(exerciseType)}`,
+		withCredentials(undefined)
+	);
+	return handleResponse(response);
+}
+
+export type UserRole = 'admin' | 'user';
+export interface PublicUser {
+	id: number;
+	username: string;
+	role: UserRole;
+}
+
+export async function authMe(fetcher: Fetcher = fetch): Promise<PublicUser> {
+	const response = await fetcher(`${API_BASE}/api/auth/me`, withCredentials(undefined));
+	return handleResponse(response);
+}
+
+export async function authLogin(
+	username: string,
+	password: string,
+	fetcher: Fetcher = fetch
+): Promise<PublicUser> {
+	const response = await fetcher(
+		`${API_BASE}/api/auth/login`,
+		withCredentials({
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify({ username, password })
+		})
+	);
+	const data = await handleResponse<{ status: 'ok'; user: PublicUser }>(response);
+	return data.user;
+}
+
+export async function authLogout(fetcher: Fetcher = fetch): Promise<void> {
+	const response = await fetcher(
+		`${API_BASE}/api/auth/logout`,
+		withCredentials({
+			method: 'POST'
+		})
+	);
+	return handleResponse(response);
+}
+
+export async function authChangePassword(
+	currentPassword: string,
+	newPassword: string,
+	fetcher: Fetcher = fetch
+): Promise<void> {
+	const response = await fetcher(
+		`${API_BASE}/api/auth/change-password`,
+		withCredentials({
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
+		})
+	);
+	return handleResponse(response);
+}
+
+export interface AdminUserListItem {
+	id: number;
+	username: string;
+	role: UserRole;
+	disabled_at: string | null;
+}
+
+export async function adminListUsers(fetcher: Fetcher = fetch): Promise<AdminUserListItem[]> {
+	const response = await fetcher(`${API_BASE}/api/admin/users`, withCredentials(undefined));
+	return handleResponse(response);
+}
+
+export async function adminCreateUser(
+	args: { username: string; password: string; role?: UserRole },
+	fetcher: Fetcher = fetch
+): Promise<{ id: number }> {
+	const response = await fetcher(
+		`${API_BASE}/api/admin/users`,
+		withCredentials({
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify(args)
+		})
+	);
+	return handleResponse(response);
+}
+
+export async function adminDisableUser(id: number, fetcher: Fetcher = fetch): Promise<void> {
+	const response = await fetcher(
+		`${API_BASE}/api/admin/users/${id}/disable`,
+		withCredentials({
+			method: 'POST'
+		})
 	);
 	return handleResponse(response);
 }

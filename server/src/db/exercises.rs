@@ -6,6 +6,7 @@ use log::{debug, error, info};
 impl Database {
     pub async fn create_exercise(
         &self,
+        user_id: i64,
         workout_id: i64,
         req: &CreateExerciseRequest,
     ) -> Result<i64, AppError> {
@@ -19,15 +20,28 @@ impl Database {
         let pool = self.pool().await;
         let mut tx = pool.begin().await.map_err(AppError::DatabaseError)?;
 
+        let workout_exists = sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count!: i64" FROM workouts WHERE id = ? AND user_id = ?"#,
+            workout_id,
+            user_id
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(AppError::DatabaseError)?;
+        if workout_exists == 0 {
+            return Err(AppError::NotFound(format!("Workout #{} not found", workout_id)));
+        }
+
         let split_weight = req.split_weight.unwrap_or(false);
         let per_side_weight = req.per_side_weight.unwrap_or(false) || split_weight;
 
         let result = sqlx::query!(
             r#"
-            INSERT INTO exercises (workout_id, exercise_type, start_time, end_time, notes, per_side_weight, split_weight)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO exercises (user_id, workout_id, exercise_type, start_time, end_time, notes, per_side_weight, split_weight)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING id
             "#,
+            user_id,
             workout_id,
             req.exercise_type,
             req.start_time,
@@ -49,9 +63,10 @@ impl Database {
             for setting in settings {
                 sqlx::query!(
                     r#"
-                    INSERT INTO exercise_settings (exercise_id, setting_key, setting_value)
-                    VALUES (?, ?, ?)
+                    INSERT INTO exercise_settings (user_id, exercise_id, setting_key, setting_value)
+                    VALUES (?, ?, ?, ?)
                     "#,
+                    user_id,
                     exercise_id,
                     setting.key,
                     setting.value
@@ -73,6 +88,7 @@ impl Database {
 
     pub async fn update_exercise(
         &self,
+        user_id: i64,
         id: i64,
         req: &UpdateExerciseRequest,
     ) -> Result<(), AppError> {
@@ -86,15 +102,28 @@ impl Database {
         let pool = self.pool().await;
         let mut tx = pool.begin().await.map_err(AppError::DatabaseError)?;
 
+        let exists = sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count!: i64" FROM exercises WHERE id = ? AND user_id = ?"#,
+            id,
+            user_id
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(AppError::DatabaseError)?;
+        if exists == 0 {
+            return Err(AppError::NotFound(format!("Exercise #{} not found", id)));
+        }
+
         sqlx::query!(
             r#"
             UPDATE exercises
             SET end_time = ?, notes = ?
-            WHERE id = ?
+            WHERE id = ? AND user_id = ?
             "#,
             req.end_time,
             req.notes,
             id,
+            user_id,
         )
         .execute(&mut *tx)
         .await
@@ -121,11 +150,12 @@ impl Database {
                 UPDATE exercises
                 SET per_side_weight = COALESCE(?, per_side_weight),
                     split_weight = COALESCE(?, split_weight)
-                WHERE id = ?
+                WHERE id = ? AND user_id = ?
                 "#,
                 per_side_weight,
                 split_weight,
-                id
+                id,
+                user_id
             )
             .execute(&mut *tx)
             .await
@@ -139,9 +169,10 @@ impl Database {
             sqlx::query!(
                 r#"
                 DELETE FROM exercise_settings
-                WHERE exercise_id = ?
+                WHERE exercise_id = ? AND user_id = ?
                 "#,
-                id
+                id,
+                user_id
             )
             .execute(&mut *tx)
             .await
@@ -153,9 +184,10 @@ impl Database {
             for setting in settings {
                 sqlx::query!(
                     r#"
-                    INSERT INTO exercise_settings (exercise_id, setting_key, setting_value)
-                    VALUES (?, ?, ?)
+                    INSERT INTO exercise_settings (user_id, exercise_id, setting_key, setting_value)
+                    VALUES (?, ?, ?, ?)
                     "#,
+                    user_id,
                     id,
                     setting.key,
                     setting.value
@@ -177,6 +209,7 @@ impl Database {
 
     pub async fn create_set(
         &self,
+        user_id: i64,
         exercise_id: i64,
         req: &CreateSetRequest,
     ) -> Result<i64, AppError> {
@@ -189,12 +222,27 @@ impl Database {
         );
 
         let pool = self.pool().await;
+        let mut tx = pool.begin().await.map_err(AppError::DatabaseError)?;
+
+        let exercise_exists = sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count!: i64" FROM exercises WHERE id = ? AND user_id = ?"#,
+            exercise_id,
+            user_id
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(AppError::DatabaseError)?;
+        if exercise_exists == 0 {
+            return Err(AppError::NotFound(format!("Exercise #{} not found", exercise_id)));
+        }
+
         let result = sqlx::query!(
             r#"
-            INSERT INTO sets (exercise_id, reps, weight, weight_left, weight_right, notes)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO sets (user_id, exercise_id, reps, weight, weight_left, weight_right, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             RETURNING id
             "#,
+            user_id,
             exercise_id,
             req.reps,
             req.weight,
@@ -202,12 +250,14 @@ impl Database {
             req.weight_right,
             req.notes,
         )
-        .fetch_one(&pool)
+        .fetch_one(&mut *tx)
         .await
         .map_err(|e| {
             error!(target: "database", "Failed to create set: {}", e);
             AppError::DatabaseError(e)
         })?;
+
+        tx.commit().await.map_err(AppError::DatabaseError)?;
 
         debug!(target: "database", "Created set #{}", result.id);
         Ok(result.id)
@@ -215,6 +265,7 @@ impl Database {
 
     pub async fn replace_sets_for_exercise(
         &self,
+        user_id: i64,
         exercise_id: i64,
         sets: &[CreateSetRequest],
     ) -> Result<Vec<Set>, AppError> {
@@ -228,12 +279,25 @@ impl Database {
         let pool = self.pool().await;
         let mut tx = pool.begin().await.map_err(AppError::DatabaseError)?;
 
+        let exercise_exists = sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count!: i64" FROM exercises WHERE id = ? AND user_id = ?"#,
+            exercise_id,
+            user_id
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(AppError::DatabaseError)?;
+        if exercise_exists == 0 {
+            return Err(AppError::NotFound(format!("Exercise #{} not found", exercise_id)));
+        }
+
         sqlx::query!(
             r#"
             DELETE FROM sets
-            WHERE exercise_id = ?
+            WHERE exercise_id = ? AND user_id = ?
             "#,
-            exercise_id
+            exercise_id,
+            user_id
         )
         .execute(&mut *tx)
         .await
@@ -246,10 +310,11 @@ impl Database {
         for req in sets {
             let result = sqlx::query!(
                 r#"
-                INSERT INTO sets (exercise_id, reps, weight, weight_left, weight_right, notes)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO sets (user_id, exercise_id, reps, weight, weight_left, weight_right, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 RETURNING id
                 "#,
+                user_id,
                 exercise_id,
                 req.reps,
                 req.weight,
@@ -287,6 +352,7 @@ impl Database {
 
     pub async fn get_exercises_for_workout(
         &self,
+        user_id: i64,
         workout_id: i64,
     ) -> Result<Vec<Exercise>, AppError> {
         debug!(target: "database", "Fetching exercises for workout #{}", workout_id);
@@ -304,9 +370,10 @@ impl Database {
                 per_side_weight as "per_side_weight: bool",
                 split_weight as "split_weight: bool"
             FROM exercises
-            WHERE workout_id = ?
+            WHERE workout_id = ? AND user_id = ?
             "#,
-            workout_id
+            workout_id,
+            user_id
         )
         .fetch_all(&pool)
         .await
@@ -320,7 +387,7 @@ impl Database {
             let id = row
                 .id
                 .ok_or_else(|| AppError::InternalError("Exercise row missing id".to_string()))?;
-            let settings = self.get_settings_for_exercise(id).await?;
+            let settings = self.get_settings_for_exercise(user_id, id).await?;
             exercises.push(Exercise {
                 id: Some(id),
                 workout_id: row.workout_id,
@@ -338,7 +405,11 @@ impl Database {
         Ok(exercises)
     }
 
-    pub async fn get_sets_for_exercise(&self, exercise_id: i64) -> Result<Vec<Set>, AppError> {
+    pub async fn get_sets_for_exercise(
+        &self,
+        user_id: i64,
+        exercise_id: i64,
+    ) -> Result<Vec<Set>, AppError> {
         debug!(target: "database", "Fetching sets for exercise #{}", exercise_id);
 
         let pool = self.pool().await;
@@ -347,9 +418,10 @@ impl Database {
             r#"
             SELECT id as "id?", exercise_id, reps, weight, weight_left, weight_right, notes
             FROM sets
-            WHERE exercise_id = ?
+            WHERE exercise_id = ? AND user_id = ?
             "#,
-            exercise_id
+            exercise_id,
+            user_id
         )
         .fetch_all(&pool)
         .await
@@ -362,7 +434,7 @@ impl Database {
         Ok(sets)
     }
 
-    pub async fn get_unique_exercise_types(&self) -> Result<Vec<String>, AppError> {
+    pub async fn get_unique_exercise_types(&self, user_id: i64) -> Result<Vec<String>, AppError> {
         debug!(target: "database", "Fetching unique exercise types");
 
         let pool = self.pool().await;
@@ -370,8 +442,10 @@ impl Database {
             r#"
             SELECT DISTINCT exercise_type
             FROM exercises
+            WHERE user_id = ?
             ORDER BY exercise_type ASC
-            "#
+            "#,
+            user_id
         )
         .fetch_all(&pool)
         .await
@@ -389,6 +463,7 @@ impl Database {
 
     pub async fn get_last_exercise_data(
         &self,
+        user_id: i64,
         exercise_type: &str,
     ) -> Result<Option<(Exercise, Vec<Set>)>, AppError> {
         debug!(target: "database", "Fetching last data for exercise type: {}", exercise_type);
@@ -406,10 +481,12 @@ impl Database {
                 per_side_weight as "per_side_weight: bool",
                 split_weight as "split_weight: bool"
             FROM exercises
-            WHERE LOWER(exercise_type) = LOWER(?)
+            WHERE user_id = ?
+              AND LOWER(exercise_type) = LOWER(?)
             ORDER BY start_time DESC
             LIMIT 1
             "#,
+            user_id,
             exercise_type
         )
         .fetch_optional(&pool)
@@ -423,7 +500,7 @@ impl Database {
             let exercise_id = row.id.ok_or_else(|| {
                 AppError::InternalError("Exercise row missing id for sets lookup".to_string())
             })?;
-            let sets = self.get_sets_for_exercise(exercise_id).await?;
+            let sets = self.get_sets_for_exercise(user_id, exercise_id).await?;
 
             let mut exercise = Exercise {
                 id: row.id,
@@ -437,7 +514,7 @@ impl Database {
                 settings: Vec::new(),
             };
 
-            exercise.settings = self.get_settings_for_exercise(exercise_id).await?;
+            exercise.settings = self.get_settings_for_exercise(user_id, exercise_id).await?;
             Ok(Some((exercise, sets)))
         } else {
             Ok(None)
@@ -446,6 +523,7 @@ impl Database {
 
     pub async fn get_settings_for_exercise(
         &self,
+        user_id: i64,
         exercise_id: i64,
     ) -> Result<Vec<ExerciseSetting>, AppError> {
         let pool = self.pool().await;
@@ -454,10 +532,11 @@ impl Database {
             r#"
             SELECT id as "id?", exercise_id, setting_key, setting_value
             FROM exercise_settings
-            WHERE exercise_id = ?
+            WHERE exercise_id = ? AND user_id = ?
             ORDER BY id ASC
             "#,
-            exercise_id
+            exercise_id,
+            user_id
         )
         .fetch_all(&pool)
         .await
@@ -469,18 +548,19 @@ impl Database {
         Ok(rows)
     }
 
-    pub async fn delete_exercise(&self, id: i64) -> Result<(), AppError> {
+    pub async fn delete_exercise(&self, user_id: i64, id: i64) -> Result<(), AppError> {
         debug!(target: "database", "Deleting exercise #{}", id);
 
         let pool = self.pool().await;
         // With CASCADE DELETE, we only need to delete the exercise
         // and all related sets will be automatically deleted
-        sqlx::query!(
+        let res = sqlx::query!(
             r#"
             DELETE FROM exercises
-            WHERE id = ?
+            WHERE id = ? AND user_id = ?
             "#,
             id,
+            user_id,
         )
         .execute(&pool)
         .await
@@ -488,6 +568,10 @@ impl Database {
             error!(target: "database", "Failed to delete exercise: {}", e);
             AppError::DatabaseError(e)
         })?;
+
+        if res.rows_affected() == 0 {
+            return Err(AppError::NotFound(format!("Exercise #{} not found", id)));
+        }
 
         info!(target: "database", "Deleted exercise #{} and its sets", id);
         Ok(())

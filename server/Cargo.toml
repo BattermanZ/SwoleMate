@@ -19,6 +19,12 @@ futures-util = "0.3"
 urlencoding = "2.1"
 tar = "0.4"
 flate2 = "1.0"
+argon2 = "0.5"
+password-hash = "0.5"
+rand = "0.8"
+sha2 = "0.10"
+base64 = "0.22"
+hex = "0.4"
 
 [dev-dependencies]
 actix-http = "3.9"

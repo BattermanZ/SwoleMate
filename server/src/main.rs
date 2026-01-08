@@ -10,7 +10,7 @@ use std::io::Write;
 use std::path::Path;
 use tokio::time::{sleep, Duration};
 
-use swolemate_server::{backup, db, middleware, routes, schema};
+use swolemate_server::{auth, backup, db, middleware, routes, schema};
 
 fn find_env_file() -> Option<String> {
     let current_dir = std::env::current_dir().ok()?;
@@ -190,7 +190,7 @@ async fn main() -> std::io::Result<()> {
     let app_env = env::var("APP_ENV")
         .unwrap_or_else(|_| "development".to_string())
         .to_lowercase();
-    let auth = middleware::ApiAuth::from_env();
+    let session_cfg = auth::SessionConfig::for_env(&app_env);
     let enable_hsts = app_env == "production"
         && env::var("ENABLE_HSTS")
             .ok()
@@ -200,14 +200,6 @@ async fn main() -> std::io::Result<()> {
         .ok()
         .and_then(|v| v.parse::<u64>().ok())
         .unwrap_or(31536000);
-    if app_env == "production" && !auth.is_configured() {
-        error!("APP_ENV=production requires SWOLEMATE_API_TOKEN and/or SWOLEMATE_ADMIN_TOKEN");
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "Missing API token configuration",
-        ));
-    }
-
     // Get database URL from environment
     let database_url =
         env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:database/swolemate.db".to_string());
@@ -307,6 +299,7 @@ async fn main() -> std::io::Result<()> {
         // Configure CORS
         let mut cors = Cors::default()
             .allowed_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+            .supports_credentials()
             .allowed_headers(vec![
                 actix_web::http::header::AUTHORIZATION,
                 actix_web::http::header::ACCEPT,
@@ -338,13 +331,17 @@ async fn main() -> std::io::Result<()> {
         }
 
         App::new()
-            .wrap(auth.clone())
+            .wrap(middleware::SessionAuth::new(
+                database.clone(),
+                session_cfg.clone(),
+            ))
             .wrap(headers)
             .wrap(middleware::RequestLogger)
             .wrap(cors)
             .wrap(concurrency.clone())
             .app_data(web::JsonConfig::default().limit(json_body_limit))
             .app_data(actix_web::web::Data::new(database.clone()))
+            .app_data(web::Data::new(session_cfg.clone()))
             .configure(routes::config)
     })
     .bind(("0.0.0.0", port))?

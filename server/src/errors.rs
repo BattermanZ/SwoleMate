@@ -15,6 +15,15 @@ pub enum AppError {
     #[error("Internal error: {0}")]
     InternalError(String),
 
+    #[error("Unauthorized")]
+    Unauthorized,
+
+    #[error("Forbidden")]
+    Forbidden,
+
+    #[error("Too many requests: {0}")]
+    TooManyRequests(String),
+
     #[error("Not found: {0}")]
     NotFound(String),
 
@@ -28,6 +37,9 @@ impl ResponseError for AppError {
         let error_type = match self {
             AppError::DatabaseError(_) => "database_error",
             AppError::InternalError(_) => "internal_error",
+            AppError::Unauthorized => "unauthorized",
+            AppError::Forbidden => "forbidden",
+            AppError::TooManyRequests(_) => "too_many_requests",
             AppError::NotFound(_) => "not_found",
             AppError::BadRequest(_) => "bad_request",
         };
@@ -57,6 +69,15 @@ impl ResponseError for AppError {
                 } else {
                     "Internal server error".to_string()
                 }
+            })),
+            AppError::Unauthorized => HttpResponse::Unauthorized().json(json!({
+                "error": "Unauthorized"
+            })),
+            AppError::Forbidden => HttpResponse::Forbidden().json(json!({
+                "error": "Forbidden"
+            })),
+            AppError::TooManyRequests(msg) => HttpResponse::TooManyRequests().json(json!({
+                "error": msg
             })),
             AppError::BadRequest(msg) => HttpResponse::BadRequest().json(json!({
                 "error": msg

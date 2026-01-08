@@ -4,6 +4,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 mod exercises;
+mod auth;
 mod progress;
 mod workouts;
 

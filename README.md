@@ -63,11 +63,16 @@ SwoleMate is a modern fitness tracking application that helps you monitor and vi
 
 ## Security / Production
 
-When exposing the backend behind an HTTPS reverse proxy, configure API auth:
+When exposing the backend behind an HTTPS reverse proxy, use cookie sessions + admin/user roles:
 
 - `APP_ENV=production` (enables stricter startup checks)
-- `SWOLEMATE_API_TOKEN=...` (required in production; sent as `Authorization: Bearer ...`)
-- `SWOLEMATE_ADMIN_TOKEN=...` (optional; used for `/api/backups*` and `/api/logs*`)
+- `BOOTSTRAP_ADMIN_PASSWORD=...` (required in production; creates the initial admin user)
+- `BOOTSTRAP_ADMIN_USERNAME=admin` (optional)
+
+Notes:
+
+- The session cookie is Secure in production, so you must serve via HTTPS.
+- Backups and user management are admin-only (`/api/backups*`, `/api/admin/*`).
 
 Optional hardening knobs:
 

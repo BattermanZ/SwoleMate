@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT id as \"id?\", exercise_id, reps, weight, weight_left, weight_right, notes\n            FROM sets\n            WHERE exercise_id = ? AND user_id = ?\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id?",
+        "ordinal": 0,
+        "type_info": "Int64"
+      },
+      {
+        "name": "exercise_id",
+        "ordinal": 1,
+        "type_info": "Int64"
+      },
+      {
+        "name": "reps",
+        "ordinal": 2,
+        "type_info": "Int64"
+      },
+      {
+        "name": "weight",
+        "ordinal": 3,
+        "type_info": "Float"
+      },
+      {
+        "name": "weight_left",
+        "ordinal": 4,
+        "type_info": "Float"
+      },
+      {
+        "name": "weight_right",
+        "ordinal": 5,
+        "type_info": "Float"
+      },
+      {
+        "name": "notes",
+        "ordinal": 6,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "67bd607fd35a2bffd09078c5c513dad0de3c817749a3eb2ac4b80babee2d6ced"
+}
