@@ -1,6 +1,14 @@
 <script lang="ts">
-	import { getBackups, createBackup, restoreBackup, deleteBackup } from '$lib/api';
+	import {
+		getBackups,
+		createBackup,
+		restoreBackup,
+		deleteBackup,
+		getWorkouts,
+		getWorkout
+	} from '$lib/api';
 	import type { BackupInfo } from '$lib/api';
+	import { browser } from '$app/environment';
 	import { logger } from '$lib/logger';
 	import { formatDateLongWithTime } from '$lib/utils/date';
 
@@ -8,6 +16,8 @@
 	let backups = data.backups;
 	let loading = false;
 	let error: string | null = null;
+	let exporting = false;
+	let exportError: string | null = null;
 
 	async function loadBackups() {
 		try {
@@ -79,80 +89,155 @@
 			loading = false;
 		}
 	}
+
+	async function exportAllData() {
+		if (!browser) return;
+		if (exporting) return;
+
+		try {
+			exporting = true;
+			exportError = null;
+
+			const workouts = await getWorkouts();
+			const detailed = await Promise.all(
+				workouts
+					.filter((w) => typeof w.id === 'number')
+					.map(async (w) => {
+						const data = await getWorkout(w.id!);
+						return { ...data.workout, exercises: data.exercises };
+					})
+			);
+
+			const payload = {
+				exported_at: new Date().toISOString(),
+				workouts: detailed
+			};
+
+			const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+			const url = window.URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = `swolemate-export-${new Date().toISOString().slice(0, 10)}.json`;
+			a.click();
+			window.URL.revokeObjectURL(url);
+		} catch (e) {
+			const message = e instanceof Error ? e.message : 'Failed to export data';
+			exportError = message;
+			logger.error('backups', 'Failed to export data', { error: e });
+		} finally {
+			exporting = false;
+		}
+	}
 </script>
 
-<div class="container mx-auto p-4 space-y-6">
-	<header class="text-center space-y-4">
-		<h2 class="h2">Database Backups</h2>
-		<div class="flex justify-center">
-			<button class="btn variant-filled-primary" on:click={handleCreateBackup} disabled={loading}>
-				<span class="text-xl mr-2">💾</span>
-				Create Manual Backup
-			</button>
+<div class="space-y-6">
+	<header
+		class="relative overflow-hidden rounded-2xl border border-surface-200/50 dark:border-surface-700/50 bg-gradient-to-br from-primary-500/10 via-transparent to-tertiary-500/10 p-5 sm:p-6"
+	>
+		<div
+			class="pointer-events-none absolute -top-24 -right-24 size-72 rounded-full blur-3xl bg-primary-500/15"
+		></div>
+		<div
+			class="pointer-events-none absolute -bottom-24 -left-24 size-72 rounded-full blur-3xl bg-secondary-500/15"
+		></div>
+
+		<div class="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+			<div class="space-y-1">
+				<h1 class="text-3xl sm:text-4xl font-black tracking-tight">Backups</h1>
+				<p class="text-sm sm:text-base opacity-80 max-w-prose">
+					Protect your database and export data for portability.
+				</p>
+			</div>
+			<div class="flex flex-col sm:items-end gap-2">
+				<div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+					<button
+						type="button"
+						class="btn variant-filled-primary w-full sm:w-auto"
+						on:click={handleCreateBackup}
+						disabled={loading}
+					>
+						Create backup
+					</button>
+					<button
+						type="button"
+						class="btn variant-soft w-full sm:w-auto"
+						on:click={exportAllData}
+						disabled={exporting}
+					>
+						{exporting ? 'Exporting…' : 'Export JSON'}
+					</button>
+				</div>
+				{#if error || exportError}
+					<div class="text-sm text-error-500">{error ?? exportError}</div>
+				{/if}
+			</div>
 		</div>
 	</header>
 
-	{#if error}
-		<div class="alert variant-filled-error">
-			{error}
-		</div>
-	{/if}
-
-	<div class="grid gap-4">
-		{#if loading}
-			<div class="card variant-ghost p-4 text-center">
-				<span class="loading">Loading backups...</span>
-			</div>
-		{:else if backups.length === 0}
-			<div class="card variant-ghost p-4 text-center">
-				<p>No backups available yet.</p>
-			</div>
-		{:else}
-			<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-				{#each backups as backup}
-					<div class="card variant-glass-surface p-4 hover:variant-glass-surface transition-colors">
-						<div class="flex flex-col h-full">
-							<div class="flex-1">
-								<div class="flex items-center justify-between mb-2">
-									<span class="text-base font-medium">
+	<div class="grid gap-6 md:grid-cols-12">
+		<section class="md:col-span-8 space-y-4 min-w-0">
+			{#if loading}
+				<div class="card variant-ghost p-4 text-center opacity-80">Loading backups…</div>
+			{:else if backups.length === 0}
+				<div class="card variant-ghost p-4 text-center opacity-80">No backups available yet.</div>
+			{:else}
+				<div class="grid gap-4 sm:grid-cols-2">
+					{#each backups as backup}
+						<div class="card variant-glass-surface p-4 min-w-0">
+							<div class="flex items-start justify-between gap-3">
+								<div class="min-w-0">
+									<div class="text-sm font-semibold truncate">
 										{formatDateLongWithTime(new Date(backup.created_at))}
-									</span>
-								</div>
-								<div class="mt-2">
-									<span
-										class="badge {backup.backup_type === 'Auto'
-											? 'variant-filled-secondary'
-											: 'variant-filled-primary'}"
-									>
-										{backup.backup_type}
-									</span>
-									<span class="text-sm ml-2 opacity-60">
-										{backup.filename.replace('swolemate_backup_', '').replace('.tar.gz', '')}
-									</span>
+									</div>
+									<div class="mt-2 flex flex-wrap items-center gap-2">
+										<span
+											class="badge {backup.backup_type === 'Auto'
+												? 'variant-filled-secondary'
+												: 'variant-filled-primary'}"
+										>
+											{backup.backup_type}
+										</span>
+										<span class="text-xs opacity-70 truncate">
+											{backup.filename.replace('swolemate_backup_', '').replace('.tar.gz', '')}
+										</span>
+									</div>
 								</div>
 							</div>
+
 							<div class="flex gap-2 mt-4">
 								<button
+									type="button"
 									class="btn variant-filled-warning flex-1"
 									on:click={() => handleRestore(backup.filename)}
 									disabled={loading}
 								>
-									<span class="text-xl mr-2">🔄</span>
 									Restore
 								</button>
 								<button
-									class="btn variant-filled-error flex-1"
+									type="button"
+									class="btn variant-soft-error flex-1"
 									on:click={() => handleDelete(backup.filename)}
 									disabled={loading}
 								>
-									<span class="text-xl mr-2">🗑️</span>
 									Delete
 								</button>
 							</div>
 						</div>
-					</div>
-				{/each}
+					{/each}
+				</div>
+			{/if}
+		</section>
+
+		<aside class="md:col-span-4 space-y-4 min-w-0">
+			<div class="card variant-glass-surface p-4 space-y-2">
+				<h2 class="text-lg font-semibold tracking-tight">Tips</h2>
+				<ul class="text-sm opacity-80 space-y-1 list-disc pl-5">
+					<li>Create a manual backup before updates or big changes.</li>
+					<li>Restore replaces the current database (it’s destructive).</li>
+					<li>Export JSON is a portable snapshot you can store anywhere.</li>
+				</ul>
 			</div>
-		{/if}
+			<a href="/settings" class="btn variant-soft w-full justify-center">Help →</a>
+		</aside>
 	</div>
 </div>

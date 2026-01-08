@@ -1,182 +1,121 @@
 <script lang="ts">
-	import { Tabs } from '@skeletonlabs/skeleton-svelte';
-	import { writable } from 'svelte/store';
-	import { getWorkouts } from '$lib/api';
 	import { browser } from '$app/environment';
-	import { logger } from '$lib/logger';
 
-	function getStoredString(key: string, fallback: string): string {
-		if (!browser) return fallback;
-		return localStorage.getItem(key) ?? fallback;
-	}
-
-	function getStoredNumber(key: string, fallback: number): number {
-		if (!browser) return fallback;
-		const raw = localStorage.getItem(key);
-		if (raw === null) return fallback;
-		const parsed = Number(raw);
-		return Number.isFinite(parsed) ? parsed : fallback;
-	}
-
-	// Settings stores
-	const unitPreference = writable(getStoredString('unitPreference', 'kg'));
-	const restTimer = writable(getStoredNumber('restTimer', 90));
-	const autoEndTimeout = writable(getStoredNumber('autoEndTimeout', 300));
-	const viewDensity = writable(getStoredString('viewDensity', 'comfortable'));
-	const accentColor = writable(getStoredString('accentColor', '#652B26'));
-
-	// Save settings to localStorage when they change
-	$: {
-		if (browser) {
-			localStorage.setItem('unitPreference', $unitPreference);
-			localStorage.setItem('restTimer', $restTimer.toString());
-			localStorage.setItem('autoEndTimeout', $autoEndTimeout.toString());
-			localStorage.setItem('viewDensity', $viewDensity);
-			localStorage.setItem('accentColor', $accentColor);
+	function resetUiPreferences() {
+		if (!browser) return;
+		if (!confirm('Reset local UI preferences? (Theme, progress selection, and legacy settings)')) {
+			return;
 		}
-	}
 
-	async function exportData() {
-		try {
-			const data = await getWorkouts();
-			const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-			const url = window.URL.createObjectURL(blob);
-			const a = document.createElement('a');
-			a.href = url;
-			a.download = `swolemate-backup-${new Date().toISOString().split('T')[0]}.json`;
-			a.click();
-			window.URL.revokeObjectURL(url);
-		} catch (error) {
-			logger.error('settings', 'Failed to export data', { error });
+		const keys = [
+			'theme',
+			'progress.selectedExercise',
+			'unitPreference',
+			'restTimer',
+			'autoEndTimeout',
+			'viewDensity',
+			'accentColor'
+		];
+		for (const key of keys) {
+			try {
+				localStorage.removeItem(key);
+			} catch {
+				// ignore
+			}
 		}
+		window.location.reload();
 	}
 </script>
 
-<div class="container mx-auto p-4 space-y-8">
-	<header class="text-center">
-		<h1 class="h1 mb-4">Settings</h1>
+<div class="space-y-6">
+	<header
+		class="relative overflow-hidden rounded-2xl border border-surface-200/50 dark:border-surface-700/50 bg-gradient-to-br from-primary-500/10 via-transparent to-tertiary-500/10 p-5 sm:p-6"
+	>
+		<div
+			class="pointer-events-none absolute -top-24 -right-24 size-72 rounded-full blur-3xl bg-primary-500/15"
+		></div>
+		<div
+			class="pointer-events-none absolute -bottom-24 -left-24 size-72 rounded-full blur-3xl bg-secondary-500/15"
+		></div>
+
+		<div class="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+			<div class="space-y-1">
+				<h1 class="text-3xl sm:text-4xl font-black tracking-tight">Help</h1>
+				<p class="text-sm sm:text-base opacity-80 max-w-prose">
+					Quick guidance on how to use SwoleMate, plus a couple of “fix it” buttons.
+				</p>
+			</div>
+			<div class="flex sm:justify-end">
+				<a href="/backups" class="btn variant-soft">Data & backups →</a>
+			</div>
+		</div>
 	</header>
 
-	<Tabs defaultValue="workout">
-		<Tabs.List class="flex gap-2 flex-wrap">
-			<Tabs.Trigger class="btn variant-ghost-primary" value="workout">
-				<span class="text-xl mr-2">💪</span> Workout
-			</Tabs.Trigger>
-			<Tabs.Trigger class="btn variant-ghost-primary" value="appearance">
-				<span class="text-xl mr-2">🎨</span> Appearance
-			</Tabs.Trigger>
-			<Tabs.Trigger class="btn variant-ghost-primary" value="data">
-				<span class="text-xl mr-2">💾</span> Data
-			</Tabs.Trigger>
-			<Tabs.Trigger class="btn variant-ghost-primary" value="notifications">
-				<span class="text-xl mr-2">🔔</span> Notifications
-			</Tabs.Trigger>
-			<Tabs.Indicator />
-		</Tabs.List>
-
-		<Tabs.Content value="workout">
-			<div class="card variant-glass-surface p-4 space-y-4">
-				<div class="space-y-2">
-					<label class="label">
-						<span>Weight Unit</span>
-						<select class="select" bind:value={$unitPreference}>
-							<option value="kg">Kilograms (kg)</option>
-							<option value="lbs">Pounds (lbs)</option>
-						</select>
-					</label>
-
-					<label class="label">
-						<span>Rest Timer Duration (seconds)</span>
-						<input type="number" class="input" bind:value={$restTimer} min="0" max="300" />
-					</label>
-
-					<label class="label">
-						<span>Auto-end Workout Timeout (minutes)</span>
-						<input type="number" class="input" bind:value={$autoEndTimeout} min="0" max="60" />
-					</label>
+	<div class="grid gap-6 md:grid-cols-12">
+		<section class="md:col-span-7 space-y-4 min-w-0">
+			<div class="card variant-glass-surface p-4 space-y-3">
+				<div>
+					<h2 class="text-lg font-semibold tracking-tight">How to use</h2>
+					<p class="text-sm opacity-70">The workflow is designed to be fast and repeatable.</p>
 				</div>
-			</div>
-		</Tabs.Content>
 
-		<Tabs.Content value="appearance">
-			<div class="card variant-glass-surface p-4 space-y-4">
-				<div class="space-y-2">
-					<label class="label">
-						<span>View Density</span>
-						<select class="select" bind:value={$viewDensity}>
-							<option value="comfortable">Comfortable</option>
-							<option value="compact">Compact</option>
-						</select>
-					</label>
-
-					<label class="label">
-						<span>Accent Color</span>
-						<input type="color" class="input" bind:value={$accentColor} />
-					</label>
-				</div>
-			</div>
-		</Tabs.Content>
-
-		<Tabs.Content value="data">
-			<div class="card variant-glass-surface p-4 space-y-4">
-				<div class="grid gap-4">
-					<button class="btn variant-filled-primary" on:click={exportData}>
-						<span class="text-xl mr-2">📤</span> Export Workout Data
-					</button>
-
-					<button class="btn variant-filled-surface">
-						<span class="text-xl mr-2">📥</span> Import Workout Data
-					</button>
-
-					<button class="btn variant-filled-error">
-						<span class="text-xl mr-2">🗑️</span> Clear All Data
-					</button>
-				</div>
-			</div>
-		</Tabs.Content>
-
-		<Tabs.Content value="notifications">
-			<div class="card variant-glass-surface p-4 space-y-4">
-				<div class="space-y-2">
-					<label class="label">
-						<span>Workout Reminders</span>
-						<select class="select">
-							<option value="none">None</option>
-							<option value="daily">Daily</option>
-							<option value="weekly">Weekly</option>
-						</select>
-					</label>
-
-					<label class="label">
-						<span>Rest Timer Notifications</span>
-						<div class="flex items-center space-x-2">
-							<input type="checkbox" class="checkbox" />
-							<span>Enable sound</span>
+				<div class="space-y-3 text-sm opacity-85">
+					<div
+						class="rounded-xl border border-surface-200/50 bg-surface-50/60 p-3 dark:border-surface-700/50 dark:bg-surface-950/30"
+					>
+						<div class="font-semibold">Today</div>
+						<div class="opacity-80">
+							Start a session → add exercises → log sets/notes/settings → mark exercises done → end
+							session with mood.
 						</div>
-					</label>
-
-					<label class="label">
-						<span>Progress Milestones</span>
-						<div class="flex items-center space-x-2">
-							<input type="checkbox" class="checkbox" />
-							<span>Show notifications</span>
+					</div>
+					<div
+						class="rounded-xl border border-surface-200/50 bg-surface-50/60 p-3 dark:border-surface-700/50 dark:bg-surface-950/30"
+					>
+						<div class="font-semibold">History</div>
+						<div class="opacity-80">
+							Search/filter sessions and review details (exercise settings + set schemes) without
+							leaving the page.
 						</div>
-					</label>
+					</div>
+					<div
+						class="rounded-xl border border-surface-200/50 bg-surface-50/60 p-3 dark:border-surface-700/50 dark:bg-surface-950/30"
+					>
+						<div class="font-semibold">Progress</div>
+						<div class="opacity-80">
+							Pick a focus exercise to see PRs and charts; overall cards show frequency/time-of-day
+							patterns.
+						</div>
+					</div>
 				</div>
 			</div>
-		</Tabs.Content>
-	</Tabs>
+
+			<div class="card variant-glass-surface p-4 space-y-3">
+				<div>
+					<h2 class="text-lg font-semibold tracking-tight">Troubleshooting</h2>
+					<p class="text-sm opacity-70">
+						If theme or page state gets weird (especially after updates), a local reset usually
+						fixes it.
+					</p>
+				</div>
+
+				<button type="button" class="btn variant-soft-error w-full" on:click={resetUiPreferences}>
+					Reset local UI preferences
+				</button>
+			</div>
+		</section>
+
+		<aside class="md:col-span-5 space-y-4 min-w-0">
+			<div class="card variant-glass-surface p-4 space-y-2">
+				<h2 class="text-lg font-semibold tracking-tight">Good to know</h2>
+				<ul class="text-sm opacity-80 space-y-1 list-disc pl-5">
+					<li>Theme is toggled from the top bar.</li>
+					<li>
+						If you run SwoleMate on multiple devices, use `/backups` to protect and migrate data.
+					</li>
+					<li>Marked-done exercises lock editing until you press Edit.</li>
+				</ul>
+			</div>
+		</aside>
+	</div>
 </div>
-
-<style>
-	.label {
-		display: block;
-	}
-	.label > span:first-child {
-		font-weight: 700;
-	}
-	.select,
-	.input {
-		width: 100%;
-	}
-</style>
