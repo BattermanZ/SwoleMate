@@ -373,6 +373,8 @@ async fn exercise_lookups_and_progress_endpoints_work() {
         .to_request();
     let body = json_body(test::call_service(&app, req).await).await;
     assert!(body.get("total_workouts").is_some());
+    assert!(body.get("avg_exercise_duration_series").is_some());
+    assert!(body["avg_exercise_duration_series"].is_array());
 
     let req = test::TestRequest::get()
         .uri("/api/progress/volume?exercise_type=Squat")

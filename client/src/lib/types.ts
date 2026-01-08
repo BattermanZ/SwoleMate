@@ -113,6 +113,13 @@ export interface WorkoutStats {
 		month: string; // YYYY-MM
 		count: number;
 	}>;
+	avg_exercise_duration_series?: Array<{
+		start_time: string;
+		end_time: string;
+		duration_minutes: number;
+		exercise_count: number;
+		avg_minutes: number;
+	}>;
 }
 
 export interface VolumeStats {

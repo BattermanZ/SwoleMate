@@ -280,6 +280,59 @@ impl Database {
             })
             .collect::<Vec<_>>();
 
+        let avg_exercise_rows = sqlx::query!(
+            r#"
+            WITH recent AS (
+                SELECT
+                    workouts.start_time as start_time,
+                    workouts.end_time as end_time,
+                    CAST(ROUND((julianday(workouts.end_time) - julianday(workouts.start_time)) * 24 * 60) AS INTEGER) as duration_minutes,
+                    (
+                        SELECT COUNT(*)
+                        FROM exercises e
+                        WHERE e.workout_id = workouts.id
+                    ) as exercise_count
+                FROM workouts
+                WHERE end_time > start_time
+                ORDER BY start_time DESC
+                LIMIT 60
+            )
+            SELECT
+                start_time as "start_time: DateTime<Utc>",
+                end_time as "end_time: DateTime<Utc>",
+                duration_minutes as "duration_minutes!: i64",
+                exercise_count as "exercise_count!: i64",
+                ROUND(CAST(duration_minutes AS FLOAT) / exercise_count, 2) as "avg_minutes!: f64"
+            FROM recent
+            WHERE exercise_count > 0
+            ORDER BY start_time ASC
+            "#
+        )
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| {
+            error!(
+                target: "database",
+                "Failed to fetch avg exercise duration series: {}",
+                e
+            );
+            AppError::DatabaseError(e)
+        })?;
+
+        let avg_exercise_duration_series = avg_exercise_rows
+            .into_iter()
+            .filter(|row| row.duration_minutes > 0)
+            .map(|row| {
+                json!({
+                    "start_time": row.start_time,
+                    "end_time": row.end_time,
+                    "duration_minutes": row.duration_minutes,
+                    "exercise_count": row.exercise_count,
+                    "avg_minutes": row.avg_minutes
+                })
+            })
+            .collect::<Vec<_>>();
+
         Ok(json!({
             "total_workouts": stats.total_workouts,
             "average_duration_minutes": stats.avg_duration,
@@ -295,7 +348,8 @@ impl Database {
             "duration_trend": stats.duration_trend,
             "popular_hours": popular_hours,
             "duration_distribution": duration_distribution,
-            "sessions_per_month": monthly_sessions
+            "sessions_per_month": monthly_sessions,
+            "avg_exercise_duration_series": avg_exercise_duration_series
         }))
     }
 

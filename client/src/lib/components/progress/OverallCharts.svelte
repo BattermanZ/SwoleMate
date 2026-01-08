@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
+	import 'chartjs-adapter-date-fns';
 	import type { ChartConfiguration } from 'chart.js';
 	import type { WorkoutStats } from '$lib/types';
 	import {
@@ -19,11 +20,13 @@
 	let timeCanvas: HTMLCanvasElement | null = null;
 	let durationCanvas: HTMLCanvasElement | null = null;
 	let monthlySessionsCanvas: HTMLCanvasElement | null = null;
+	let avgExerciseDurationCanvas: HTMLCanvasElement | null = null;
 
 	let feedbackChart: AnyChart | null = null;
 	let timeDistributionChart: AnyChart | null = null;
 	let durationDistributionChart: AnyChart | null = null;
 	let monthlySessionsChart: AnyChart | null = null;
+	let avgExerciseDurationChart: AnyChart | null = null;
 
 	let theme: ChartTheme = {
 		isDark: false,
@@ -45,10 +48,12 @@
 		timeDistributionChart?.destroy();
 		durationDistributionChart?.destroy();
 		monthlySessionsChart?.destroy();
+		avgExerciseDurationChart?.destroy();
 		feedbackChart = null;
 		timeDistributionChart = null;
 		durationDistributionChart = null;
 		monthlySessionsChart = null;
+		avgExerciseDurationChart = null;
 	}
 
 	function render(...deps: unknown[]) {
@@ -136,6 +141,49 @@
 			monthlySessionsChart = null;
 		}
 
+		const avgExerciseSeries = workoutStats.avg_exercise_duration_series ?? [];
+		if (avgExerciseSeries.length) {
+			avgExerciseDurationChart = upsertChart(avgExerciseDurationChart, avgExerciseDurationCanvas, {
+				type: 'line',
+				data: {
+					datasets: [
+						{
+							label: 'Avg minutes / exercise',
+							data: avgExerciseSeries.map((p) => ({
+								x: new Date(p.start_time).getTime(),
+								y: p.avg_minutes
+							})),
+							borderColor: theme.secondary,
+							backgroundColor: rgba(theme.secondary, theme.isDark ? 0.22 : 0.14),
+							pointRadius: 2,
+							tension: 0.25,
+							fill: false
+						}
+					]
+				},
+				options: {
+					...base,
+					scales: {
+						x: {
+							type: 'time',
+							time: { unit: 'week' },
+							ticks: { color: theme.mutedText },
+							grid: { color: theme.grid },
+							title: { display: true, text: 'Session', color: theme.mutedText }
+						},
+						y: {
+							...(baseScales.y ?? {}),
+							beginAtZero: true,
+							title: { display: true, text: 'Min / exercise', color: theme.mutedText }
+						}
+					}
+				}
+			} as unknown as ChartConfiguration<'line'>);
+		} else {
+			avgExerciseDurationChart?.destroy();
+			avgExerciseDurationChart = null;
+		}
+
 		const popularHours = [...workoutStats.popular_hours].sort(
 			(a, b) => Number(a.hour) - Number(b.hour)
 		);
@@ -209,7 +257,15 @@
 		});
 	});
 
-	$: render(workoutStats, feedbackCanvas, timeCanvas, durationCanvas, monthlySessionsCanvas, theme);
+	$: render(
+		workoutStats,
+		feedbackCanvas,
+		timeCanvas,
+		durationCanvas,
+		monthlySessionsCanvas,
+		avgExerciseDurationCanvas,
+		theme
+	);
 
 	onDestroy(() => {
 		destroyCharts();
@@ -240,6 +296,18 @@
 		</div>
 		<div class="mt-3 h-64">
 			<canvas bind:this={monthlySessionsCanvas}></canvas>
+		</div>
+	</div>
+
+	<div class="card variant-glass-surface p-4 min-w-0">
+		<div class="flex items-start justify-between gap-3">
+			<div>
+				<h3 class="text-base font-semibold">Avg time per exercise</h3>
+				<p class="text-sm opacity-70">Session pace over time.</p>
+			</div>
+		</div>
+		<div class="mt-3 h-64">
+			<canvas bind:this={avgExerciseDurationCanvas}></canvas>
 		</div>
 	</div>
 
