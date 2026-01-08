@@ -11,6 +11,8 @@ pub struct Workout {
     pub end_time: DateTime<Utc>,
     pub notes: Option<String>,
     pub feedback: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exercise_count: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow, Clone)]

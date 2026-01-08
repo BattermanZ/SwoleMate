@@ -454,6 +454,43 @@ async fn workout_times_can_be_edited_and_date_tracks_start_time() {
 }
 
 #[actix_web::test]
+async fn workouts_list_includes_exercise_count() {
+    let _env = TestEnv::new();
+    let (_, app) = setup_test_app().await;
+
+    let now = chrono::Utc::now().with_nanosecond(0).expect("truncate nanos");
+
+    let req = test::TestRequest::post()
+        .uri("/api/workouts")
+        .set_json(json!({ "date": now, "start_time": now, "notes": null }))
+        .to_request();
+    let workout_id = json_body(test::call_service(&app, req).await).await["id"]
+        .as_i64()
+        .unwrap();
+
+    let req = test::TestRequest::post()
+        .uri(&format!("/api/workouts/{workout_id}/exercises"))
+        .set_json(json!({
+            "exercise_type": "Bench Press",
+            "start_time": now,
+            "notes": null
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 201);
+
+    let req = test::TestRequest::get().uri("/api/workouts").to_request();
+    let workouts = json_body(test::call_service(&app, req).await).await;
+    let items = workouts.as_array().expect("workouts array");
+    let selected = items
+        .iter()
+        .find(|w| w["id"].as_i64() == Some(workout_id))
+        .expect("workout present in list");
+
+    assert_eq!(selected["exercise_count"], 1);
+}
+
+#[actix_web::test]
 async fn logs_endpoints_work_and_enforce_limits() {
     let _env = TestEnv::new();
     let (_, app) = setup_test_app().await;

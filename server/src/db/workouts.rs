@@ -132,6 +132,7 @@ impl Database {
             end_time: result.end_time,
             notes: result.notes,
             feedback: result.feedback,
+            exercise_count: None,
         })
     }
 
@@ -147,7 +148,12 @@ impl Database {
                 start_time as "start_time: DateTime<Utc>",
                 end_time as "end_time: DateTime<Utc>",
                 notes,
-                feedback
+                feedback,
+                (
+                    SELECT COUNT(*)
+                    FROM exercises e
+                    WHERE e.workout_id = workouts.id
+                ) as "exercise_count!: i64"
             FROM workouts
             ORDER BY date DESC
             "#
@@ -168,6 +174,7 @@ impl Database {
                 end_time: row.end_time,
                 notes: row.notes,
                 feedback: row.feedback,
+                exercise_count: Some(row.exercise_count),
             })
             .collect();
 

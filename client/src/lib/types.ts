@@ -7,6 +7,7 @@ export interface Workout {
 	end_time: string; // ISO date string
 	notes?: string | null;
 	feedback?: FeedbackEmoji | null;
+	exercise_count?: number;
 }
 
 export interface Exercise {

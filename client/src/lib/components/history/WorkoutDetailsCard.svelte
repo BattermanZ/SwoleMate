@@ -42,6 +42,14 @@
 	function totalSets(w: WorkoutWithExercises): number {
 		return w.exercises.reduce((count, { sets }) => count + sets.length, 0);
 	}
+
+	function avgExerciseDurationMinutes(w: WorkoutWithExercises): number | null {
+		const duration = durationMinutes(w.start_time, w.end_time);
+		if (duration === null) return null;
+		const count = w.exercises.length;
+		if (count <= 0) return null;
+		return Math.round(duration / count);
+	}
 </script>
 
 <div class="card variant-glass-surface p-4 min-w-0">
@@ -71,7 +79,7 @@
 		</div>
 	{:else}
 		<div class="mt-4 space-y-4 min-w-0">
-			<div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+			<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
 				<div class="card variant-glass-surface p-3 border-l-4 border-primary-500/70">
 					<div class="text-xs font-semibold opacity-70">When</div>
 					<div class="text-sm font-bold truncate">{formatDateRelative(workout.start_time)}</div>
@@ -81,6 +89,16 @@
 					<div class="text-sm font-bold">
 						{durationMinutes(workout.start_time, workout.end_time) ?? '—'}m
 					</div>
+				</div>
+				<div class="card variant-glass-surface p-3 border-l-4 border-warning-500/70">
+					<div class="text-xs font-semibold opacity-70">Avg / exercise</div>
+					<div class="text-sm font-bold">{avgExerciseDurationMinutes(workout) ?? '—'}m</div>
+				</div>
+				<div
+					class="card variant-glass-surface p-3 border-l-4 border-surface-400/70 dark:border-surface-600/70"
+				>
+					<div class="text-xs font-semibold opacity-70">Exercises</div>
+					<div class="text-sm font-bold">{workout.exercises.length}</div>
 				</div>
 				<div class="card variant-glass-surface p-3 border-l-4 border-tertiary-500/70">
 					<div class="text-xs font-semibold opacity-70">Sets</div>

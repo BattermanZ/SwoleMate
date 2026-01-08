@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n            SELECT \n                id as \"id!\",\n                date as \"date: DateTime<Utc>\",\n                start_time as \"start_time: DateTime<Utc>\",\n                end_time as \"end_time: DateTime<Utc>\",\n                notes,\n                feedback\n            FROM workouts\n            ORDER BY date DESC\n            ",
+  "query": "\n            SELECT \n                id as \"id!\",\n                date as \"date: DateTime<Utc>\",\n                start_time as \"start_time: DateTime<Utc>\",\n                end_time as \"end_time: DateTime<Utc>\",\n                notes,\n                feedback,\n                (\n                    SELECT COUNT(*)\n                    FROM exercises e\n                    WHERE e.workout_id = workouts.id\n                ) as \"exercise_count!: i64\"\n            FROM workouts\n            ORDER BY date DESC\n            ",
   "describe": {
     "columns": [
       {
@@ -32,19 +32,25 @@
         "name": "feedback",
         "ordinal": 5,
         "type_info": "Text"
+      },
+      {
+        "name": "exercise_count!: i64",
+        "ordinal": 6,
+        "type_info": "Int"
       }
     ],
     "parameters": {
       "Right": 0
     },
     "nullable": [
-      false,
+      true,
       false,
       false,
       false,
       true,
-      true
+      true,
+      null
     ]
   },
-  "hash": "fd244051741442e41d8988ddaaaa2142754fedb88fd6dfcea0129189cb449c84"
+  "hash": "435f2cb20ee13154c994f02e97cc1c3126889734ddb906852518d803e1333e18"
 }

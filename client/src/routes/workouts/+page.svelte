@@ -12,7 +12,7 @@
 	let loading = false;
 	let error: string | null = null;
 
-	type SortOrder = 'newest' | 'oldest';
+	type SortOrder = 'newest' | 'oldest' | 'longest' | 'shortest';
 
 	let query = '';
 	let rangePreset: DateRangePreset = 'all';
@@ -21,6 +21,9 @@
 	let mood: 'all' | FeedbackEmoji = 'all';
 	let sort: SortOrder = 'newest';
 	let selectedId: number | null = null;
+	let pageIndex = 0;
+	const PAGE_SIZE = 20;
+	let lastFiltersKey = '';
 
 	type DetailsState =
 		| { status: 'idle' }
@@ -49,6 +52,14 @@
 	}
 
 	$: sortedWorkouts = [...workouts].sort((a, b) => {
+		if (sort === 'longest' || sort === 'shortest') {
+			const ad = workoutDurationMinutes(a);
+			const bd = workoutDurationMinutes(b);
+			const aVal = ad ?? Number.POSITIVE_INFINITY;
+			const bVal = bd ?? Number.POSITIVE_INFINITY;
+			return sort === 'shortest' ? aVal - bVal : bVal - aVal;
+		}
+
 		const at = new Date(a.start_time).getTime();
 		const bt = new Date(b.start_time).getTime();
 		if (sort === 'oldest') return (Number.isFinite(at) ? at : 0) - (Number.isFinite(bt) ? bt : 0);
@@ -62,11 +73,26 @@
 		return true;
 	});
 
+	$: pageCount = Math.max(1, Math.ceil(filteredWorkouts.length / PAGE_SIZE));
+	$: pageIndex = Math.min(pageIndex, pageCount - 1);
+	$: pagedWorkouts = filteredWorkouts.slice(
+		pageIndex * PAGE_SIZE,
+		pageIndex * PAGE_SIZE + PAGE_SIZE
+	);
+
 	$: {
-		if (filteredWorkouts.length === 0) {
+		const filtersKey = [query, rangePreset, customFrom, customTo, mood, sort].join('|');
+		if (filtersKey !== lastFiltersKey) {
+			pageIndex = 0;
+			lastFiltersKey = filtersKey;
+		}
+	}
+
+	$: {
+		if (pagedWorkouts.length === 0) {
 			selectedId = null;
-		} else if (selectedId === null || !filteredWorkouts.some((w) => w.id === selectedId)) {
-			selectedId = filteredWorkouts[0].id ?? null;
+		} else if (selectedId === null || !pagedWorkouts.some((w) => w.id === selectedId)) {
+			selectedId = pagedWorkouts[0]?.id ?? null;
 		}
 	}
 
@@ -102,12 +128,27 @@
 			? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
 			: null;
 
-		const last7d = items.filter((w) => {
+		const last30d = items.filter((w) => {
 			const start = new Date(w.start_time).getTime();
-			return Number.isFinite(start) && start >= Date.now() - 7 * 24 * 60 * 60 * 1000;
+			return Number.isFinite(start) && start >= Date.now() - 30 * 24 * 60 * 60 * 1000;
 		}).length;
 
-		return { total, avgDuration, last7d };
+		let totalDurationForAvgExercise = 0;
+		let totalExercisesForAvgExercise = 0;
+		for (const w of items) {
+			const duration = workoutDurationMinutes(w);
+			const count = w.exercise_count ?? 0;
+			if (duration === null) continue;
+			if (!Number.isFinite(count) || count <= 0) continue;
+			totalDurationForAvgExercise += duration;
+			totalExercisesForAvgExercise += count;
+		}
+
+		const avgExerciseDuration = totalExercisesForAvgExercise
+			? Math.round(totalDurationForAvgExercise / totalExercisesForAvgExercise)
+			: null;
+
+		return { total, avgDuration, last30d, avgExerciseDuration };
 	}
 
 	$: summary = statsSummary(filteredWorkouts);
@@ -115,6 +156,11 @@
 	$: selectedWorkout = selectedState?.status === 'loaded' ? selectedState.workout : null;
 	$: selectedError = selectedState?.status === 'error' ? selectedState.message : null;
 	$: loadingSelected = selectedState?.status === 'loading';
+
+	$: pageStart = filteredWorkouts.length ? pageIndex * PAGE_SIZE + 1 : 0;
+	$: pageEnd = Math.min(filteredWorkouts.length, (pageIndex + 1) * PAGE_SIZE);
+	$: canPrevPage = pageIndex > 0;
+	$: canNextPage = pageIndex < pageCount - 1;
 
 	let editTimesOpen = false;
 	let editTimesError: string | null = null;
@@ -216,18 +262,22 @@
 			</div>
 		</div>
 
-		<div class="relative mt-5 grid gap-3 grid-cols-2 sm:grid-cols-4">
+		<div class="relative mt-5 grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
 			<div class="card variant-glass-surface p-3 border-l-4 border-primary-500/70">
 				<div class="text-xs font-semibold opacity-70">Filtered sessions</div>
 				<div class="text-lg font-bold">{summary.total}</div>
 			</div>
 			<div class="card variant-glass-surface p-3 border-l-4 border-secondary-500/70">
-				<div class="text-xs font-semibold opacity-70">Last 7 days</div>
-				<div class="text-lg font-bold">{summary.last7d}</div>
+				<div class="text-xs font-semibold opacity-70">Last 30 days</div>
+				<div class="text-lg font-bold">{summary.last30d}</div>
 			</div>
 			<div class="card variant-glass-surface p-3 border-l-4 border-tertiary-500/70">
 				<div class="text-xs font-semibold opacity-70">Avg duration</div>
 				<div class="text-lg font-bold">{summary.avgDuration ?? '—'}m</div>
+			</div>
+			<div class="card variant-glass-surface p-3 border-l-4 border-warning-500/70">
+				<div class="text-xs font-semibold opacity-70">Avg / exercise</div>
+				<div class="text-lg font-bold">{summary.avgExerciseDuration ?? '—'}m</div>
 			</div>
 			<div class="card variant-glass-surface p-3 border-l-4 border-success-500/70">
 				<div class="text-xs font-semibold opacity-70">Selected</div>
@@ -246,7 +296,7 @@
 						<h2 class="text-lg font-semibold tracking-tight">Workouts</h2>
 						<p class="text-sm opacity-70">Search and filter sessions.</p>
 					</div>
-					<div class="text-sm opacity-70">{filteredWorkouts.length} shown</div>
+					<div class="text-sm opacity-70">{filteredWorkouts.length} total</div>
 				</div>
 
 				<div class="grid gap-2 sm:grid-cols-2">
@@ -318,6 +368,8 @@
 						<select class="select w-full mt-1" bind:value={sort} disabled={loading}>
 							<option value="newest">Newest first</option>
 							<option value="oldest">Oldest first</option>
+							<option value="longest">Longest first</option>
+							<option value="shortest">Shortest first</option>
 						</select>
 					</label>
 				</div>
@@ -329,8 +381,36 @@
 						No workouts match filters.
 					</div>
 				{:else}
+					<div class="flex items-center justify-between gap-3">
+						<div class="text-sm opacity-70">
+							Showing {pageStart}-{pageEnd} of {filteredWorkouts.length}
+						</div>
+						<div class="flex items-center gap-2">
+							<button
+								type="button"
+								class="btn btn-sm variant-soft"
+								on:click={() => (pageIndex = Math.max(0, pageIndex - 1))}
+								disabled={!canPrevPage}
+								aria-label="Previous page"
+							>
+								←
+							</button>
+							<div class="text-sm font-semibold tabular-nums">
+								{pageIndex + 1}/{pageCount}
+							</div>
+							<button
+								type="button"
+								class="btn btn-sm variant-soft"
+								on:click={() => (pageIndex = Math.min(pageCount - 1, pageIndex + 1))}
+								disabled={!canNextPage}
+								aria-label="Next page"
+							>
+								→
+							</button>
+						</div>
+					</div>
 					<div class="space-y-2">
-						{#each filteredWorkouts as workout (workout.id)}
+						{#each pagedWorkouts as workout (workout.id)}
 							<button
 								type="button"
 								class="w-full text-left rounded-2xl border p-3 transition-colors min-w-0 {workout.id ===
