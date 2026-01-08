@@ -442,3 +442,31 @@ export async function adminDisableUser(id: number, fetcher: Fetcher = fetch): Pr
 	);
 	return handleResponse(response);
 }
+
+export async function adminResetUserPassword(
+	id: number,
+	newPassword: string,
+	fetcher: Fetcher = fetch
+): Promise<void> {
+	const response = await fetcher(
+		`${API_BASE}/api/admin/users/${id}/reset-password`,
+		withCredentials({
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify({ new_password: newPassword })
+		})
+	);
+	return handleResponse(response);
+}
+
+export async function adminDeleteUser(id: number, fetcher: Fetcher = fetch): Promise<void> {
+	const response = await fetcher(
+		`${API_BASE}/api/admin/users/${id}`,
+		withCredentials({
+			method: 'DELETE'
+		})
+	);
+	return handleResponse(response);
+}

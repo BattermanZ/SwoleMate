@@ -150,6 +150,54 @@ impl Database {
             .collect())
     }
 
+    pub async fn count_active_admins(&self) -> Result<i64, AppError> {
+        let pool = self.pool().await;
+        let count = sqlx::query_scalar!(
+            r#"
+            SELECT COUNT(*) as "count!: i64"
+            FROM users
+            WHERE role = 'admin' AND disabled_at IS NULL
+            "#
+        )
+        .fetch_one(&pool)
+        .await
+        .map_err(AppError::DatabaseError)?;
+        Ok(count)
+    }
+
+    pub async fn delete_user_cascade(&self, user_id: i64) -> Result<(), AppError> {
+        let pool = self.pool().await;
+        let mut tx = pool.begin().await.map_err(AppError::DatabaseError)?;
+
+        sqlx::query!("DELETE FROM exercise_settings WHERE user_id = ?", user_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(AppError::DatabaseError)?;
+        sqlx::query!("DELETE FROM sets WHERE user_id = ?", user_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(AppError::DatabaseError)?;
+        sqlx::query!("DELETE FROM exercises WHERE user_id = ?", user_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(AppError::DatabaseError)?;
+        sqlx::query!("DELETE FROM workouts WHERE user_id = ?", user_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(AppError::DatabaseError)?;
+        sqlx::query!("DELETE FROM sessions WHERE user_id = ?", user_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(AppError::DatabaseError)?;
+        sqlx::query!("DELETE FROM users WHERE id = ?", user_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(AppError::DatabaseError)?;
+
+        tx.commit().await.map_err(AppError::DatabaseError)?;
+        Ok(())
+    }
+
     pub async fn disable_user(&self, user_id: i64) -> Result<(), AppError> {
         let pool = self.pool().await;
         sqlx::query!(

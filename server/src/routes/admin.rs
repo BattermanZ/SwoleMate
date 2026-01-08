@@ -15,6 +15,11 @@ pub struct CreateUserRequest {
     pub role: Option<Role>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ResetPasswordRequest {
+    pub new_password: String,
+}
+
 #[derive(Debug, Serialize)]
 pub struct UserListItem {
     pub id: i64,
@@ -66,4 +71,41 @@ pub async fn disable_user(
     db.disable_user(*id).await?;
     db.revoke_all_sessions_for_user(*id).await?;
     Ok(HttpResponse::Ok().json(serde_json::json!({ "status": "ok" })))
+}
+
+#[post("/api/admin/users/{id}/reset-password")]
+pub async fn reset_user_password(
+    _admin: AdminUser,
+    db: web::Data<Database>,
+    id: web::Path<i64>,
+    body: web::Json<ResetPasswordRequest>,
+) -> Result<HttpResponse, AppError> {
+    let new_hash = password::hash_password(&body.new_password).map_err(AppError::BadRequest)?;
+    db.update_password_hash(*id, &new_hash).await?;
+    db.revoke_all_sessions_for_user(*id).await?;
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "status": "ok" })))
+}
+
+#[actix_web::delete("/api/admin/users/{id}")]
+pub async fn delete_user(
+    _admin: AdminUser,
+    db: web::Data<Database>,
+    id: web::Path<i64>,
+) -> Result<HttpResponse, AppError> {
+    let user_id = *id;
+    let Some(target) = db.get_user_by_id(user_id).await? else {
+        return Err(AppError::NotFound("User not found".to_string()));
+    };
+
+    if target.role.is_admin() {
+        let admins = db.count_active_admins().await?;
+        if admins <= 1 {
+            return Err(AppError::Conflict(
+                "Cannot delete the last admin account.".to_string(),
+            ));
+        }
+    }
+
+    db.delete_user_cascade(user_id).await?;
+    Ok(HttpResponse::NoContent().finish())
 }

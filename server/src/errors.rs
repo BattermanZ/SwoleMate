@@ -24,6 +24,9 @@ pub enum AppError {
     #[error("Too many requests: {0}")]
     TooManyRequests(String),
 
+    #[error("Conflict: {0}")]
+    Conflict(String),
+
     #[error("Not found: {0}")]
     NotFound(String),
 
@@ -40,6 +43,7 @@ impl ResponseError for AppError {
             AppError::Unauthorized => "unauthorized",
             AppError::Forbidden => "forbidden",
             AppError::TooManyRequests(_) => "too_many_requests",
+            AppError::Conflict(_) => "conflict",
             AppError::NotFound(_) => "not_found",
             AppError::BadRequest(_) => "bad_request",
         };
@@ -77,6 +81,9 @@ impl ResponseError for AppError {
                 "error": "Forbidden"
             })),
             AppError::TooManyRequests(msg) => HttpResponse::TooManyRequests().json(json!({
+                "error": msg
+            })),
+            AppError::Conflict(msg) => HttpResponse::Conflict().json(json!({
                 "error": msg
             })),
             AppError::BadRequest(msg) => HttpResponse::BadRequest().json(json!({

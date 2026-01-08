@@ -18,15 +18,21 @@
 		{ href: '/workouts', label: 'History', icon: '📅' },
 		{ href: '/progress', label: 'Progress', icon: '📈' },
 		{ href: '/settings', label: 'Help', icon: '❓' },
+		{ href: '/admin', label: 'Admin', icon: '🛡️' },
 		{ href: '/backups', label: 'Backups', icon: '💾' }
 	];
 
 	$: isLogin = $page.url.pathname === '/login';
+	$: canSeeAdmin = $authState.status === 'authenticated' && $authState.user?.role === 'admin';
 	$: canSeeBackups =
 		$authState.status === 'authenticated' &&
 		$authState.user?.role === 'admin' &&
 		!$authState.offline;
-	$: visibleNavItems = navItems.filter((item) => item.href !== '/backups' || canSeeBackups);
+	$: visibleNavItems = navItems.filter((item) => {
+		if (item.href === '/admin') return canSeeAdmin;
+		if (item.href === '/backups') return canSeeBackups;
+		return true;
+	});
 
 	function toggleDrawer(): void {
 		drawerOpen = !drawerOpen;
@@ -156,6 +162,17 @@
 				{#if !isLogin && $authState.offline}
 					<span class="badge variant-soft-warning hidden sm:inline-flex">Offline</span>
 				{/if}
+
+				{#if !isLogin && $authState.status === 'authenticated'}
+					<button
+						type="button"
+						class="btn btn-sm variant-ghost-primary"
+						aria-label="Log out"
+						on:click={() => auth.logout()}
+					>
+						<span aria-hidden="true">⎋</span>
+					</button>
+				{/if}
 			</AppBar.Trail>
 		</AppBar.Toolbar>
 	</AppBar>
@@ -185,6 +202,21 @@
 							</a>
 						</li>
 					{/each}
+					{#if $authState.status === 'authenticated'}
+						<li class="pt-2 border-t border-surface-200/50 dark:border-surface-700/50">
+							<button
+								type="button"
+								class="btn w-full justify-start variant-soft-error"
+								on:click={() => {
+									drawerOpen = false;
+									void auth.logout();
+								}}
+							>
+								<span class="text-xl">⎋</span>
+								<span>Log out</span>
+							</button>
+						</li>
+					{/if}
 				</ul>
 			</nav>
 		</div>

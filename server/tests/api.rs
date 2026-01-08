@@ -274,6 +274,99 @@ async fn admin_only_endpoints_are_forbidden_for_normal_users() {
 }
 
 #[actix_web::test]
+async fn admin_can_reset_user_password_and_revoke_sessions() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    let user_id = create_user_as_admin(&app, &admin_cookie, "resetme", "passwordpassword").await;
+    let user_cookie = login_cookie(&app, "resetme", "passwordpassword").await;
+
+    let req = with_cookie(test::TestRequest::post(), &admin_cookie)
+        .uri(&format!("/api/admin/users/{user_id}/reset-password"))
+        .set_json(json!({ "new_password": "newpasswordpassword" }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+
+    // Old session is revoked.
+    let req = with_cookie(test::TestRequest::get(), &user_cookie)
+        .uri("/api/workouts")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 401);
+
+    // Old password no longer works.
+    let req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(json!({ "username": "resetme", "password": "passwordpassword" }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 401);
+
+    // New password works.
+    let _new_cookie = login_cookie(&app, "resetme", "newpasswordpassword").await;
+}
+
+#[actix_web::test]
+async fn admin_can_delete_user_and_all_user_data() {
+    let _env = TestEnv::new();
+    let (db, admin_cookie, app) = setup_test_app().await;
+
+    let user_id = create_user_as_admin(&app, &admin_cookie, "deleteme", "passwordpassword").await;
+    let user_cookie = login_cookie(&app, "deleteme", "passwordpassword").await;
+
+    let now = chrono::Utc::now();
+    let req = with_cookie(test::TestRequest::post(), &user_cookie)
+        .uri("/api/workouts")
+        .set_json(json!({ "date": now, "start_time": now, "notes": "to be deleted" }))
+        .to_request();
+    let workout_id = json_body(test::call_service(&app, req).await).await["id"]
+        .as_i64()
+        .unwrap();
+
+    let req = with_cookie(test::TestRequest::delete(), &admin_cookie)
+        .uri(&format!("/api/admin/users/{user_id}"))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 204);
+
+    // User can no longer authenticate.
+    let req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(json!({ "username": "deleteme", "password": "passwordpassword" }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 401);
+
+    // Domain data is deleted.
+    let pool = db.pool().await;
+    let workout_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM workouts WHERE id = ?")
+        .bind(workout_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(workout_count, 0);
+}
+
+#[actix_web::test]
+async fn cannot_delete_last_admin() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    let req = with_cookie(test::TestRequest::get(), &admin_cookie)
+        .uri("/api/auth/me")
+        .to_request();
+    let me = json_body(test::call_service(&app, req).await).await;
+    let admin_id = me["id"].as_i64().unwrap();
+
+    let req = with_cookie(test::TestRequest::delete(), &admin_cookie)
+        .uri(&format!("/api/admin/users/{admin_id}"))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 409);
+}
+
+#[actix_web::test]
 async fn workout_and_exercise_flow_works_for_normal_user() {
     let _env = TestEnv::new();
     let (_db, admin_cookie, app) = setup_test_app().await;
@@ -629,4 +722,3 @@ async fn invalid_backup_filenames_are_rejected_before_io() {
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 400);
 }
-

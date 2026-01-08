@@ -482,6 +482,8 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(admin::list_users)
         .service(admin::create_user)
         .service(admin::disable_user)
+        .service(admin::reset_user_password)
+        .service(admin::delete_user)
         .service(create_workout)
         .service(end_workout)
         .service(update_workout_times)
