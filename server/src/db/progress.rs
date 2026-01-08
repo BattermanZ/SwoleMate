@@ -333,6 +333,30 @@ impl Database {
             })
             .collect::<Vec<_>>();
 
+        let session_start_times = sqlx::query!(
+            r#"
+            SELECT
+                start_time as "start_time: DateTime<Utc>"
+            FROM workouts
+            WHERE end_time > start_time
+              AND date(start_time) >= date('now', 'start of month', '-11 months')
+            ORDER BY start_time ASC
+            "#
+        )
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| {
+            error!(
+                target: "database",
+                "Failed to fetch rolling-year session start times: {}",
+                e
+            );
+            AppError::DatabaseError(e)
+        })?
+        .into_iter()
+        .map(|row| row.start_time)
+        .collect::<Vec<_>>();
+
         Ok(json!({
             "total_workouts": stats.total_workouts,
             "average_duration_minutes": stats.avg_duration,
@@ -349,7 +373,8 @@ impl Database {
             "popular_hours": popular_hours,
             "duration_distribution": duration_distribution,
             "sessions_per_month": monthly_sessions,
-            "avg_exercise_duration_series": avg_exercise_duration_series
+            "avg_exercise_duration_series": avg_exercise_duration_series,
+            "session_start_times": session_start_times
         }))
     }
 

@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT\n                start_time as \"start_time: DateTime<Utc>\"\n            FROM workouts\n            WHERE end_time > start_time\n              AND date(start_time) >= date('now', 'start of month', '-11 months')\n            ORDER BY start_time ASC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "start_time: DateTime<Utc>",
+        "ordinal": 0,
+        "type_info": "Datetime"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "909beb41ebe3c993c9be5b937c3559e0bd88a91d136984d465dbdaf9fa7e7397"
+}

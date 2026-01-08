@@ -120,6 +120,7 @@ export interface WorkoutStats {
 		exercise_count: number;
 		avg_minutes: number;
 	}>;
+	session_start_times?: string[];
 }
 
 export interface VolumeStats {

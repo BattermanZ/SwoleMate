@@ -421,6 +421,21 @@ async fn exercise_lookups_and_progress_endpoints_work() {
     let avg_minutes = point["avg_minutes"].as_f64().expect("avg_minutes f64");
     assert!((avg_minutes - 20.0).abs() < 1e-6);
 
+    assert!(body.get("session_start_times").is_some());
+    assert!(body["session_start_times"].is_array());
+    let start_times = body["session_start_times"]
+        .as_array()
+        .expect("session_start_times array");
+    assert!(start_times.iter().any(|v| {
+        let Some(raw) = v.as_str() else {
+            return false;
+        };
+        let Ok(ts) = raw.parse::<chrono::DateTime<chrono::Utc>>() else {
+            return false;
+        };
+        ts == now
+    }));
+
     let req = test::TestRequest::get()
         .uri("/api/progress/volume?exercise_type=Squat")
         .to_request();
