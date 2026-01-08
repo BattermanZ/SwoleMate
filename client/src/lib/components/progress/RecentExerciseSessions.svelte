@@ -28,7 +28,7 @@
 					</div>
 
 					{#if session.exercise.notes}
-						<div class="mt-1 text-sm opacity-80">{session.exercise.notes}</div>
+						<div class="mt-1 text-sm opacity-80">Notes: {session.exercise.notes}</div>
 					{/if}
 
 					<div class="mt-2">

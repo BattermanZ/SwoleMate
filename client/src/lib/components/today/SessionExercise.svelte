@@ -256,7 +256,7 @@
 						/>
 					</div>
 					{#if lastTime.notes}
-						<p class="mt-2 opacity-80">{lastTime.notes}</p>
+						<p class="mt-2 opacity-80">Notes: {lastTime.notes}</p>
 					{/if}
 				</div>
 			{/if}

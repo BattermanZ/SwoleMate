@@ -74,9 +74,6 @@
 								<div class="flex items-start justify-between gap-3">
 									<div class="min-w-0">
 										<div class="font-semibold truncate">{ex.name}</div>
-										{#if ex.notes}
-											<div class="text-sm opacity-75 truncate">{ex.notes}</div>
-										{/if}
 										{#if ex.settings.length > 0}
 											<div class="mt-1 flex flex-wrap gap-1 text-xs opacity-70">
 												{#each ex.settings.slice(0, 2) as s}
@@ -95,6 +92,9 @@
 												size="xs"
 											/>
 										</div>
+										{#if ex.notes}
+											<div class="mt-2 text-sm opacity-75">Notes: {ex.notes}</div>
+										{/if}
 									</div>
 
 									{#if canAdd}

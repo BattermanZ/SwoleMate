@@ -139,9 +139,6 @@
 							<header class="flex items-start justify-between gap-3">
 								<div class="min-w-0">
 									<h3 class="text-base font-semibold truncate">{exercise.exercise_type}</h3>
-									{#if exercise.notes}
-										<div class="text-sm opacity-75 truncate">{exercise.notes}</div>
-									{/if}
 								</div>
 								<div class="text-sm opacity-70 whitespace-nowrap">{sets.length} sets</div>
 							</header>
@@ -165,6 +162,10 @@
 								</div>
 							{:else}
 								<div class="mt-3 text-sm opacity-70">No sets recorded.</div>
+							{/if}
+
+							{#if exercise.notes}
+								<div class="mt-3 text-sm opacity-75">Notes: {exercise.notes}</div>
 							{/if}
 						</article>
 					{/each}
