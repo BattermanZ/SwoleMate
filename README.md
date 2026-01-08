@@ -18,6 +18,7 @@ SwoleMate is a modern fitness tracking application that helps you monitor and vi
 - TailwindCSS
 - Chart.js for data visualization
 - PWA support with service workers
+- SSR disabled (SPA-first) to keep cookie auth + offline flows consistent
 
 ### Backend
 - Rust with Actix-web framework
