@@ -23,9 +23,12 @@
 		exerciseQuery,
 		getLastTimeForExercise,
 		loading,
+		notice,
+		offlineMode,
 		markExerciseDone,
 		openEndModal,
 		openExerciseId,
+		pendingSyncCount,
 		quickPicks,
 		recentSessions,
 		removeExercise,
@@ -34,6 +37,7 @@
 		start,
 		startSession,
 		submitEndSession,
+		syncPendingSessions,
 		suggestions,
 		toggleExercise,
 		toggleExercisePerSideWeight,
@@ -48,6 +52,31 @@
 </script>
 
 <div class="space-y-6">
+	{#if $notice || $pendingSyncCount}
+		<div
+			class="card variant-glass-surface p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+		>
+			<div class="text-sm">
+				{#if $notice}{$notice}{/if}
+				{#if $pendingSyncCount}
+					<span class="opacity-80">
+						&nbsp;•&nbsp;{$pendingSyncCount} change{$pendingSyncCount === 1 ? '' : 's'} pending sync
+					</span>
+				{/if}
+			</div>
+			{#if $pendingSyncCount}
+				<button
+					type="button"
+					class="btn btn-sm variant-filled-secondary w-full sm:w-auto"
+					on:click={syncPendingSessions}
+					disabled={$loading || $offlineMode}
+				>
+					Sync now
+				</button>
+			{/if}
+		</div>
+	{/if}
+
 	{#if $error}
 		<div class="alert variant-filled-error">{$error}</div>
 	{/if}

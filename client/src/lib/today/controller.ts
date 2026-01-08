@@ -12,6 +12,15 @@ import {
 	replaceSets
 } from '$lib/api';
 import { EXERCISE_LIBRARY, createDemoSession } from '$lib/mocks/today';
+import { kvGet, kvSet } from '$lib/offline/storage';
+import {
+	deleteOfflineSession,
+	listOfflineSessions,
+	loadOfflineSession,
+	saveOfflineSession,
+	sessionKeyForId,
+	type OfflineSessionRecord
+} from '$lib/offline/todaySessions';
 import { toUiSession, workoutIsActive } from '$lib/today/backend';
 import type { UiMood, UiSession } from '$lib/today/types';
 import { createId } from '$lib/utils/id';
@@ -35,9 +44,23 @@ type LastTime = {
 	splitWeight: boolean;
 };
 
+const RECENT_SESSIONS_KEY = 'offline.today.recentSessions';
+
 function getErrorMessage(e: unknown): string {
 	if (e instanceof Error) return e.message;
 	return 'Something went wrong';
+}
+
+function isNetworkFailure(e: unknown): boolean {
+	if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
+	if (e instanceof TypeError) return true;
+	const message = e instanceof Error ? e.message : String(e);
+	return /failed to fetch|networkerror|load failed|connection/i.test(message);
+}
+
+function makeLocalNumericId(): number {
+	const rand = Math.floor(Math.random() * 1_000_000);
+	return -(Date.now() * 1_000_000 + rand);
 }
 
 export function createTodayController() {
@@ -54,10 +77,78 @@ export function createTodayController() {
 	const endNotes = writable('');
 	const loading = writable(false);
 	const error = writable<string | null>(null);
+	const notice = writable<string | null>(null);
+	const offlineMode = writable(false);
+	const pendingSyncCount = writable(0);
 
 	const exerciseLibrary = writable<string[]>(EXERCISE_LIBRARY);
 
 	const syncTimers = new Map<number, number>();
+	let persistTimer: number | null = null;
+
+	async function refreshPendingSyncCount() {
+		const sessions = await listOfflineSessions().catch(() => []);
+		const count = sessions.filter(
+			(r) =>
+				r.cancel_workout ||
+				r.status === 'pending_sync' ||
+				(r.status === 'in_progress' && r.session.id < 0 && !r.server_workout_id)
+		).length;
+		pendingSyncCount.set(count);
+	}
+
+	async function findInProgressOffline(): Promise<OfflineSessionRecord | null> {
+		const records = await listOfflineSessions().catch(() => []);
+		return records.find((r) => r.status === 'in_progress') ?? null;
+	}
+
+	async function hydrateOfflineState() {
+		await refreshPendingSyncCount();
+
+		const cachedRecent = await kvGet<UiSession[]>(RECENT_SESSIONS_KEY).catch(() => null);
+		if (cachedRecent?.length) recentSessions.set(cachedRecent);
+
+		const inProgress = await findInProgressOffline();
+		if (!get(currentSession) && inProgress?.session) {
+			currentSession.set(inProgress.session);
+			sessionNotes.set(inProgress.session.notes);
+			openExerciseId.set(inProgress.session.exercises[0]?.id ?? null);
+		}
+	}
+
+	function setOffline(message?: string) {
+		offlineMode.set(true);
+		notice.set(message ?? 'Offline mode: changes are saved on this device and will sync later.');
+	}
+
+	async function persistInProgressSession(extra?: Partial<OfflineSessionRecord>) {
+		const session = get(currentSession);
+		if (!session) return;
+		const key = sessionKeyForId(session.id);
+		const existing = await loadOfflineSession(key).catch(() => null);
+		const record: OfflineSessionRecord = {
+			key,
+			status: 'in_progress',
+			updated_at: new Date().toISOString(),
+			session,
+			server_workout_id: existing?.server_workout_id ?? (session.id > 0 ? session.id : undefined),
+			server_exercise_ids_by_local: existing?.server_exercise_ids_by_local ?? {},
+			deleted_server_exercise_ids: existing?.deleted_server_exercise_ids ?? [],
+			cancel_workout: existing?.cancel_workout,
+			...extra
+		};
+		await saveOfflineSession(record);
+		await refreshPendingSyncCount();
+	}
+
+	function schedulePersist() {
+		if (typeof window === 'undefined') return;
+		if (persistTimer) window.clearTimeout(persistTimer);
+		persistTimer = window.setTimeout(() => {
+			persistTimer = null;
+			void persistInProgressSession();
+		}, 450);
+	}
 
 	function resetLocalSessionUi() {
 		exerciseQuery.set('');
@@ -178,18 +269,42 @@ export function createTodayController() {
 				sessionNotes.set(next.notes);
 				openExerciseId.set(next.exercises[0]?.id ?? null);
 			} else {
-				currentSession.set(null);
-				sessionNotes.set('');
-				openExerciseId.set(null);
+				const offlineInProgress = await findInProgressOffline();
+				if (offlineInProgress?.session) {
+					currentSession.set(offlineInProgress.session);
+					sessionNotes.set(offlineInProgress.session.notes);
+					openExerciseId.set(offlineInProgress.session.exercises[0]?.id ?? null);
+					notice.set('Local session in progress. You can keep logging and sync later.');
+				} else {
+					currentSession.set(null);
+					sessionNotes.set('');
+					openExerciseId.set(null);
+				}
 			}
 
 			const completed = workouts.filter((w) => w.id != null && !workoutIsActive(w)).slice(0, 2);
 			const recent = await Promise.all(completed.map((w) => getWorkout(w.id!)));
-			recentSessions.set(recent.map((d) => toUiSession(d.workout, d.exercises)));
+			const nextRecent = recent.map((d) => toUiSession(d.workout, d.exercises));
+			recentSessions.set(nextRecent);
+			void kvSet(RECENT_SESSIONS_KEY, nextRecent);
 
 			resetLocalSessionUi();
+			offlineMode.set(false);
+			await refreshPendingSyncCount();
+			if (get(pendingSyncCount) && !get(notice)) {
+				notice.set('Offline changes pending sync.');
+			}
+			if (!get(pendingSyncCount) && !get(currentSession)) {
+				notice.set(null);
+			}
 		} catch (e) {
-			error.set(getErrorMessage(e));
+			if (isNetworkFailure(e)) {
+				if (!get(offlineMode)) setOffline();
+				error.set(null);
+				await hydrateOfflineState();
+			} else {
+				error.set(getErrorMessage(e));
+			}
 		} finally {
 			loading.set(false);
 		}
@@ -197,13 +312,13 @@ export function createTodayController() {
 
 	async function startSession(mode: 'empty' | 'demo') {
 		if (get(currentSession)) return;
-		loading.set(true);
 		error.set(null);
 
 		try {
 			const demo = mode === 'demo' ? createDemoSession() : null;
 			const startIso = demo?.startedAt ?? new Date().toISOString();
 
+			loading.set(true);
 			const created = await createWorkout({
 				date: startIso,
 				start_time: startIso,
@@ -237,7 +352,40 @@ export function createTodayController() {
 
 			await refreshFromBackend();
 		} catch (e) {
-			error.set(getErrorMessage(e));
+			if (isNetworkFailure(e)) {
+				setOffline('Offline mode: started a local session (will sync when back online).');
+				const demo = mode === 'demo' ? createDemoSession() : null;
+				const startIso = demo?.startedAt ?? new Date().toISOString();
+				const localId = makeLocalNumericId();
+				currentSession.set({
+					id: localId,
+					startedAt: startIso,
+					notes: demo?.notes ?? '',
+					exercises: []
+				});
+				sessionNotes.set(demo?.notes ?? '');
+				openExerciseId.set(null);
+				resetLocalSessionUi();
+
+				if (demo) {
+					for (const ex of demo.exercises) {
+						await addExercise(
+							ex.name,
+							{
+								notes: ex.notes,
+								perSideWeight: ex.perSideWeight,
+								splitWeight: ex.splitWeight,
+								settings: ex.settings.map((s) => ({ key: s.key, value: s.value }))
+							},
+							ex.sets.map((s) => ({ reps: s.reps, weight: s.weight }))
+						);
+					}
+				}
+
+				await persistInProgressSession();
+			} else {
+				error.set(getErrorMessage(e));
+			}
 			await refreshFromBackend();
 		} finally {
 			loading.set(false);
@@ -247,10 +395,32 @@ export function createTodayController() {
 	async function cancelSession() {
 		const session = get(currentSession);
 		if (!session) return;
-		loading.set(true);
 		error.set(null);
 
 		try {
+			if (get(offlineMode) || session.id < 0) {
+				const key = sessionKeyForId(session.id);
+				const existing = await loadOfflineSession(key).catch(() => null);
+				if (existing?.server_workout_id) {
+					await saveOfflineSession({
+						...existing,
+						status: 'pending_sync',
+						cancel_workout: true,
+						updated_at: new Date().toISOString()
+					});
+				} else {
+					await deleteOfflineSession(key).catch(() => undefined);
+				}
+				currentSession.set(null);
+				sessionNotes.set('');
+				openExerciseId.set(null);
+				resetLocalSessionUi();
+				await refreshPendingSyncCount();
+				notice.set('Session canceled locally.');
+				return;
+			}
+
+			loading.set(true);
 			await cancelWorkout(session.id);
 			currentSession.set(null);
 			sessionNotes.set('');
@@ -258,7 +428,13 @@ export function createTodayController() {
 			resetLocalSessionUi();
 			await refreshFromBackend();
 		} catch (e) {
-			error.set(getErrorMessage(e));
+			if (isNetworkFailure(e)) {
+				setOffline();
+				await persistInProgressSession();
+				await hydrateOfflineState();
+			} else {
+				error.set(getErrorMessage(e));
+			}
 		} finally {
 			loading.set(false);
 		}
@@ -276,12 +452,41 @@ export function createTodayController() {
 		const session = get(currentSession);
 		const mood = get(endMood);
 		if (!session || !mood) return;
-		loading.set(true);
 		error.set(null);
 
 		try {
 			const endedAt = new Date().toISOString();
 
+			if (get(offlineMode) || session.id < 0) {
+				const endedExercises = session.exercises.map((e) =>
+					e.status === 'done' ? e : { ...e, status: 'done' as const, endedAt }
+				);
+				const ended: UiSession = { ...session, endedAt, mood, exercises: endedExercises };
+				currentSession.set(null);
+				sessionNotes.set('');
+				openExerciseId.set(null);
+				resetLocalSessionUi();
+
+				const key = sessionKeyForId(session.id);
+				const existing = await loadOfflineSession(key).catch(() => null);
+				await saveOfflineSession({
+					key,
+					status: 'pending_sync',
+					updated_at: new Date().toISOString(),
+					session: ended,
+					end_mood: mood,
+					end_notes: get(endNotes).trim() || undefined,
+					server_workout_id: existing?.server_workout_id,
+					server_exercise_ids_by_local: existing?.server_exercise_ids_by_local ?? {},
+					deleted_server_exercise_ids: existing?.deleted_server_exercise_ids ?? []
+				});
+				await refreshPendingSyncCount();
+				setOffline('Saved locally. Sync when you’re back online.');
+				endModalOpen.set(false);
+				return;
+			}
+
+			loading.set(true);
 			await Promise.all(
 				session.exercises
 					.filter((e) => e.status !== 'done')
@@ -308,7 +513,13 @@ export function createTodayController() {
 			resetLocalSessionUi();
 			await refreshFromBackend();
 		} catch (e) {
-			error.set(getErrorMessage(e));
+			if (isNetworkFailure(e)) {
+				setOffline();
+				await persistInProgressSession();
+				await hydrateOfflineState();
+			} else {
+				error.set(getErrorMessage(e));
+			}
 		} finally {
 			loading.set(false);
 		}
@@ -324,7 +535,6 @@ export function createTodayController() {
 		const trimmed = name.trim();
 		if (!trimmed) return;
 
-		loading.set(true);
 		error.set(null);
 
 		try {
@@ -336,6 +546,42 @@ export function createTodayController() {
 			const settings =
 				options?.settings ?? last?.settings.map((s) => ({ key: s.key, value: s.value })) ?? [];
 
+			if (get(offlineMode) || session.id < 0) {
+				const localExerciseId = makeLocalNumericId();
+				const newExercise = {
+					id: localExerciseId,
+					name: trimmed,
+					notes: options?.notes?.trim() ?? '',
+					startedAt: startIso,
+					endedAt: startIso,
+					status: 'active' as const,
+					perSideWeight,
+					splitWeight,
+					settings: settings.map((s) => ({
+						id: createId('setting'),
+						key: s.key,
+						value: s.value
+					})),
+					sets: []
+				};
+
+				currentSession.set({
+					...session,
+					exercises: [...session.exercises, newExercise]
+				});
+				openExerciseId.set(newExercise.id);
+				exerciseQuery.set('');
+				await persistInProgressSession();
+
+				if (seedSets?.length) {
+					for (const s of seedSets) {
+						await addSet(newExercise.id, s.reps, s.weight, s.weightLeft, s.weightRight);
+					}
+				}
+				return;
+			}
+
+			loading.set(true);
 			const created = await createExercise(session.id, {
 				exercise_type: trimmed,
 				start_time: startIso,
@@ -378,7 +624,13 @@ export function createTodayController() {
 				}
 			}
 		} catch (e) {
-			error.set(getErrorMessage(e));
+			if (isNetworkFailure(e)) {
+				setOffline();
+				await persistInProgressSession();
+				await addExercise(trimmed, options, seedSets);
+			} else {
+				error.set(getErrorMessage(e));
+			}
 		} finally {
 			loading.set(false);
 		}
@@ -387,10 +639,29 @@ export function createTodayController() {
 	async function removeExercise(exerciseId: number) {
 		const session = get(currentSession);
 		if (!session) return;
-		loading.set(true);
 		error.set(null);
 
 		try {
+			if (get(offlineMode) || session.id < 0) {
+				currentSession.set({
+					...session,
+					exercises: session.exercises.filter((e) => e.id !== exerciseId)
+				});
+				openExerciseId.update((current) => (current === exerciseId ? null : current));
+				if (exerciseId > 0) {
+					const key = sessionKeyForId(session.id);
+					const existing = await loadOfflineSession(key).catch(() => null);
+					const prev = existing?.deleted_server_exercise_ids ?? [];
+					await persistInProgressSession({
+						deleted_server_exercise_ids: Array.from(new Set([...prev, exerciseId]))
+					});
+				} else {
+					await persistInProgressSession();
+				}
+				return;
+			}
+
+			loading.set(true);
 			await cancelExercise(exerciseId);
 			currentSession.set({
 				...session,
@@ -398,8 +669,14 @@ export function createTodayController() {
 			});
 			openExerciseId.update((current) => (current === exerciseId ? null : current));
 		} catch (e) {
-			error.set(getErrorMessage(e));
-			await refreshFromBackend();
+			if (isNetworkFailure(e)) {
+				setOffline();
+				await persistInProgressSession();
+				await hydrateOfflineState();
+			} else {
+				error.set(getErrorMessage(e));
+				await refreshFromBackend();
+			}
 		} finally {
 			loading.set(false);
 		}
@@ -408,7 +685,6 @@ export function createTodayController() {
 	async function markExerciseDone(exerciseId: number) {
 		const session = get(currentSession);
 		if (!session) return;
-		loading.set(true);
 		error.set(null);
 
 		try {
@@ -416,6 +692,18 @@ export function createTodayController() {
 			const ex = session.exercises.find((e) => e.id === exerciseId);
 			if (!ex) return;
 
+			if (get(offlineMode) || session.id < 0 || exerciseId < 0) {
+				currentSession.set({
+					...session,
+					exercises: session.exercises.map((e) =>
+						e.id === exerciseId ? { ...e, status: 'done' as const, endedAt } : e
+					)
+				});
+				await persistInProgressSession();
+				return;
+			}
+
+			loading.set(true);
 			await endExercise(exerciseId, {
 				end_time: endedAt,
 				notes: ex.notes || undefined,
@@ -431,7 +719,13 @@ export function createTodayController() {
 				)
 			});
 		} catch (e) {
-			error.set(getErrorMessage(e));
+			if (isNetworkFailure(e)) {
+				setOffline();
+				await persistInProgressSession();
+				await markExerciseDone(exerciseId);
+			} else {
+				error.set(getErrorMessage(e));
+			}
 		} finally {
 			loading.set(false);
 		}
@@ -446,10 +740,35 @@ export function createTodayController() {
 	) {
 		const session = get(currentSession);
 		if (!session) return;
-		loading.set(true);
 		error.set(null);
 
 		try {
+			if (get(offlineMode) || session.id < 0 || exerciseId < 0) {
+				const setId = makeLocalNumericId();
+				currentSession.set({
+					...session,
+					exercises: session.exercises.map((e) => {
+						if (e.id !== exerciseId) return e;
+						return {
+							...e,
+							sets: [
+								...e.sets,
+								{
+									id: setId,
+									reps,
+									weight,
+									weightLeft,
+									weightRight
+								}
+							]
+						};
+					})
+				});
+				await persistInProgressSession();
+				return;
+			}
+
+			loading.set(true);
 			const created = await createSet(exerciseId, {
 				reps,
 				weight,
@@ -478,7 +797,13 @@ export function createTodayController() {
 				})
 			});
 		} catch (e) {
-			error.set(getErrorMessage(e));
+			if (isNetworkFailure(e)) {
+				setOffline();
+				await persistInProgressSession();
+				await addSet(exerciseId, reps, weight, weightLeft, weightRight);
+			} else {
+				error.set(getErrorMessage(e));
+			}
 		} finally {
 			loading.set(false);
 		}
@@ -486,6 +811,10 @@ export function createTodayController() {
 
 	function scheduleExerciseSync(exerciseId: number) {
 		if (typeof window === 'undefined') return;
+		if (get(offlineMode) || exerciseId < 0) {
+			schedulePersist();
+			return;
+		}
 		const existing = syncTimers.get(exerciseId);
 		if (existing) window.clearTimeout(existing);
 		const timer = window.setTimeout(() => void syncExercise(exerciseId), 650);
@@ -493,6 +822,7 @@ export function createTodayController() {
 	}
 
 	async function syncExercise(exerciseId: number) {
+		if (get(offlineMode) || exerciseId < 0) return;
 		const session = get(currentSession);
 		if (!session) return;
 		const ex = session.exercises.find((e) => e.id === exerciseId);
@@ -507,7 +837,12 @@ export function createTodayController() {
 				settings: ex.settings.map((s) => ({ key: s.key, value: s.value }))
 			});
 		} catch (e) {
-			error.set(getErrorMessage(e));
+			if (isNetworkFailure(e)) {
+				setOffline();
+				await persistInProgressSession();
+			} else {
+				error.set(getErrorMessage(e));
+			}
 		}
 	}
 
@@ -613,6 +948,11 @@ export function createTodayController() {
 			)
 		});
 
+		if (get(offlineMode) || session.id < 0 || exerciseId < 0) {
+			await persistInProgressSession();
+			return;
+		}
+
 		try {
 			await endExercise(exerciseId, {
 				end_time: ex.endedAt,
@@ -655,8 +995,13 @@ export function createTodayController() {
 				});
 			}
 		} catch (e) {
-			error.set(getErrorMessage(e));
-			await refreshFromBackend();
+			if (isNetworkFailure(e)) {
+				setOffline();
+				await persistInProgressSession();
+			} else {
+				error.set(getErrorMessage(e));
+				await refreshFromBackend();
+			}
 		}
 	}
 
@@ -692,6 +1037,11 @@ export function createTodayController() {
 				e.id === exerciseId ? { ...e, splitWeight: enabled, sets: nextSets } : e
 			)
 		});
+
+		if (get(offlineMode) || session.id < 0 || exerciseId < 0) {
+			await persistInProgressSession();
+			return;
+		}
 
 		try {
 			await endExercise(exerciseId, {
@@ -735,8 +1085,13 @@ export function createTodayController() {
 				});
 			}
 		} catch (e) {
-			error.set(getErrorMessage(e));
-			await refreshFromBackend();
+			if (isNetworkFailure(e)) {
+				setOffline();
+				await persistInProgressSession();
+			} else {
+				error.set(getErrorMessage(e));
+				await refreshFromBackend();
+			}
 		}
 	}
 
@@ -762,13 +1117,150 @@ export function createTodayController() {
 		if (!session) return;
 		if (session.notes === notes) return;
 		currentSession.set({ ...session, notes });
+		if (get(offlineMode) || session.id < 0) schedulePersist();
 	});
 
+	async function syncPendingSessions() {
+		error.set(null);
+		notice.set('Syncing offline changes…');
+
+		try {
+			const records = await listOfflineSessions();
+			if (!records.length) {
+				notice.set(null);
+				return;
+			}
+
+			loading.set(true);
+			for (const record of records) {
+				await syncOne(record);
+			}
+			await refreshPendingSyncCount();
+			offlineMode.set(false);
+			notice.set(get(pendingSyncCount) ? 'Some changes are still pending sync.' : null);
+			await refreshFromBackend();
+		} catch (e) {
+			if (isNetworkFailure(e)) {
+				setOffline('Still offline. Your changes are safe and will sync later.');
+			} else {
+				error.set(getErrorMessage(e));
+			}
+		} finally {
+			loading.set(false);
+		}
+	}
+
+	async function syncOne(record: OfflineSessionRecord) {
+		if (record.cancel_workout) {
+			const id =
+				record.server_workout_id ?? (record.session.id > 0 ? record.session.id : undefined);
+			if (id) await cancelWorkout(id);
+			await deleteOfflineSession(record.key);
+			return;
+		}
+
+		let workoutId =
+			record.server_workout_id ?? (record.session.id > 0 ? record.session.id : undefined);
+		const exerciseMap = record.server_exercise_ids_by_local ?? {};
+
+		if (!workoutId) {
+			const created = await createWorkout({
+				date: record.session.startedAt,
+				start_time: record.session.startedAt,
+				notes: record.session.notes.trim() || undefined
+			});
+			workoutId = created.id;
+		}
+
+		for (const ex of record.session.exercises) {
+			let exerciseId = ex.id > 0 ? ex.id : exerciseMap[ex.id];
+			if (!exerciseId) {
+				const created = await createExercise(workoutId, {
+					exercise_type: ex.name,
+					start_time: ex.startedAt,
+					notes: ex.notes.trim() || undefined,
+					per_side_weight: ex.perSideWeight,
+					split_weight: ex.splitWeight,
+					settings: ex.settings.length
+						? ex.settings.map((s) => ({ key: s.key, value: s.value }))
+						: undefined
+				});
+				exerciseId = created.id;
+				exerciseMap[ex.id] = created.id;
+			}
+
+			await replaceSets(
+				exerciseId,
+				ex.sets.map((s) => ({
+					reps: s.reps,
+					weight: s.weight,
+					weight_left: s.weightLeft,
+					weight_right: s.weightRight,
+					notes: undefined
+				}))
+			);
+
+			const endTime =
+				ex.status === 'done'
+					? ex.endedAt
+					: record.session.endedAt
+						? record.session.endedAt
+						: ex.endedAt;
+			await endExercise(exerciseId, {
+				end_time: endTime,
+				notes: ex.notes.trim() || undefined,
+				per_side_weight: ex.perSideWeight,
+				split_weight: ex.splitWeight,
+				settings: ex.settings.map((s) => ({ key: s.key, value: s.value }))
+			});
+		}
+
+		if (record.deleted_server_exercise_ids?.length) {
+			for (const id of record.deleted_server_exercise_ids) {
+				await cancelExercise(id);
+			}
+		}
+
+		if (record.status === 'pending_sync' && record.end_mood && record.session.endedAt) {
+			await endWorkout(workoutId, {
+				end_time: record.session.endedAt,
+				notes: record.end_notes?.trim() || undefined,
+				feedback: record.end_mood
+			});
+			await deleteOfflineSession(record.key);
+			return;
+		}
+
+		await saveOfflineSession({
+			...record,
+			server_workout_id: workoutId,
+			server_exercise_ids_by_local: exerciseMap,
+			deleted_server_exercise_ids: [],
+			updated_at: new Date().toISOString()
+		});
+	}
+
 	function start() {
+		void hydrateOfflineState();
 		void refreshFromBackend();
 		void hydrateExerciseLibrary();
+
+		const onOnline = () => {
+			if (get(pendingSyncCount)) void syncPendingSessions();
+		};
+		const onOffline = () => {
+			setOffline();
+			void persistInProgressSession();
+		};
+		window.addEventListener('online', onOnline);
+		window.addEventListener('offline', onOffline);
+
 		const timer = window.setInterval(() => nowMs.set(Date.now()), 10_000);
-		return () => window.clearInterval(timer);
+		return () => {
+			window.clearInterval(timer);
+			window.removeEventListener('online', onOnline);
+			window.removeEventListener('offline', onOffline);
+		};
 	}
 
 	return {
@@ -781,7 +1273,10 @@ export function createTodayController() {
 		error,
 		exerciseQuery,
 		loading,
+		notice,
+		offlineMode,
 		openExerciseId,
+		pendingSyncCount,
 		quickPicks,
 		recentSessions,
 		sessionNotes,
@@ -802,6 +1297,7 @@ export function createTodayController() {
 		start,
 		startSession,
 		submitEndSession,
+		syncPendingSessions,
 		toggleExercise,
 		toggleExercisePerSideWeight,
 		toggleExerciseSplitWeight,
