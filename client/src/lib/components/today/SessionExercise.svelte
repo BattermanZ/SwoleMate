@@ -37,8 +37,19 @@
 	let notesDraft = '';
 	let newSettingKey = '';
 	let newSettingValue = '';
+	let editing = false;
+	let locked = false;
 
 	$: notesDraft = exercise.notes;
+	$: locked = disabled || (exercise.status === 'done' && !editing);
+	$: if (exercise.status !== 'done') editing = false;
+
+	function toggleEditing() {
+		if (disabled) return;
+		if (exercise.status !== 'done') return;
+		if (editing) saveNotes();
+		editing = !editing;
+	}
 
 	function setTotalWeight(
 		set: { weight: number; weightLeft?: number; weightRight?: number },
@@ -80,7 +91,7 @@
 	}
 
 	function addSet() {
-		if (exercise.status === 'done') return;
+		if (locked) return;
 		if (setReps <= 0) return;
 		if (!exercise.perSideWeight) {
 			if (setWeight < 0) return;
@@ -102,12 +113,14 @@
 	}
 
 	function saveNotes() {
+		if (locked) return;
 		const next = notesDraft.trim();
 		if (next === exercise.notes) return;
 		dispatch('updateNotes', { notes: next });
 	}
 
 	function addSetting() {
+		if (locked) return;
 		const key = newSettingKey.trim();
 		const value = newSettingValue.trim();
 		if (!key || !value) return;
@@ -117,6 +130,7 @@
 	}
 
 	function togglePerSideWeight(enabled: boolean) {
+		if (locked) return;
 		if (enabled === exercise.perSideWeight) return;
 		if (!enabled) {
 			setWeight = exercise.splitWeight ? setWeightLeft + setWeightRight : setWeight * 2;
@@ -133,6 +147,7 @@
 	}
 
 	function toggleSplitWeight(enabled: boolean) {
+		if (locked) return;
 		if (enabled === exercise.splitWeight) return;
 		if (!exercise.perSideWeight) return;
 		if (enabled) {
@@ -162,12 +177,7 @@
 				{:else}
 					<span class="badge variant-soft text-xs">In progress</span>
 				{/if}
-				{#if exercise.notes}
-					<span class="opacity-60 text-sm" aria-label="Has notes">📝</span>
-				{/if}
-				{#if exercise.settings.length > 0}
-					<span class="opacity-60 text-sm" aria-label="Has settings">⚙️</span>
-				{/if}
+				<span class="ml-auto opacity-60">{isOpen ? '▾' : '▸'}</span>
 			</div>
 			<div class="mt-1 flex flex-wrap gap-2 text-sm opacity-80">
 				<span>{exercise.sets.length} set{exercise.sets.length === 1 ? '' : 's'}</span>
@@ -178,11 +188,23 @@
 			</div>
 		</button>
 
-		<div class="flex items-center gap-2 shrink-0">
-			<span class="opacity-60">{isOpen ? '▾' : '▸'}</span>
+		<div class="flex items-center gap-2 shrink-0 mt-0.5">
+			{#if exercise.status === 'done'}
+				<button
+					type="button"
+					class="badge text-xs {editing
+						? 'variant-filled-tertiary'
+						: 'variant-soft'} cursor-pointer select-none transition disabled:opacity-50 disabled:cursor-not-allowed"
+					on:click={toggleEditing}
+					{disabled}
+					aria-label={editing ? 'Stop editing exercise' : 'Edit exercise'}
+				>
+					{editing ? 'Done' : 'Edit'}
+				</button>
+			{/if}
 			<button
 				type="button"
-				class="btn btn-sm variant-soft-error"
+				class="btn btn-xs variant-soft-error"
 				on:click={() => dispatch('delete')}
 				{disabled}
 				aria-label="Remove exercise"
@@ -233,7 +255,7 @@
 								class="input min-w-0"
 								value={s.key}
 								placeholder="Setting"
-								{disabled}
+								disabled={locked}
 								on:input={(e) =>
 									dispatch('updateSetting', {
 										id: s.id,
@@ -245,7 +267,7 @@
 								class="input min-w-0"
 								value={s.value}
 								placeholder="Value"
-								{disabled}
+								disabled={locked}
 								on:input={(e) =>
 									dispatch('updateSetting', {
 										id: s.id,
@@ -257,7 +279,7 @@
 								type="button"
 								class="btn variant-soft-error justify-self-end w-10"
 								on:click={() => dispatch('removeSetting', { id: s.id })}
-								{disabled}
+								disabled={locked}
 								aria-label="Remove setting"
 							>
 								✕
@@ -270,21 +292,21 @@
 							class="input min-w-0"
 							bind:value={newSettingKey}
 							placeholder="e.g. Bench angle"
-							{disabled}
+							disabled={locked}
 							on:keydown={(e) => e.key === 'Enter' && addSetting()}
 						/>
 						<input
 							class="input min-w-0"
 							bind:value={newSettingValue}
 							placeholder="e.g. 30°"
-							{disabled}
+							disabled={locked}
 							on:keydown={(e) => e.key === 'Enter' && addSetting()}
 						/>
 						<button
 							type="button"
 							class="btn variant-filled-primary justify-self-end sm:justify-self-auto"
 							on:click={addSetting}
-							disabled={disabled || !newSettingKey.trim() || !newSettingValue.trim()}
+							disabled={locked || !newSettingKey.trim() || !newSettingValue.trim()}
 						>
 							Add
 						</button>
@@ -301,7 +323,7 @@
 								type="checkbox"
 								class="checkbox"
 								checked={exercise.perSideWeight}
-								disabled={disabled || exercise.status === 'done'}
+								disabled={locked}
 								on:change={(e) => togglePerSideWeight(e.currentTarget.checked)}
 							/>
 							Per-side weights
@@ -312,7 +334,7 @@
 									type="checkbox"
 									class="checkbox"
 									checked={exercise.splitWeight}
-									disabled={disabled || exercise.status === 'done'}
+									disabled={locked}
 									on:change={(e) => toggleSplitWeight(e.currentTarget.checked)}
 								/>
 								Different L/R
@@ -323,7 +345,7 @@
 								type="button"
 								class="btn btn-xs variant-ghost-primary"
 								on:click={useLastSet}
-								disabled={disabled || exercise.status === 'done'}
+								disabled={locked}
 							>
 								Use last
 							</button>
@@ -352,7 +374,7 @@
 							pattern="[0-9]*"
 							class="input w-full min-w-0"
 							bind:value={setReps}
-							disabled={disabled || exercise.status === 'done'}
+							disabled={locked}
 						/>
 					</label>
 					{#if !exercise.perSideWeight}
@@ -365,7 +387,7 @@
 								inputmode="decimal"
 								class="input w-full min-w-0"
 								bind:value={setWeight}
-								disabled={disabled || exercise.status === 'done'}
+								disabled={locked}
 							/>
 						</label>
 					{:else if !exercise.splitWeight}
@@ -378,7 +400,7 @@
 								inputmode="decimal"
 								class="input w-full min-w-0"
 								bind:value={setWeight}
-								disabled={disabled || exercise.status === 'done'}
+								disabled={locked}
 							/>
 						</label>
 					{:else}
@@ -392,7 +414,7 @@
 									inputmode="decimal"
 									class="input w-full min-w-0"
 									bind:value={setWeightLeft}
-									disabled={disabled || exercise.status === 'done'}
+									disabled={locked}
 								/>
 							</label>
 							<label class="block">
@@ -404,7 +426,7 @@
 									inputmode="decimal"
 									class="input w-full min-w-0"
 									bind:value={setWeightRight}
-									disabled={disabled || exercise.status === 'done'}
+									disabled={locked}
 								/>
 							</label>
 						</div>
@@ -413,7 +435,7 @@
 						type="button"
 						class="btn variant-filled-primary w-full sm:w-auto"
 						on:click={addSet}
-						disabled={disabled || exercise.status === 'done'}
+						disabled={locked}
 					>
 						Add set
 					</button>
@@ -427,7 +449,7 @@
 					rows="2"
 					bind:value={notesDraft}
 					placeholder="Cues, tempo, how it felt…"
-					{disabled}
+					disabled={locked}
 					on:blur={saveNotes}
 				></textarea>
 			</section>
