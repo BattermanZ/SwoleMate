@@ -14,6 +14,7 @@ services:
     expose:
       - "2469" # Backend port (internal)
     working_dir: /data
+    user: "1000:1000"
     volumes:
       - ./database:/data/database
       - ./backups:/data/backups

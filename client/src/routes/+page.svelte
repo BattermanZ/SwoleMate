@@ -231,37 +231,7 @@
 					on:add={(e) => addExercise(e.detail.name)}
 				/>
 			{:else}
-				<div class="card variant-glass-surface p-6 space-y-3">
-					<h2 class="text-xl font-semibold tracking-tight">Your landing page, rebuilt</h2>
-					<p class="opacity-75">
-						Log your session now, backed by your database, while keeping the last two sessions
-						visible for instant recall.
-					</p>
-					<ol class="grid gap-2 text-sm opacity-80 list-decimal pl-5">
-						<li>Start a session</li>
-						<li>Add exercises (search + quick picks)</li>
-						<li>Log sets + notes</li>
-						<li>End session with mood + notes</li>
-					</ol>
-					<div class="flex flex-col sm:flex-row gap-2 pt-2">
-						<button
-							type="button"
-							class="btn variant-filled-primary"
-							on:click={() => startSession('empty')}
-							disabled={$loading}
-						>
-							Start session
-						</button>
-						<button
-							type="button"
-							class="btn variant-soft"
-							on:click={() => startSession('demo')}
-							disabled={$loading}
-						>
-							Load demo session
-						</button>
-					</div>
-				</div>
+				<!-- no extra landing card -->
 			{/if}
 		</section>
 
