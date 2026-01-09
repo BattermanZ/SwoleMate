@@ -51,4 +51,21 @@ describe('offline today flow', () => {
 		expect(session?.exercises).toHaveLength(1);
 		expect(session?.exercises[0]?.id).toBeLessThan(0);
 	});
+
+	it('collapses the exercise card when marked done', async () => {
+		localStorage.clear();
+		const controller = createTodayController();
+
+		await controller.startSession('empty');
+		await controller.addExercise('Bench Press');
+
+		const session = get(controller.currentSession);
+		const exerciseId = session?.exercises[0]?.id;
+		expect(exerciseId).toBeTruthy();
+		expect(get(controller.openExerciseId)).toBe(exerciseId);
+
+		await controller.markExerciseDone(exerciseId!);
+
+		expect(get(controller.openExerciseId)).toBeNull();
+	});
 });

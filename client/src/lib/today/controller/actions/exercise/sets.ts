@@ -35,6 +35,7 @@ export function createExerciseSetActions(args: { state: TodayState }) {
 						e.id === exerciseId ? { ...e, status: 'done' as const, endedAt } : e
 					)
 				});
+				state.openExerciseId.update((current) => (current === exerciseId ? null : current));
 				await persistInProgressSession(state);
 				return;
 			}
@@ -54,6 +55,7 @@ export function createExerciseSetActions(args: { state: TodayState }) {
 					e.id === exerciseId ? { ...e, status: 'done' as const, endedAt } : e
 				)
 			});
+			state.openExerciseId.update((current) => (current === exerciseId ? null : current));
 		} catch (e) {
 			if (isNetworkFailure(e)) {
 				setOffline(state);

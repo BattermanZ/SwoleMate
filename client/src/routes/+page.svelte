@@ -185,19 +185,11 @@
 					</label>
 				</div>
 
-				<ExerciseComposer
-					bind:query={$exerciseQuery}
-					disabled={$loading || !$currentSession}
-					suggestions={$suggestions}
-					quickPicks={$quickPicks}
-					on:add={(e) => addExercise(e.detail.name)}
-				/>
-
 				{#if $currentSession.exercises.length === 0}
 					<div class="card variant-ghost p-6 text-center space-y-2">
 						<div class="text-lg font-semibold">Add your first exercise</div>
 						<p class="opacity-70 text-sm max-w-prose mx-auto">
-							Use the search above or tap a quick pick from your recent sessions.
+							Use the search below or tap a quick pick from your recent sessions.
 						</p>
 					</div>
 				{:else}
@@ -230,6 +222,14 @@
 						{/each}
 					</div>
 				{/if}
+
+				<ExerciseComposer
+					bind:query={$exerciseQuery}
+					disabled={$loading || !$currentSession}
+					suggestions={$suggestions}
+					quickPicks={$quickPicks}
+					on:add={(e) => addExercise(e.detail.name)}
+				/>
 			{:else}
 				<div class="card variant-glass-surface p-6 space-y-3">
 					<h2 class="text-xl font-semibold tracking-tight">Your landing page, rebuilt</h2>
