@@ -103,6 +103,14 @@ pub const SCHEMA_UPDATES: &[(i64, &str)] = &[
         SELECT 1;
         "#,
     ),
+    (
+        8,
+        r#"
+        -- Require-password-change flag on users.
+        -- Applied via Rust migration logic in `setup_schema` (kept as a placeholder for versioning).
+        SELECT 1;
+        "#,
+    ),
 ];
 
 pub const SCHEMA_VERSION_TABLE: &str = r#"
@@ -218,6 +226,15 @@ pub async fn setup_schema(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<(), sqlx::E
                 continue;
             }
 
+            if *version == 8 {
+                migrate_user_must_change_password(pool).await?;
+                sqlx::query("INSERT INTO schema_version (version) VALUES (?)")
+                    .bind(*version)
+                    .execute(pool)
+                    .await?;
+                continue;
+            }
+
             let has_workouts_table = sqlx::query_scalar!(
                 r#"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='workouts'"#
             )
@@ -305,6 +322,31 @@ async fn migrate_workout_autoclose(pool: &Pool<Sqlite>) -> Result<(), sqlx::Erro
     )
     .execute(pool)
     .await?;
+
+    Ok(())
+}
+
+async fn migrate_user_must_change_password(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
+    let has_users_table: i64 =
+        sqlx::query_scalar(r#"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='users'"#)
+            .fetch_one(pool)
+            .await?;
+    if has_users_table == 0 {
+        return Ok(());
+    }
+
+    let has_column: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pragma_table_info('users') WHERE name = 'must_change_password'",
+    )
+    .fetch_one(pool)
+    .await?;
+    if has_column == 0 {
+        sqlx::query(
+            "ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0",
+        )
+        .execute(pool)
+        .await?;
+    }
 
     Ok(())
 }
@@ -407,6 +449,7 @@ async fn migrate_multi_user_schema(pool: &Pool<Sqlite>) -> Result<(), sqlx::Erro
             failed_login_count INTEGER NOT NULL DEFAULT 0,
             locked_until DATETIME,
             disabled_at DATETIME,
+            must_change_password INTEGER NOT NULL DEFAULT 0,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
@@ -447,8 +490,8 @@ async fn migrate_multi_user_schema(pool: &Pool<Sqlite>) -> Result<(), sqlx::Erro
     if user_count == 0 {
         sqlx::query(
             r#"
-            INSERT INTO users (username, password_hash, role)
-            VALUES (?, ?, 'admin')
+            INSERT INTO users (username, password_hash, role, must_change_password)
+            VALUES (?, ?, 'admin', 1)
             "#,
         )
         .bind(bootstrap_username)

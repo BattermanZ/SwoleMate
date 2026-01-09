@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { auth } from '$lib/auth';
 	import { logger } from '$lib/logger';
+	import { get } from 'svelte/store';
 
 	let username = '';
 	let password = '';
@@ -14,7 +15,8 @@
 		try {
 			await auth.login(username, password);
 			logger.info('auth', 'Logged in');
-			await goto('/');
+			const mustChange = get(auth.state).user?.must_change_password ?? false;
+			await goto(mustChange ? '/settings' : '/');
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Login failed';
 		} finally {

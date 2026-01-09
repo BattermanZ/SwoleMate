@@ -11,6 +11,7 @@ pub struct UserRow {
     pub password_hash: String,
     pub role: Role,
     pub disabled_at: Option<DateTime<Utc>>,
+    pub must_change_password: bool,
     pub failed_login_count: i64,
     pub locked_until: Option<DateTime<Utc>>,
 }
@@ -37,6 +38,7 @@ impl Database {
                 password_hash,
                 role as "role!: String",
                 disabled_at as "disabled_at: DateTime<Utc>",
+                must_change_password as "must_change_password!: i64",
                 failed_login_count as "failed_login_count!: i64",
                 locked_until as "locked_until: DateTime<Utc>"
             FROM users
@@ -62,6 +64,7 @@ impl Database {
                 Role::User
             },
             disabled_at: r.disabled_at,
+            must_change_password: r.must_change_password != 0,
             failed_login_count: r.failed_login_count,
             locked_until: r.locked_until,
         }))
@@ -77,6 +80,7 @@ impl Database {
                 password_hash,
                 role as "role!: String",
                 disabled_at as "disabled_at: DateTime<Utc>",
+                must_change_password as "must_change_password!: i64",
                 failed_login_count as "failed_login_count!: i64",
                 locked_until as "locked_until: DateTime<Utc>"
             FROM users
@@ -102,6 +106,7 @@ impl Database {
                 Role::User
             },
             disabled_at: r.disabled_at,
+            must_change_password: r.must_change_password != 0,
             failed_login_count: r.failed_login_count,
             locked_until: r.locked_until,
         }))
@@ -118,8 +123,8 @@ impl Database {
         let role = if role.is_admin() { "admin" } else { "user" };
         let row = sqlx::query!(
             r#"
-            INSERT INTO users (username, password_hash, role)
-            VALUES (?, ?, ?)
+            INSERT INTO users (username, password_hash, role, must_change_password)
+            VALUES (?, ?, ?, 1)
             RETURNING id as "id!: i64"
             "#,
             username,
@@ -210,15 +215,21 @@ impl Database {
         &self,
         user_id: i64,
         password_hash: &str,
+        must_change_password: bool,
     ) -> Result<(), AppError> {
         let pool = self.pool().await;
+        let must_change_password = if must_change_password { 1 } else { 0 };
         sqlx::query!(
             r#"
             UPDATE users
-            SET password_hash = ?, failed_login_count = 0, locked_until = NULL
+            SET password_hash = ?,
+                must_change_password = ?,
+                failed_login_count = 0,
+                locked_until = NULL
             WHERE id = ?
             "#,
             password_hash,
+            must_change_password,
             user_id
         )
         .execute(&pool)
@@ -344,6 +355,7 @@ impl Database {
                 u.password_hash as "password_hash!: String",
                 u.role as "role!: String",
                 u.disabled_at as "disabled_at: DateTime<Utc>",
+                u.must_change_password as "must_change_password!: i64",
                 u.failed_login_count as "failed_login_count!: i64",
                 u.locked_until as "locked_until: DateTime<Utc>"
             FROM sessions s
@@ -380,6 +392,7 @@ impl Database {
                 Role::User
             },
             disabled_at: r.disabled_at,
+            must_change_password: r.must_change_password != 0,
             failed_login_count: r.failed_login_count,
             locked_until: r.locked_until,
         };

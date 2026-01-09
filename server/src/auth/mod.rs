@@ -26,6 +26,7 @@ pub struct AuthUser {
     pub id: i64,
     pub username: String,
     pub role: Role,
+    pub must_change_password: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -33,6 +34,7 @@ pub struct PublicUser {
     pub id: i64,
     pub username: String,
     pub role: Role,
+    pub must_change_password: bool,
 }
 
 impl From<&AuthUser> for PublicUser {
@@ -41,6 +43,7 @@ impl From<&AuthUser> for PublicUser {
             id: value.id,
             username: value.username.clone(),
             role: value.role,
+            must_change_password: value.must_change_password,
         }
     }
 }

@@ -93,6 +93,13 @@ fn should_skip_auth(req: &ServiceRequest) -> bool {
     }
 }
 
+fn allowed_when_password_change_required(path: &str) -> bool {
+    matches!(
+        path,
+        "/api/health" | "/api/auth/me" | "/api/auth/change-password" | "/api/auth/logout"
+    )
+}
+
 impl<S, B> Service<ServiceRequest> for SessionAuthMiddleware<S>
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
@@ -165,8 +172,18 @@ where
                 id: user.id,
                 username: user.username,
                 role: user.role,
+                must_change_password: user.must_change_password,
             };
             req.extensions_mut().insert(auth_user.clone());
+
+            if auth_user.must_change_password && !allowed_when_password_change_required(req.path()) {
+                let (req, _) = req.into_parts();
+                let resp = HttpResponse::Forbidden().json(serde_json::json!({
+                    "error": "Password change required",
+                    "code": "PASSWORD_CHANGE_REQUIRED"
+                }));
+                return Ok(ServiceResponse::new(req, resp));
+            }
 
             let rotate_cutoff =
                 now + ChronoDuration::days(cfg.rotate_if_expires_within_days.max(0));

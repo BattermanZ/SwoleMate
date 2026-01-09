@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO users (username, password_hash, role, must_change_password)\n            VALUES (?, ?, ?, 1)\n            RETURNING id as \"id!: i64\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Int64"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "fc002f7c8503c83f9f94655ac3b93be5910e79234fe7bd36a5e5ac895e59d74f"
+}

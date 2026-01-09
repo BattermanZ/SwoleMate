@@ -23,6 +23,9 @@
 	];
 
 	$: isLogin = $page.url.pathname === '/login';
+	$: isSettings = $page.url.pathname === '/settings';
+	$: mustChangePassword =
+		$authState.status === 'authenticated' && $authState.user?.must_change_password;
 	$: canSeeAdmin =
 		$authState.status === 'authenticated' &&
 		$authState.user?.role === 'admin' &&
@@ -106,7 +109,11 @@
 	}
 
 	$: if ($authState.status === 'authenticated' && isLogin) {
-		void goto('/');
+		void goto(mustChangePassword ? '/settings' : '/');
+	}
+
+	$: if ($authState.status === 'authenticated' && mustChangePassword && !isLogin && !isSettings) {
+		void goto('/settings');
 	}
 
 	$: {

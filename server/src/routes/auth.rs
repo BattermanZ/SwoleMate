@@ -77,7 +77,12 @@ pub async fn login(
     let cookie = build_session_cookie(&token, &cfg);
     let mut resp = HttpResponse::Ok().json(serde_json::json!({
         "status": "ok",
-        "user": PublicUser { id: user.id, username: user.username, role: user.role }
+        "user": PublicUser {
+            id: user.id,
+            username: user.username,
+            role: user.role,
+            must_change_password: user.must_change_password
+        }
     }));
     let _ = resp.add_cookie(&cookie);
     Ok(resp)
@@ -121,7 +126,7 @@ pub async fn change_password(
     }
 
     let new_hash = password::hash_password(&body.new_password).map_err(AppError::BadRequest)?;
-    db.update_password_hash(user.0.id, &new_hash).await?;
+    db.update_password_hash(user.0.id, &new_hash, false).await?;
     db.revoke_all_sessions_for_user(user.0.id).await?;
 
     // Create a new session immediately.

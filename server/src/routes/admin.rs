@@ -90,7 +90,7 @@ pub async fn reset_user_password(
         return Err(AppError::NotFound("User not found".to_string()));
     }
     let new_hash = password::hash_password(&body.new_password).map_err(AppError::BadRequest)?;
-    db.update_password_hash(*id, &new_hash).await?;
+    db.update_password_hash(*id, &new_hash, true).await?;
     db.revoke_all_sessions_for_user(*id).await?;
     Ok(HttpResponse::Ok().json(serde_json::json!({ "status": "ok" })))
 }

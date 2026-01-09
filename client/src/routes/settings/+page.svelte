@@ -148,6 +148,12 @@
 					</p>
 				</div>
 
+				{#if $authState.status === 'authenticated' && $authState.user?.must_change_password}
+					<div class="alert variant-filled-warning">
+						Password change required. Update your password before using the app.
+					</div>
+				{/if}
+
 				{#if $authState.user}
 					<div class="flex flex-wrap items-center gap-2">
 						<span class="badge variant-filled-primary">{$authState.user.username}</span>

@@ -30,7 +30,11 @@ function readStoredUser(): PublicUser | null {
 		if (typeof parsed.id !== 'number') return null;
 		if (typeof parsed.username !== 'string') return null;
 		if (parsed.role !== 'admin' && parsed.role !== 'user') return null;
-		return parsed;
+		const must_change_password =
+			typeof (parsed as { must_change_password?: unknown }).must_change_password === 'boolean'
+				? (parsed as { must_change_password: boolean }).must_change_password
+				: false;
+		return { ...parsed, must_change_password };
 	} catch {
 		return null;
 	}

@@ -29,7 +29,10 @@ describe('auth store', () => {
 		const { auth } = await import('$lib/auth');
 
 		const loginFetch = vi.fn(async () =>
-			jsonResponse({ status: 'ok', user: { id: 1, username: 'alice', role: 'user' } })
+			jsonResponse({
+				status: 'ok',
+				user: { id: 1, username: 'alice', role: 'user', must_change_password: false }
+			})
 		);
 		await auth.login('alice', 'pw', loginFetch as unknown as typeof fetch);
 

@@ -12,6 +12,7 @@ static TEST_ENV_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 const ADMIN_USERNAME: &str = "admin";
 const ADMIN_PASSWORD: &str = "test-admin-password";
+const ADMIN_PASSWORD_CHANGED: &str = "test-admin-password-changed";
 
 struct TestEnv {
     _lock: std::sync::MutexGuard<'static, ()>,
@@ -91,9 +92,8 @@ impl Drop for TestEnv {
     }
 }
 
-async fn setup_test_app() -> (
+async fn setup_test_app_raw() -> (
     Database,
-    actix_web::cookie::Cookie<'static>,
     impl actix_web::dev::Service<
         actix_http::Request,
         Response = actix_web::dev::ServiceResponse,
@@ -131,7 +131,22 @@ async fn setup_test_app() -> (
     )
     .await;
 
+    (database, app)
+}
+
+async fn setup_test_app() -> (
+    Database,
+    actix_web::cookie::Cookie<'static>,
+    impl actix_web::dev::Service<
+        actix_http::Request,
+        Response = actix_web::dev::ServiceResponse,
+        Error = actix_web::Error,
+    >,
+) {
+    let (database, app) = setup_test_app_raw().await;
     let admin_cookie = login_cookie(&app, ADMIN_USERNAME, ADMIN_PASSWORD).await;
+    let admin_cookie =
+        change_password_cookie(&app, &admin_cookie, ADMIN_PASSWORD, ADMIN_PASSWORD_CHANGED).await;
     (database, admin_cookie, app)
 }
 
@@ -181,6 +196,58 @@ async fn login_cookie(
         .into_owned()
 }
 
+async fn change_password_cookie(
+    app: &impl actix_web::dev::Service<
+        actix_http::Request,
+        Response = actix_web::dev::ServiceResponse,
+        Error = actix_web::Error,
+    >,
+    cookie: &actix_web::cookie::Cookie<'static>,
+    current_password: &str,
+    new_password: &str,
+) -> actix_web::cookie::Cookie<'static> {
+    let req = with_cookie(test::TestRequest::post(), cookie)
+        .uri("/api/auth/change-password")
+        .set_json(json!({
+            "current_password": current_password,
+            "new_password": new_password
+        }))
+        .to_request();
+    let resp = test::call_service(app, req).await;
+    assert!(resp.status().is_success());
+
+    let set_cookie = resp
+        .headers()
+        .get(actix_web::http::header::SET_COOKIE)
+        .expect("set-cookie header")
+        .to_str()
+        .expect("set-cookie str")
+        .to_string();
+
+    let cookie_pair = set_cookie
+        .split(';')
+        .next()
+        .expect("cookie pair")
+        .to_string();
+    actix_web::cookie::Cookie::parse(cookie_pair)
+        .expect("parse cookie")
+        .into_owned()
+}
+
+async fn login_cookie_active(
+    app: &impl actix_web::dev::Service<
+        actix_http::Request,
+        Response = actix_web::dev::ServiceResponse,
+        Error = actix_web::Error,
+    >,
+    username: &str,
+    password: &str,
+) -> actix_web::cookie::Cookie<'static> {
+    let cookie = login_cookie(app, username, password).await;
+    let new_password = format!("{password}-changed");
+    change_password_cookie(app, &cookie, password, &new_password).await
+}
+
 async fn create_user_as_admin(
     app: &impl actix_web::dev::Service<
         actix_http::Request,
@@ -208,7 +275,7 @@ async fn workout_stats_empty_workouts_returns_empty_arrays() {
     let username = "user-zero";
     let password = "user-zero-password";
     create_user_as_admin(&app, &admin_cookie, username, password).await;
-    let user_cookie = login_cookie(&app, username, password).await;
+    let user_cookie = login_cookie_active(&app, username, password).await;
 
     let req = with_cookie(test::TestRequest::get(), &user_cookie)
         .uri("/api/progress/workout-stats")
@@ -257,9 +324,16 @@ async fn unauthenticated_requests_are_rejected() {
 #[actix_web::test]
 async fn login_me_logout_flow_works() {
     let _env = TestEnv::new();
-    let (_db, _admin_cookie, app) = setup_test_app().await;
+    let (_db, app) = setup_test_app_raw().await;
 
     let cookie = login_cookie(&app, ADMIN_USERNAME, ADMIN_PASSWORD).await;
+
+    // Fresh login should be forced into a password change.
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri("/api/workouts")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 403);
 
     let req = with_cookie(test::TestRequest::get(), &cookie)
         .uri("/api/auth/me")
@@ -269,6 +343,15 @@ async fn login_me_logout_flow_works() {
     let me = json_body(resp).await;
     assert_eq!(me["username"], ADMIN_USERNAME);
     assert_eq!(me["role"], "admin");
+    assert_eq!(me["must_change_password"], true);
+
+    let cookie =
+        change_password_cookie(&app, &cookie, ADMIN_PASSWORD, ADMIN_PASSWORD_CHANGED).await;
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri("/api/workouts")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
 
     let req = with_cookie(test::TestRequest::post(), &cookie)
         .uri("/api/auth/logout")
@@ -289,7 +372,7 @@ async fn admin_only_endpoints_are_forbidden_for_normal_users() {
     let (_db, admin_cookie, app) = setup_test_app().await;
 
     let _user_id = create_user_as_admin(&app, &admin_cookie, "user1", "passwordpassword").await;
-    let user_cookie = login_cookie(&app, "user1", "passwordpassword").await;
+    let user_cookie = login_cookie_active(&app, "user1", "passwordpassword").await;
 
     let req = with_cookie(test::TestRequest::get(), &user_cookie)
         .uri("/api/admin/users")
@@ -310,7 +393,7 @@ async fn admin_can_reset_user_password_and_revoke_sessions() {
     let (_db, admin_cookie, app) = setup_test_app().await;
 
     let user_id = create_user_as_admin(&app, &admin_cookie, "resetme", "passwordpassword").await;
-    let user_cookie = login_cookie(&app, "resetme", "passwordpassword").await;
+    let user_cookie = login_cookie_active(&app, "resetme", "passwordpassword").await;
 
     let req = with_cookie(test::TestRequest::post(), &admin_cookie)
         .uri(&format!("/api/admin/users/{user_id}/reset-password"))
@@ -335,7 +418,21 @@ async fn admin_can_reset_user_password_and_revoke_sessions() {
     assert_eq!(resp.status(), 401);
 
     // New password works.
-    let _new_cookie = login_cookie(&app, "resetme", "newpasswordpassword").await;
+    let new_cookie = login_cookie(&app, "resetme", "newpasswordpassword").await;
+    let req = with_cookie(test::TestRequest::get(), &new_cookie)
+        .uri("/api/workouts")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 403);
+
+    let changed_cookie =
+        change_password_cookie(&app, &new_cookie, "newpasswordpassword", "newpasswordpassword2")
+            .await;
+    let req = with_cookie(test::TestRequest::get(), &changed_cookie)
+        .uri("/api/workouts")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
 }
 
 #[actix_web::test]
@@ -344,7 +441,7 @@ async fn admin_can_delete_user_and_all_user_data() {
     let (db, admin_cookie, app) = setup_test_app().await;
 
     let user_id = create_user_as_admin(&app, &admin_cookie, "deleteme", "passwordpassword").await;
-    let user_cookie = login_cookie(&app, "deleteme", "passwordpassword").await;
+    let user_cookie = login_cookie_active(&app, "deleteme", "passwordpassword").await;
 
     let now = chrono::Utc::now();
     let req = with_cookie(test::TestRequest::post(), &user_cookie)
@@ -438,7 +535,7 @@ async fn workout_and_exercise_flow_works_for_normal_user() {
     let (_db, admin_cookie, app) = setup_test_app().await;
 
     let _user_id = create_user_as_admin(&app, &admin_cookie, "user2", "passwordpassword").await;
-    let cookie = login_cookie(&app, "user2", "passwordpassword").await;
+    let cookie = login_cookie_active(&app, "user2", "passwordpassword").await;
 
     let now = chrono::Utc::now();
 
@@ -519,8 +616,8 @@ async fn data_is_scoped_per_user() {
     let _ = create_user_as_admin(&app, &admin_cookie, "alice", "passwordpassword").await;
     let _ = create_user_as_admin(&app, &admin_cookie, "bob", "passwordpassword").await;
 
-    let alice = login_cookie(&app, "alice", "passwordpassword").await;
-    let bob = login_cookie(&app, "bob", "passwordpassword").await;
+    let alice = login_cookie_active(&app, "alice", "passwordpassword").await;
+    let bob = login_cookie_active(&app, "bob", "passwordpassword").await;
 
     let now = chrono::Utc::now();
     let req = with_cookie(test::TestRequest::post(), &alice)
@@ -550,7 +647,7 @@ async fn update_workout_times_can_update_notes_and_feedback() {
     let (_db, admin_cookie, app) = setup_test_app().await;
 
     let _user_id = create_user_as_admin(&app, &admin_cookie, "u4", "passwordpassword").await;
-    let cookie = login_cookie(&app, "u4", "passwordpassword").await;
+    let cookie = login_cookie_active(&app, "u4", "passwordpassword").await;
 
     let now = chrono::Utc::now();
     let req = with_cookie(test::TestRequest::post(), &cookie)
@@ -588,7 +685,7 @@ async fn update_workout_times_preserves_notes_and_feedback_when_omitted() {
     let (_db, admin_cookie, app) = setup_test_app().await;
 
     let _user_id = create_user_as_admin(&app, &admin_cookie, "u5", "passwordpassword").await;
-    let cookie = login_cookie(&app, "u5", "passwordpassword").await;
+    let cookie = login_cookie_active(&app, "u5", "passwordpassword").await;
 
     let now = chrono::Utc::now();
     let req = with_cookie(test::TestRequest::post(), &cookie)
@@ -632,7 +729,7 @@ async fn workouts_are_auto_closed_after_inactivity_and_marked() {
     let (db, admin_cookie, app) = setup_test_app().await;
 
     let _user_id = create_user_as_admin(&app, &admin_cookie, "u6", "passwordpassword").await;
-    let cookie = login_cookie(&app, "u6", "passwordpassword").await;
+    let cookie = login_cookie_active(&app, "u6", "passwordpassword").await;
 
     let start = chrono::Utc::now() - chrono::Duration::hours(2);
     let req = with_cookie(test::TestRequest::post(), &cookie)
@@ -692,7 +789,7 @@ async fn logs_endpoints_work_and_enforce_limits() {
     let (_db, admin_cookie, app) = setup_test_app().await;
 
     let _user_id = create_user_as_admin(&app, &admin_cookie, "user3", "passwordpassword").await;
-    let cookie = login_cookie(&app, "user3", "passwordpassword").await;
+    let cookie = login_cookie_active(&app, "user3", "passwordpassword").await;
 
     let req = with_cookie(test::TestRequest::post(), &cookie)
         .uri("/api/logs")
@@ -854,7 +951,7 @@ async fn validation_rejects_invalid_set_payloads() {
     let (_db, admin_cookie, app) = setup_test_app().await;
 
     let _user_id = create_user_as_admin(&app, &admin_cookie, "user4", "passwordpassword").await;
-    let cookie = login_cookie(&app, "user4", "passwordpassword").await;
+    let cookie = login_cookie_active(&app, "user4", "passwordpassword").await;
 
     let now = chrono::Utc::now();
     let req = with_cookie(test::TestRequest::post(), &cookie)

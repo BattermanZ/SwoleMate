@@ -350,6 +350,7 @@ export interface PublicUser {
 	id: number;
 	username: string;
 	role: UserRole;
+	must_change_password: boolean;
 }
 
 export async function authMe(fetcher: Fetcher = fetch): Promise<PublicUser> {
