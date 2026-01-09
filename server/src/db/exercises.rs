@@ -83,6 +83,10 @@ impl Database {
             }
         }
 
+        let now = Utc::now();
+        self.touch_workout_activity_at(user_id, workout_id, now, &mut *tx)
+            .await?;
+
         tx.commit().await.map_err(AppError::DatabaseError)?;
 
         info!(target: "database", "Created exercise #{}", exercise_id);
@@ -204,6 +208,10 @@ impl Database {
             }
         }
 
+        let now = Utc::now();
+        self.touch_workout_activity_for_exercise_at(user_id, id, now, &mut *tx)
+            .await?;
+
         tx.commit().await.map_err(AppError::DatabaseError)?;
 
         info!(target: "database", "Updated exercise #{}", id);
@@ -262,6 +270,10 @@ impl Database {
             error!(target: "database", "Failed to create set: {}", e);
             AppError::DatabaseError(e)
         })?;
+
+        let now = Utc::now();
+        self.touch_workout_activity_for_exercise_at(user_id, exercise_id, now, &mut *tx)
+            .await?;
 
         tx.commit().await.map_err(AppError::DatabaseError)?;
 
@@ -348,6 +360,10 @@ impl Database {
                 notes: req.notes.clone(),
             });
         }
+
+        let now = Utc::now();
+        self.touch_workout_activity_for_exercise_at(user_id, exercise_id, now, &mut *tx)
+            .await?;
 
         tx.commit().await.map_err(AppError::DatabaseError)?;
 

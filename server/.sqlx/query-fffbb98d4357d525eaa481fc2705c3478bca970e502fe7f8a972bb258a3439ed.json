@@ -1,10 +1,10 @@
 {
   "db_name": "SQLite",
-  "query": "\n            SELECT \n                id as \"id!\",\n                date as \"date: DateTime<Utc>\",\n                start_time as \"start_time: DateTime<Utc>\",\n                end_time as \"end_time: DateTime<Utc>\",\n                notes,\n                feedback,\n                timezone_offset_minutes,\n                (\n                    SELECT COUNT(*)\n                    FROM exercises e\n                    WHERE e.workout_id = workouts.id\n                      AND e.user_id = workouts.user_id\n                ) as \"exercise_count!: i64\"\n            FROM workouts\n            WHERE user_id = ?\n            ORDER BY date DESC\n            ",
+  "query": "\n            SELECT \n                id,\n                date as \"date: DateTime<Utc>\",\n                start_time as \"start_time: DateTime<Utc>\",\n                end_time as \"end_time: DateTime<Utc>\",\n                notes,\n                feedback,\n                timezone_offset_minutes,\n                auto_closed_at as \"auto_closed_at: DateTime<Utc>\"\n            FROM workouts\n            WHERE id = ? AND user_id = ?\n            ",
   "describe": {
     "columns": [
       {
-        "name": "id!",
+        "name": "id",
         "ordinal": 0,
         "type_info": "Int64"
       },
@@ -39,24 +39,24 @@
         "type_info": "Int64"
       },
       {
-        "name": "exercise_count!: i64",
+        "name": "auto_closed_at: DateTime<Utc>",
         "ordinal": 7,
-        "type_info": "Null"
+        "type_info": "Datetime"
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 2
     },
     "nullable": [
-      true,
       false,
       false,
       false,
+      false,
       true,
       true,
       true,
-      null
+      true
     ]
   },
-  "hash": "c10ac0f8c129de39f2320972075389863894118a578fbc2ef1ede01d66d5e598"
+  "hash": "fffbb98d4357d525eaa481fc2705c3478bca970e502fe7f8a972bb258a3439ed"
 }

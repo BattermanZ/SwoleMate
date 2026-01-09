@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE workouts\n            SET last_activity_time = ?\n            WHERE id = (\n                SELECT workout_id\n                FROM exercises\n                WHERE id = ? AND user_id = ?\n            )\n              AND user_id = ?\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "347043677b167685a18807988efa28908d0988048f65e5e0c3a9e1f323380f3a"
+}

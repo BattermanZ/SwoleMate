@@ -95,6 +95,14 @@ pub const SCHEMA_UPDATES: &[(i64, &str)] = &[
         SELECT 1;
         "#,
     ),
+    (
+        7,
+        r#"
+        -- Add workout activity tracking + auto-close marker columns.
+        -- Applied via Rust migration logic in `setup_schema` (kept as a placeholder for versioning).
+        SELECT 1;
+        "#,
+    ),
 ];
 
 pub const SCHEMA_VERSION_TABLE: &str = r#"
@@ -201,6 +209,15 @@ pub async fn setup_schema(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<(), sqlx::E
                 continue;
             }
 
+            if *version == 7 {
+                migrate_workout_autoclose(pool).await?;
+                sqlx::query("INSERT INTO schema_version (version) VALUES (?)")
+                    .bind(*version)
+                    .execute(pool)
+                    .await?;
+                continue;
+            }
+
             let has_workouts_table = sqlx::query_scalar!(
                 r#"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='workouts'"#
             )
@@ -238,6 +255,56 @@ pub async fn setup_schema(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<(), sqlx::E
                 .await?;
         }
     }
+
+    Ok(())
+}
+
+async fn migrate_workout_autoclose(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
+    let has_workouts_table: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='workouts'"#,
+    )
+    .fetch_one(pool)
+    .await?;
+    if has_workouts_table == 0 {
+        return Ok(());
+    }
+
+    let workout_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM workouts")
+        .fetch_one(pool)
+        .await?;
+    if workout_count > 0 {
+        backup::create_backup(backup::BackupType::Auto)
+            .await
+            .map_err(|e| sqlx::Error::Protocol(format!("Failed to create backup: {}", e)))?;
+    }
+
+    let has_last_activity: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pragma_table_info('workouts') WHERE name = 'last_activity_time'",
+    )
+    .fetch_one(pool)
+    .await?;
+    if has_last_activity == 0 {
+        sqlx::query("ALTER TABLE workouts ADD COLUMN last_activity_time DATETIME")
+            .execute(pool)
+            .await?;
+    }
+
+    let has_auto_closed: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pragma_table_info('workouts') WHERE name = 'auto_closed_at'",
+    )
+    .fetch_one(pool)
+    .await?;
+    if has_auto_closed == 0 {
+        sqlx::query("ALTER TABLE workouts ADD COLUMN auto_closed_at DATETIME")
+            .execute(pool)
+            .await?;
+    }
+
+    sqlx::query(
+        "UPDATE workouts SET last_activity_time = start_time WHERE last_activity_time IS NULL",
+    )
+    .execute(pool)
+    .await?;
 
     Ok(())
 }

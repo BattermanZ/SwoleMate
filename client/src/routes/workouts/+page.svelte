@@ -433,6 +433,9 @@
 									<div class="min-w-0">
 										<div class="flex items-center gap-2">
 											<div class="font-semibold">{formatDateRelative(workout.start_time)}</div>
+											{#if workout.auto_closed_at}
+												<span class="badge variant-soft-warning text-xs">Auto-closed</span>
+											{/if}
 											{#if workout.feedback}
 												<span class="text-lg" aria-label="Session mood">{workout.feedback}</span>
 											{/if}

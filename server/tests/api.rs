@@ -627,6 +627,66 @@ async fn update_workout_times_preserves_notes_and_feedback_when_omitted() {
 }
 
 #[actix_web::test]
+async fn workouts_are_auto_closed_after_inactivity_and_marked() {
+    let _env = TestEnv::new();
+    let (db, admin_cookie, app) = setup_test_app().await;
+
+    let _user_id = create_user_as_admin(&app, &admin_cookie, "u6", "passwordpassword").await;
+    let cookie = login_cookie(&app, "u6", "passwordpassword").await;
+
+    let start = chrono::Utc::now() - chrono::Duration::hours(2);
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri("/api/workouts")
+        .set_json(json!({ "date": start, "start_time": start, "notes": "stale" }))
+        .to_request();
+    let workout_id = json_body(test::call_service(&app, req).await).await["id"]
+        .as_i64()
+        .expect("workout id");
+
+    let closed = db.auto_close_stale_workouts(30).await.expect("auto close");
+    assert!(closed >= 1);
+
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}"))
+        .to_request();
+    let body = json_body(test::call_service(&app, req).await).await;
+
+    let workout = &body["workout"];
+    assert!(workout.get("auto_closed_at").is_some());
+    assert!(workout["auto_closed_at"].is_string());
+
+    let start_time = chrono::DateTime::parse_from_rfc3339(workout["start_time"].as_str().unwrap())
+        .unwrap()
+        .with_timezone(&chrono::Utc);
+    let end_time = chrono::DateTime::parse_from_rfc3339(workout["end_time"].as_str().unwrap())
+        .unwrap()
+        .with_timezone(&chrono::Utc);
+    let delta = end_time - start_time;
+    let expected = chrono::Duration::minutes(30);
+    assert!(
+        (delta - expected).num_seconds().abs() <= 2,
+        "expected ~30m inactivity close; start={start_time} end={end_time} delta={delta}"
+    );
+
+    let new_end = start_time + chrono::Duration::minutes(45);
+    let req = with_cookie(test::TestRequest::put(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}/times"))
+        .set_json(json!({
+            "start_time": start_time,
+            "end_time": new_end
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}"))
+        .to_request();
+    let body = json_body(test::call_service(&app, req).await).await;
+    assert!(body["workout"]["auto_closed_at"].is_null());
+}
+
+#[actix_web::test]
 async fn logs_endpoints_work_and_enforce_limits() {
     let _env = TestEnv::new();
     let (_db, admin_cookie, app) = setup_test_app().await;

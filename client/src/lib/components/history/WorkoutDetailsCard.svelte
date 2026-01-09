@@ -114,10 +114,21 @@
 				<div class="text-sm opacity-75">
 					{formatTime(workout.start_time)} - {formatTime(workout.end_time)}
 				</div>
-				{#if workout.feedback}
-					<span class="text-2xl" aria-label="Session mood">{workout.feedback}</span>
-				{/if}
+				<div class="flex items-center gap-2">
+					{#if workout.auto_closed_at}
+						<span class="badge variant-soft-warning text-xs">Auto-closed</span>
+					{/if}
+					{#if workout.feedback}
+						<span class="text-2xl" aria-label="Session mood">{workout.feedback}</span>
+					{/if}
+				</div>
 			</div>
+
+			{#if workout.auto_closed_at}
+				<div class="text-sm opacity-70">
+					Auto-closed due to inactivity — adjust times if needed.
+				</div>
+			{/if}
 
 			{#if workout.notes}
 				<div

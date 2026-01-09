@@ -7,6 +7,7 @@ export interface Workout {
 	end_time: string; // ISO date string
 	notes?: string | null;
 	feedback?: FeedbackEmoji | null;
+	auto_closed_at?: string | null;
 	exercise_count?: number;
 	timezone_offset_minutes?: number | null;
 }

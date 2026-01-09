@@ -2,8 +2,73 @@ use super::Database;
 use crate::{errors::AppError, models::*};
 use chrono::{DateTime, Utc};
 use log::{debug, error, info};
+use sqlx::{Executor, Sqlite};
 
 impl Database {
+    pub(crate) async fn touch_workout_activity_at<'e, E>(
+        &self,
+        user_id: i64,
+        workout_id: i64,
+        at: DateTime<Utc>,
+        executor: E,
+    ) -> Result<(), AppError>
+    where
+        E: Executor<'e, Database = Sqlite>,
+    {
+        sqlx::query!(
+            r#"
+            UPDATE workouts
+            SET last_activity_time = ?
+            WHERE id = ? AND user_id = ?
+            "#,
+            at,
+            workout_id,
+            user_id
+        )
+        .execute(executor)
+        .await
+        .map_err(|e| {
+            error!(target: "database", "Failed to touch workout activity: {}", e);
+            AppError::DatabaseError(e)
+        })?;
+        Ok(())
+    }
+
+    pub(crate) async fn touch_workout_activity_for_exercise_at<'e, E>(
+        &self,
+        user_id: i64,
+        exercise_id: i64,
+        at: DateTime<Utc>,
+        executor: E,
+    ) -> Result<(), AppError>
+    where
+        E: Executor<'e, Database = Sqlite>,
+    {
+        sqlx::query!(
+            r#"
+            UPDATE workouts
+            SET last_activity_time = ?
+            WHERE id = (
+                SELECT workout_id
+                FROM exercises
+                WHERE id = ? AND user_id = ?
+            )
+              AND user_id = ?
+            "#,
+            at,
+            exercise_id,
+            user_id,
+            user_id
+        )
+        .execute(executor)
+        .await
+        .map_err(|e| {
+            error!(target: "database", "Failed to touch workout activity (exercise): {}", e);
+            AppError::DatabaseError(e)
+        })?;
+        Ok(())
+    }
+
     pub async fn create_workout(
         &self,
         user_id: i64,
@@ -14,8 +79,8 @@ impl Database {
         let pool = self.pool().await;
         let result = sqlx::query!(
             r#"
-            INSERT INTO workouts (user_id, date, start_time, end_time, notes, timezone_offset_minutes)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO workouts (user_id, date, start_time, end_time, notes, timezone_offset_minutes, last_activity_time)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             RETURNING id
             "#,
             user_id,
@@ -24,6 +89,7 @@ impl Database {
             req.start_time, // Initially set end_time to start_time
             req.notes,
             req.timezone_offset_minutes,
+            req.start_time,
         )
         .fetch_one(&pool)
         .await
@@ -50,12 +116,13 @@ impl Database {
         let res = sqlx::query!(
             r#"
             UPDATE workouts
-            SET end_time = ?, notes = ?, feedback = ?
+            SET end_time = ?, notes = ?, feedback = ?, last_activity_time = ?, auto_closed_at = NULL
             WHERE id = ? AND user_id = ?
             "#,
             end_time,
             notes,
             feedback,
+            end_time,
             id,
             user_id,
         )
@@ -91,6 +158,7 @@ impl Database {
             end_time
         );
 
+        let now = Utc::now();
         let update_notes = notes.is_some();
         let notes_value = notes.unwrap_or(None);
         let update_feedback = feedback.is_some();
@@ -103,6 +171,8 @@ impl Database {
             SET date = ?,
                 start_time = ?,
                 end_time = ?,
+                last_activity_time = ?,
+                auto_closed_at = NULL,
                 notes = CASE WHEN ? THEN ? ELSE notes END,
                 feedback = CASE WHEN ? THEN ? ELSE feedback END
             WHERE id = ? AND user_id = ?
@@ -110,6 +180,7 @@ impl Database {
             start_time,
             start_time,
             end_time,
+            now,
             update_notes,
             notes_value,
             update_feedback,
@@ -145,7 +216,8 @@ impl Database {
                 end_time as "end_time: DateTime<Utc>",
                 notes,
                 feedback,
-                timezone_offset_minutes
+                timezone_offset_minutes,
+                auto_closed_at as "auto_closed_at: DateTime<Utc>"
             FROM workouts
             WHERE id = ? AND user_id = ?
             "#,
@@ -169,6 +241,7 @@ impl Database {
             feedback: result.feedback,
             exercise_count: None,
             timezone_offset_minutes: result.timezone_offset_minutes,
+            auto_closed_at: result.auto_closed_at,
         })
     }
 
@@ -186,6 +259,7 @@ impl Database {
                 notes,
                 feedback,
                 timezone_offset_minutes,
+                auto_closed_at as "auto_closed_at: DateTime<Utc>",
                 (
                     SELECT COUNT(*)
                     FROM exercises e
@@ -216,6 +290,7 @@ impl Database {
                 feedback: row.feedback,
                 exercise_count: Some(row.exercise_count),
                 timezone_offset_minutes: row.timezone_offset_minutes,
+                auto_closed_at: row.auto_closed_at,
             })
             .collect();
 
@@ -250,5 +325,56 @@ impl Database {
 
         info!(target: "database", "Deleted workout #{} and all its exercises and sets", id);
         Ok(())
+    }
+
+    pub async fn touch_workout_activity(
+        &self,
+        user_id: i64,
+        workout_id: i64,
+    ) -> Result<(), AppError> {
+        let now = Utc::now();
+        let pool = self.pool().await;
+        self.touch_workout_activity_at(user_id, workout_id, now, &pool)
+            .await
+    }
+
+    pub async fn touch_workout_activity_for_exercise(
+        &self,
+        user_id: i64,
+        exercise_id: i64,
+    ) -> Result<(), AppError> {
+        let now = Utc::now();
+        let pool = self.pool().await;
+        self.touch_workout_activity_for_exercise_at(user_id, exercise_id, now, &pool)
+            .await
+    }
+
+    pub async fn auto_close_stale_workouts(
+        &self,
+        inactivity_minutes: i64,
+    ) -> Result<u64, AppError> {
+        let now = Utc::now();
+        let pool = self.pool().await;
+        let res = sqlx::query!(
+            r#"
+            UPDATE workouts
+            SET end_time = datetime(COALESCE(last_activity_time, start_time), '+' || ? || ' minutes'),
+                auto_closed_at = ?
+            WHERE auto_closed_at IS NULL
+              AND end_time <= start_time
+              AND (julianday(?) - julianday(COALESCE(last_activity_time, start_time))) * 24 * 60 >= ?
+            "#,
+            inactivity_minutes,
+            now,
+            now,
+            inactivity_minutes
+        )
+        .execute(&pool)
+        .await
+        .map_err(|e| {
+            error!(target: "database", "Failed to auto-close stale workouts: {}", e);
+            AppError::DatabaseError(e)
+        })?;
+        Ok(res.rows_affected())
     }
 }

@@ -23,7 +23,11 @@ fn validate_opt_len(name: &str, value: &Option<String>, max: usize) -> Result<()
     Ok(())
 }
 
-fn validate_opt_opt_len(name: &str, value: &Option<Option<String>>, max: usize) -> Result<(), String> {
+fn validate_opt_opt_len(
+    name: &str,
+    value: &Option<Option<String>>,
+    max: usize,
+) -> Result<(), String> {
     let Some(value) = value.as_ref() else {
         return Ok(());
     };
@@ -97,6 +101,8 @@ pub struct Workout {
     pub exercise_count: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timezone_offset_minutes: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_closed_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow, Clone)]

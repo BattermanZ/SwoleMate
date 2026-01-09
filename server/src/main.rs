@@ -116,6 +116,52 @@ async fn schedule_backups(mut shutdown: watch::Receiver<bool>) {
     }
 }
 
+async fn schedule_auto_close(
+    database: db::Database,
+    mut shutdown: watch::Receiver<bool>,
+    inactivity_minutes: i64,
+    poll_seconds: u64,
+) {
+    if inactivity_minutes <= 0 {
+        info!("Auto-close disabled (inactivity_minutes <= 0)");
+        return;
+    }
+
+    info!(
+        "Starting auto-close scheduler inactivity_minutes={} poll_seconds={}",
+        inactivity_minutes, poll_seconds
+    );
+
+    loop {
+        if *shutdown.borrow() {
+            info!("Auto-close scheduler stopping (shutdown requested)");
+            break;
+        }
+
+        tokio::select! {
+            _ = sleep(Duration::from_secs(poll_seconds.max(5))) => {},
+            _ = shutdown.changed() => {
+                info!("Auto-close scheduler stopping (shutdown requested)");
+                break;
+            }
+        }
+
+        if *shutdown.borrow() {
+            info!("Auto-close scheduler stopping (shutdown requested)");
+            break;
+        }
+
+        match database.auto_close_stale_workouts(inactivity_minutes).await {
+            Ok(count) => {
+                if count > 0 {
+                    info!("Auto-closed {} workout(s) due to inactivity", count);
+                }
+            }
+            Err(e) => error!("Failed to auto-close workouts: {}", e),
+        }
+    }
+}
+
 async fn wait_for_shutdown_signal() {
     #[cfg(unix)]
     {
@@ -301,10 +347,25 @@ async fn main() -> std::io::Result<()> {
 
     let concurrency = middleware::ApiConcurrency::from_env();
 
+    let auto_close_inactivity_minutes = env::var("AUTO_CLOSE_INACTIVITY_MINUTES")
+        .ok()
+        .and_then(|v| v.parse::<i64>().ok())
+        .unwrap_or(30);
+    let auto_close_poll_seconds = env::var("AUTO_CLOSE_POLL_SECONDS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(60);
+
     info!("Server starting on port {}", port);
 
     // Start the backup scheduler in a separate task.
     tokio::spawn(schedule_backups(shutdown_rx.clone()));
+    tokio::spawn(schedule_auto_close(
+        database.clone(),
+        shutdown_rx.clone(),
+        auto_close_inactivity_minutes,
+        auto_close_poll_seconds,
+    ));
 
     // Create and start HTTP server.
     let server = HttpServer::new(move || {

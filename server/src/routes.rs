@@ -200,10 +200,7 @@ struct ClientLogEntry {
 }
 
 #[post("/api/logs")]
-pub async fn write_logs(
-    _user: CurrentUser,
-    logs: web::Json<Vec<ClientLogEntry>>,
-) -> HttpResponse {
+pub async fn write_logs(_user: CurrentUser, logs: web::Json<Vec<ClientLogEntry>>) -> HttpResponse {
     const MAX_LOG_ENTRIES: usize = 1000;
     if logs.len() > MAX_LOG_ENTRIES {
         return HttpResponse::PayloadTooLarge().json(json!({
@@ -218,12 +215,7 @@ pub async fn write_logs(
             .unwrap_or("info")
             .trim()
             .to_ascii_lowercase();
-        let target = entry
-            .target
-            .as_deref()
-            .unwrap_or("app")
-            .trim()
-            .to_string();
+        let target = entry.target.as_deref().unwrap_or("app").trim().to_string();
         let message = entry
             .message
             .as_deref()
