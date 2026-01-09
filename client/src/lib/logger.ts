@@ -31,6 +31,21 @@ class Logger {
 				this.processLogQueue();
 			});
 
+			// Best-effort flush when the page is being hidden (more reliable than beforeunload on mobile).
+			window.addEventListener('pagehide', () => {
+				void this.processLogQueue();
+			});
+
+			document.addEventListener('visibilitychange', () => {
+				if (document.visibilityState === 'hidden') {
+					void this.processLogQueue();
+				}
+			});
+
+			window.addEventListener('online', () => {
+				void this.processLogQueue();
+			});
+
 			// Log application startup
 			this.info('app', 'Frontend application started', {
 				url: window.location.href,

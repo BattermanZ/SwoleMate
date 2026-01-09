@@ -10,7 +10,12 @@
 
 	const dispatch = createEventDispatcher<{
 		cancel: undefined;
-		submit: { start_time: string; end_time: string; notes: string | null; feedback: FeedbackEmoji | null };
+		submit: {
+			start_time: string;
+			end_time: string;
+			notes: string | null;
+			feedback: FeedbackEmoji | null;
+		};
 	}>();
 
 	let startLocal = '';

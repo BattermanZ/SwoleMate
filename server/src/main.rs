@@ -8,6 +8,7 @@ use std::fs;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
+use tokio::sync::watch;
 use tokio::time::{sleep, Duration};
 
 use swolemate_server::{auth, backup, db, middleware, routes, schema};
@@ -73,9 +74,14 @@ fn redact_database_url(database_url: &str) -> String {
     }
 }
 
-async fn schedule_backups() {
+async fn schedule_backups(mut shutdown: watch::Receiver<bool>) {
     info!("Starting automatic backup scheduler");
     loop {
+        if *shutdown.borrow() {
+            info!("Backup scheduler stopping (shutdown requested)");
+            break;
+        }
+
         let now = Local::now();
         let days_until_monday = (7 + Weekday::Mon.num_days_from_monday() as i64
             - now.weekday().num_days_from_monday() as i64)
@@ -89,13 +95,42 @@ async fn schedule_backups() {
         }
 
         let seconds = (next_backup - now).num_seconds().max(0) as u64;
-        sleep(Duration::from_secs(seconds)).await;
+        tokio::select! {
+            _ = sleep(Duration::from_secs(seconds)) => {},
+            _ = shutdown.changed() => {
+                info!("Backup scheduler stopping (shutdown requested)");
+                break;
+            }
+        }
+
+        if *shutdown.borrow() {
+            info!("Backup scheduler stopping (shutdown requested)");
+            break;
+        }
 
         info!("Creating automatic backup");
         match backup::create_backup(backup::BackupType::Auto).await {
             Ok(backup_info) => info!("Automatic backup created: {}", backup_info.filename),
             Err(e) => error!("Failed to create automatic backup: {}", e),
         }
+    }
+}
+
+async fn wait_for_shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+
+        let mut sigterm = signal(SignalKind::terminate()).expect("SIGTERM handler");
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {},
+            _ = sigterm.recv() => {},
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
     }
 }
 
@@ -120,6 +155,8 @@ async fn main() -> std::io::Result<()> {
         .filter(None, LevelFilter::Info)
         .parse_env("RUST_LOG")
         .init();
+
+    let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
     // Create backups directory if it doesn't exist
     let backups_dir = Path::new("backups");
@@ -266,11 +303,11 @@ async fn main() -> std::io::Result<()> {
 
     info!("Server starting on port {}", port);
 
-    // Start the backup scheduler in a separate task
-    tokio::spawn(schedule_backups());
+    // Start the backup scheduler in a separate task.
+    tokio::spawn(schedule_backups(shutdown_rx.clone()));
 
-    // Create and start HTTP server
-    HttpServer::new(move || {
+    // Create and start HTTP server.
+    let server = HttpServer::new(move || {
         // Configure CORS
         let mut cors = Cors::default()
             .allowed_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])
@@ -323,6 +360,25 @@ async fn main() -> std::io::Result<()> {
     .client_request_timeout(Duration::from_secs(15))
     .client_disconnect_timeout(Duration::from_secs(5))
     .keep_alive(Duration::from_secs(75))
-    .run()
-    .await
+    .run();
+
+    let handle = server.handle();
+
+    tokio::spawn(async move {
+        wait_for_shutdown_signal().await;
+        info!("Shutdown requested");
+        let _ = shutdown_tx.send(true);
+
+        let stop = handle.stop(true);
+        if tokio::time::timeout(Duration::from_secs(15), stop)
+            .await
+            .is_err()
+        {
+            error!("Graceful shutdown timed out; forcing stop");
+            handle.stop(false).await;
+        }
+        info!("Shutdown sequence completed");
+    });
+
+    server.await
 }
