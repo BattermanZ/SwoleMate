@@ -2,10 +2,6 @@
 FROM node:24-slim AS builder
 WORKDIR /app
 
-# Handle build-time variables
-ARG VITE_API_URL
-ENV VITE_API_URL=${VITE_API_URL}
-
 # Install dependencies
 COPY package*.json ./
 RUN npm ci

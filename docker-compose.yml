@@ -4,8 +4,6 @@ services:
     container_name: swolemate-client
     ports:
       - "2470:2470"  # Frontend port
-    networks:
-      - cinelink_default
     restart: unless-stopped
     depends_on:
       - server
@@ -16,18 +14,7 @@ services:
     expose:  
       - 2469  # Backend port
     volumes:
-      - ./logs:/app/logs
       - ./database:/app/database
       - ./backups:/app/backups
       - ./server.env:/app/server.env
-    networks:
-      - cinelink_default
     restart: unless-stopped
-
-volumes:
-  database:
-  logs:
-
-networks:
-  cinelink_default:
-    external: true 
