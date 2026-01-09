@@ -4,6 +4,7 @@ target
 *.db
 *.log
 *.env
+.env*
 .DS_Store
 README.md
 .vscode

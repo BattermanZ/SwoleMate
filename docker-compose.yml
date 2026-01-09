@@ -7,14 +7,21 @@ services:
     restart: unless-stopped
     depends_on:
       - server
-        
+
   server:
     image: 192.168.31.233:5000/swolemate-server:latest
     container_name: swolemate-server
-    expose:  
-      - 2469  # Backend port
+    expose:
+      - "2469" # Backend port (internal)
+    working_dir: /data
     volumes:
-      - ./database:/app/database
-      - ./backups:/app/backups
-      - ./server.env:/app/server.env
+      - ./database:/data/database
+      - ./backups:/data/backups
+      - ./server.env:/data/server.env:ro
+    environment:
+      - TZ=Europe/Amsterdam
     restart: unless-stopped
+    networks:
+      default:
+        aliases:
+          - swolemate-server
