@@ -2,12 +2,9 @@ use crate::backup::{self, BackupType};
 use crate::middleware::{AdminUser, CurrentUser};
 use crate::{db::Database, errors::AppError, models::*};
 use actix_web::{delete, get, post, put, web, HttpResponse};
-use log::error;
+use log::{debug, error, info, warn};
 use serde::Deserialize;
 use serde_json::json;
-use std::fs;
-use std::io::Write;
-use std::path::Path;
 
 pub mod admin;
 pub mod auth;
@@ -179,24 +176,26 @@ pub async fn replace_sets(
     Ok(HttpResponse::Ok().json(sets))
 }
 
-#[post("/api/logs/init")]
-pub async fn init_logs_directory(_user: CurrentUser) -> HttpResponse {
-    let logs_dir = Path::new("logs");
-    if !logs_dir.exists() {
-        if let Err(e) = fs::create_dir(logs_dir) {
-            error!("Failed to create logs directory: {}", e);
-            return HttpResponse::InternalServerError().json(json!({
-                "error": "Failed to create logs directory"
-            }));
-        }
-    }
-    HttpResponse::Ok().json(json!({ "status": "ok" }))
+#[derive(Debug, Deserialize)]
+struct ClientLogEntry {
+    #[serde(default)]
+    timestamp: Option<String>,
+    #[serde(default)]
+    level: Option<String>,
+    #[serde(default)]
+    target: Option<String>,
+    #[serde(default)]
+    message: Option<String>,
+    #[serde(default)]
+    msg: Option<String>,
+    #[serde(default)]
+    metadata: Option<serde_json::Value>,
 }
 
 #[post("/api/logs")]
 pub async fn write_logs(
     _user: CurrentUser,
-    logs: web::Json<Vec<serde_json::Value>>,
+    logs: web::Json<Vec<ClientLogEntry>>,
 ) -> HttpResponse {
     const MAX_LOG_ENTRIES: usize = 1000;
     if logs.len() > MAX_LOG_ENTRIES {
@@ -205,39 +204,63 @@ pub async fn write_logs(
         }));
     }
 
-    let client_log_path = Path::new("logs/client.log");
-    let file = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(client_log_path);
+    for entry in logs.iter() {
+        let level = entry
+            .level
+            .as_deref()
+            .unwrap_or("info")
+            .trim()
+            .to_ascii_lowercase();
+        let target = entry
+            .target
+            .as_deref()
+            .unwrap_or("app")
+            .trim()
+            .to_string();
+        let message = entry
+            .message
+            .as_deref()
+            .or(entry.msg.as_deref())
+            .unwrap_or("<missing message>")
+            .trim()
+            .to_string();
 
-    match file {
-        Ok(mut file) => {
-            for log in logs.iter() {
-                let line = match serde_json::to_string(log) {
-                    Ok(line) => line,
-                    Err(e) => {
-                        error!("Failed to serialize client log: {}", e);
-                        continue;
-                    }
-                };
-
-                if let Err(e) = writeln!(file, "{}", line) {
-                    error!("Failed to write client log: {}", e);
-                    return HttpResponse::InternalServerError().json(json!({
-                        "error": "Failed to write logs"
-                    }));
-                }
+        let mut prefix = format!("component={}", target);
+        if let Some(ts) = entry.timestamp.as_deref() {
+            if !ts.is_empty() {
+                prefix.push_str(&format!(" client_ts={}", ts));
             }
-            HttpResponse::Ok().json(json!({ "status": "ok" }))
         }
-        Err(e) => {
-            error!("Failed to open client log file: {}", e);
-            HttpResponse::InternalServerError().json(json!({
-                "error": "Failed to open log file"
-            }))
+
+        match level.as_str() {
+            "debug" => {
+                let metadata_str = entry.metadata.as_ref().and_then(|value| {
+                    let s = serde_json::to_string(value).ok()?;
+                    if s.len() <= 2048 {
+                        Some(s)
+                    } else {
+                        Some(format!("{}…", &s[..2048]))
+                    }
+                });
+                if let Some(meta) = metadata_str {
+                    debug!(target: "client", "{} {} | {}", prefix, message, meta);
+                    continue;
+                }
+                debug!(target: "client", "{} {}", prefix, message);
+            }
+            "warn" | "warning" => {
+                warn!(target: "client", "{} {}", prefix, message);
+            }
+            "error" => {
+                error!(target: "client", "{} {}", prefix, message);
+            }
+            _ => {
+                info!(target: "client", "{} {}", prefix, message);
+            }
         }
     }
+
+    HttpResponse::Ok().json(json!({ "status": "ok" }))
 }
 
 #[get("/api/exercises/types")]
@@ -496,7 +519,6 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(end_exercise)
         .service(create_set)
         .service(replace_sets)
-        .service(init_logs_directory)
         .service(write_logs)
         .service(get_exercise_types)
         .service(get_last_exercise_data)

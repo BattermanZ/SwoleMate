@@ -110,7 +110,8 @@
 	}
 
 	$: {
-		const shouldEnableRemoteLogs = $authState.status === 'authenticated' && !$authState.offline;
+		const shouldEnableRemoteLogs =
+			!import.meta.env.DEV && $authState.status === 'authenticated' && !$authState.offline;
 		logger.setRemoteEnabled(shouldEnableRemoteLogs);
 	}
 </script>

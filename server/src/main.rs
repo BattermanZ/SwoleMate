@@ -23,7 +23,6 @@ fn find_env_file() -> Option<String> {
     for path in env_paths.iter() {
         // Try to actually open and read the file to verify it exists and is readable
         if let Ok(contents) = std::fs::read_to_string(path) {
-            info!("Found and verified server.env at: {}", path.display());
             // Manually parse and set environment variables
             for line in contents.lines() {
                 if line.starts_with('#') || line.is_empty() {
@@ -102,12 +101,25 @@ async fn schedule_backups() {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    // Create logs directory if it doesn't exist
-    let logs_dir = Path::new("logs");
-    if !logs_dir.exists() {
-        fs::create_dir(logs_dir)?;
-        info!("Created logs directory at: {}", logs_dir.display());
-    }
+    let env_path = find_env_file();
+
+    // Setup structured logging (stdout only).
+    env_logger::builder()
+        .target(env_logger::Target::Stdout)
+        .format(|buf, record| {
+            let ts = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+            writeln!(
+                buf,
+                "[{}] {} {} - {}",
+                ts,
+                record.level(),
+                record.target(),
+                record.args()
+            )
+        })
+        .filter(None, LevelFilter::Info)
+        .parse_env("RUST_LOG")
+        .init();
 
     // Create backups directory if it doesn't exist
     let backups_dir = Path::new("backups");
@@ -123,43 +135,6 @@ async fn main() -> std::io::Result<()> {
         info!("Created database directory at: {}", db_path.display());
     }
 
-    // Setup file logging
-    let server_log_file = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("logs/server.log")?;
-
-    // Setup structured logging with improved readability
-    env_logger::builder()
-        .format(move |buf, record| {
-            let local_time = Local::now().format("%Y-%m-%d - %H:%M:%S");
-            writeln!(
-                buf,
-                "[{}] {} - {} - {}",
-                local_time,
-                record.level(),
-                record.target(),
-                record.args()
-            )?;
-
-            // Write to file
-            if let Ok(mut file) = server_log_file.try_clone() {
-                writeln!(
-                    file,
-                    "[{}] {} - {} - {}",
-                    local_time,
-                    record.level(),
-                    record.target(),
-                    record.args()
-                )?;
-            }
-
-            Ok(())
-        })
-        .filter(None, LevelFilter::Info)
-        .parse_env("RUST_LOG")
-        .init();
-
     // Load environment variables
     info!("Looking for server.env file...");
     info!(
@@ -167,7 +142,7 @@ async fn main() -> std::io::Result<()> {
         std::env::current_dir()?.display()
     );
 
-    match find_env_file() {
+    match env_path {
         Some(env_path) => {
             info!("Environment loaded successfully from {}", env_path);
             // Verify some key environment variables were loaded

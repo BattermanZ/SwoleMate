@@ -3,7 +3,7 @@ use actix_web::{
     Error, HttpResponse,
 };
 use futures_util::future::LocalBoxFuture;
-use log::info;
+use log::{debug, info};
 use std::{
     env,
     future::{ready, Ready},
@@ -60,9 +60,9 @@ where
         let method = req.method().clone();
         let uri = req.uri().clone();
 
-        info!(
+        debug!(
             target: "request",
-            "Request started - {{ \"request_id\": \"{}\", \"method\": \"{}\", \"path\": \"{}\" }}",
+            "start request_id={} method={} path={}",
             request_id,
             method,
             uri
@@ -76,7 +76,7 @@ where
 
             info!(
                 target: "request",
-                "Request completed - {{ \"request_id\": \"{}\", \"method\": \"{}\", \"path\": \"{}\", \"status\": {}, \"duration_ms\": {} }}",
+                "complete request_id={} method={} path={} status={} duration_ms={}",
                 request_id,
                 method,
                 uri,

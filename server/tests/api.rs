@@ -3,7 +3,6 @@ use once_cell::sync::Lazy;
 use serde_json::{json, Value};
 use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::Row;
-use std::path::Path;
 use std::sync::Mutex;
 use tempfile::TempDir;
 
@@ -34,7 +33,6 @@ impl TestEnv {
         let temp_dir = tempfile::tempdir().expect("tempdir");
 
         std::fs::create_dir_all(temp_dir.path().join("database")).expect("database dir");
-        std::fs::create_dir_all(temp_dir.path().join("logs")).expect("logs dir");
         std::fs::create_dir_all(temp_dir.path().join("backups")).expect("backups dir");
         std::fs::File::create(temp_dir.path().join("database").join("swolemate.db"))
             .expect("create db file");
@@ -555,22 +553,14 @@ async fn logs_endpoints_work_and_enforce_limits() {
     let cookie = login_cookie(&app, "user3", "passwordpassword").await;
 
     let req = with_cookie(test::TestRequest::post(), &cookie)
-        .uri("/api/logs/init")
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success());
-    assert!(Path::new("logs").exists());
-
-    let req = with_cookie(test::TestRequest::post(), &cookie)
         .uri("/api/logs")
         .set_json(json!([
             {"level": "info", "msg": "hello"},
-            {"level": "warn", "msg": "world"}
+            {"level": "warn", "message": "world", "target": "ui"}
         ]))
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success());
-    assert!(Path::new("logs/client.log").exists());
 
     let too_many = (0..1001).map(|i| json!({ "idx": i })).collect::<Vec<_>>();
     let req = with_cookie(test::TestRequest::post(), &cookie)

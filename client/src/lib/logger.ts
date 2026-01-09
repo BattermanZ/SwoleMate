@@ -17,6 +17,7 @@ class Logger {
 	private remoteEnabled: boolean = false;
 	private readonly API_BASE = config.apiUrl;
 	private isBrowser: boolean;
+	private readonly MAX_QUEUE = 500;
 
 	private constructor() {
 		this.isBrowser = typeof window !== 'undefined';
@@ -47,33 +48,8 @@ class Logger {
 
 	public setRemoteEnabled(enabled: boolean) {
 		if (!this.isBrowser) return;
-		if (enabled && !this.remoteEnabled) {
-			this.remoteEnabled = true;
-			this.createLogsDirectory();
-			void this.processLogQueue();
-			return;
-		}
-
 		this.remoteEnabled = enabled;
-	}
-
-	private async createLogsDirectory() {
-		if (!this.isBrowser) return;
-		if (!this.remoteEnabled) return;
-
-		try {
-			const response = await fetch(`${this.API_BASE}/api/logs/init`, {
-				method: 'POST',
-				credentials: 'include'
-			});
-			if (!response.ok) {
-				console.error('Failed to create logs directory');
-			} else {
-				this.info('logger', 'Logs directory initialized');
-			}
-		} catch (error) {
-			console.error('Error creating logs directory:', error);
-		}
+		if (enabled) void this.processLogQueue();
 	}
 
 	private createLogEntry(
@@ -83,17 +59,7 @@ class Logger {
 		metadata?: Record<string, unknown>
 	): LogEntry {
 		return {
-			timestamp: new Date()
-				.toLocaleString('en-GB', {
-					year: 'numeric',
-					month: '2-digit',
-					day: '2-digit',
-					hour: '2-digit',
-					minute: '2-digit',
-					second: '2-digit',
-					hour12: false
-				})
-				.replace(',', ' -'),
+			timestamp: new Date().toISOString(),
 			level,
 			target,
 			message,
@@ -144,6 +110,11 @@ class Logger {
 		}
 	}
 
+	private shouldSendRemotely(level: LogLevel): boolean {
+		// Keep remote logs minimal to avoid noise/PII; send warnings+errors only.
+		return level === 'warn' || level === 'error';
+	}
+
 	private log(
 		level: LogLevel,
 		target: string,
@@ -155,11 +126,18 @@ class Logger {
 
 		const logEntry = this.createLogEntry(level, target, message, metadata);
 
-		// Add to queue for file logging
-		this.logQueue.push(logEntry);
+		// Queue for server-side ingestion (stdout) when enabled.
+		if (this.remoteEnabled && this.shouldSendRemotely(level)) {
+			this.logQueue.push(logEntry);
+			if (this.logQueue.length > this.MAX_QUEUE) {
+				this.logQueue.splice(0, this.logQueue.length - this.MAX_QUEUE);
+			}
+		}
 
-		// Also log to console in development
-		if (import.meta.env.DEV) {
+		// Console logging:
+		// - dev: all levels
+		// - prod: warn+error only
+		if (import.meta.env.DEV || level === 'warn' || level === 'error') {
 			const consoleMethod = level === 'debug' ? 'log' : level;
 			console[consoleMethod](this.formatLogEntry(logEntry));
 		}
