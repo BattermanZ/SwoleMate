@@ -355,8 +355,7 @@ impl Database {
               AND user_id = ?
               AND date(start_time) >= date('now', 'start of month', '-11 months')
             ORDER BY start_time ASC
-            "#
-            ,
+            "#,
             user_id
         )
         .fetch_all(&pool)

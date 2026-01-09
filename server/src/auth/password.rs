@@ -16,7 +16,9 @@ fn argon2() -> Argon2<'static> {
 
 pub fn validate_new_password(password: &str) -> Result<(), String> {
     if password.len() < MIN_PASSWORD_LEN {
-        return Err(format!("password must be at least {MIN_PASSWORD_LEN} characters"));
+        return Err(format!(
+            "password must be at least {MIN_PASSWORD_LEN} characters"
+        ));
     }
     Ok(())
 }
@@ -38,4 +40,3 @@ pub fn verify_password(password_hash: &str, password: &str) -> Result<bool, Stri
         .verify_password(password.as_bytes(), &parsed)
         .is_ok())
 }
-

@@ -29,7 +29,10 @@ impl Database {
         .await
         .map_err(AppError::DatabaseError)?;
         if workout_exists == 0 {
-            return Err(AppError::NotFound(format!("Workout #{} not found", workout_id)));
+            return Err(AppError::NotFound(format!(
+                "Workout #{} not found",
+                workout_id
+            )));
         }
 
         let split_weight = req.split_weight.unwrap_or(false);
@@ -233,7 +236,10 @@ impl Database {
         .await
         .map_err(AppError::DatabaseError)?;
         if exercise_exists == 0 {
-            return Err(AppError::NotFound(format!("Exercise #{} not found", exercise_id)));
+            return Err(AppError::NotFound(format!(
+                "Exercise #{} not found",
+                exercise_id
+            )));
         }
 
         let result = sqlx::query!(
@@ -288,7 +294,10 @@ impl Database {
         .await
         .map_err(AppError::DatabaseError)?;
         if exercise_exists == 0 {
-            return Err(AppError::NotFound(format!("Exercise #{} not found", exercise_id)));
+            return Err(AppError::NotFound(format!(
+                "Exercise #{} not found",
+                exercise_id
+            )));
         }
 
         sqlx::query!(

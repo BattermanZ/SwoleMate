@@ -142,7 +142,10 @@ async fn json_body(resp: actix_web::dev::ServiceResponse) -> Value {
     serde_json::from_slice(&bytes).expect("valid json response")
 }
 
-fn with_cookie(req: test::TestRequest, cookie: &actix_web::cookie::Cookie<'static>) -> test::TestRequest {
+fn with_cookie(
+    req: test::TestRequest,
+    cookie: &actix_web::cookie::Cookie<'static>,
+) -> test::TestRequest {
     req.cookie(cookie.clone())
 }
 
@@ -364,6 +367,41 @@ async fn cannot_delete_last_admin() {
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 409);
+}
+
+#[actix_web::test]
+async fn user_foreign_keys_cascade_on_delete() {
+    let _env = TestEnv::new();
+    let (db, _admin_cookie, _app) = setup_test_app().await;
+
+    let pool = db.pool().await;
+    for table in [
+        "sessions",
+        "workouts",
+        "exercises",
+        "sets",
+        "exercise_settings",
+    ] {
+        let rows = sqlx::query(&format!("PRAGMA foreign_key_list('{table}')"))
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+
+        let mut found = false;
+        for row in rows {
+            let target: String = row.try_get("table").unwrap();
+            let from: String = row.try_get("from").unwrap();
+            let on_delete: String = row.try_get("on_delete").unwrap();
+            if target == "users" && from == "user_id" {
+                found = true;
+                assert_eq!(
+                    on_delete, "CASCADE",
+                    "{table}.user_id -> users.id should be ON DELETE CASCADE"
+                );
+            }
+        }
+        assert!(found, "{table} should have a user_id foreign key");
+    }
 }
 
 #[actix_web::test]

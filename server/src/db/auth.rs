@@ -56,7 +56,11 @@ impl Database {
             id: r.id,
             username: r.username,
             password_hash: r.password_hash,
-            role: if r.role == "admin" { Role::Admin } else { Role::User },
+            role: if r.role == "admin" {
+                Role::Admin
+            } else {
+                Role::User
+            },
             disabled_at: r.disabled_at,
             failed_login_count: r.failed_login_count,
             locked_until: r.locked_until,
@@ -92,7 +96,11 @@ impl Database {
             id: r.id,
             username: r.username,
             password_hash: r.password_hash,
-            role: if r.role == "admin" { Role::Admin } else { Role::User },
+            role: if r.role == "admin" {
+                Role::Admin
+            } else {
+                Role::User
+            },
             disabled_at: r.disabled_at,
             failed_login_count: r.failed_login_count,
             locked_until: r.locked_until,
@@ -124,8 +132,9 @@ impl Database {
         Ok(row.id)
     }
 
-    pub async fn list_users(&self) -> Result<Vec<(i64, String, Role, Option<DateTime<Utc>>)>, AppError>
-    {
+    pub async fn list_users(
+        &self,
+    ) -> Result<Vec<(i64, String, Role, Option<DateTime<Utc>>)>, AppError> {
         let pool = self.pool().await;
         let rows = sqlx::query!(
             r#"
@@ -143,7 +152,11 @@ impl Database {
                 (
                     r.id,
                     r.username,
-                    if r.role == "admin" { Role::Admin } else { Role::User },
+                    if r.role == "admin" {
+                        Role::Admin
+                    } else {
+                        Role::User
+                    },
                     r.disabled_at,
                 )
             })
@@ -167,34 +180,13 @@ impl Database {
 
     pub async fn delete_user_cascade(&self, user_id: i64) -> Result<(), AppError> {
         let pool = self.pool().await;
-        let mut tx = pool.begin().await.map_err(AppError::DatabaseError)?;
-
-        sqlx::query!("DELETE FROM exercise_settings WHERE user_id = ?", user_id)
-            .execute(&mut *tx)
+        let res = sqlx::query!("DELETE FROM users WHERE id = ?", user_id)
+            .execute(&pool)
             .await
             .map_err(AppError::DatabaseError)?;
-        sqlx::query!("DELETE FROM sets WHERE user_id = ?", user_id)
-            .execute(&mut *tx)
-            .await
-            .map_err(AppError::DatabaseError)?;
-        sqlx::query!("DELETE FROM exercises WHERE user_id = ?", user_id)
-            .execute(&mut *tx)
-            .await
-            .map_err(AppError::DatabaseError)?;
-        sqlx::query!("DELETE FROM workouts WHERE user_id = ?", user_id)
-            .execute(&mut *tx)
-            .await
-            .map_err(AppError::DatabaseError)?;
-        sqlx::query!("DELETE FROM sessions WHERE user_id = ?", user_id)
-            .execute(&mut *tx)
-            .await
-            .map_err(AppError::DatabaseError)?;
-        sqlx::query!("DELETE FROM users WHERE id = ?", user_id)
-            .execute(&mut *tx)
-            .await
-            .map_err(AppError::DatabaseError)?;
-
-        tx.commit().await.map_err(AppError::DatabaseError)?;
+        if res.rows_affected() == 0 {
+            return Err(AppError::NotFound("User not found".to_string()));
+        }
         Ok(())
     }
 
@@ -214,7 +206,11 @@ impl Database {
         Ok(())
     }
 
-    pub async fn update_password_hash(&self, user_id: i64, password_hash: &str) -> Result<(), AppError> {
+    pub async fn update_password_hash(
+        &self,
+        user_id: i64,
+        password_hash: &str,
+    ) -> Result<(), AppError> {
         let pool = self.pool().await;
         sqlx::query!(
             r#"
@@ -378,7 +374,11 @@ impl Database {
             id: r.user_id,
             username: r.username,
             password_hash: r.password_hash,
-            role: if r.role == "admin" { Role::Admin } else { Role::User },
+            role: if r.role == "admin" {
+                Role::Admin
+            } else {
+                Role::User
+            },
             disabled_at: r.disabled_at,
             failed_login_count: r.failed_login_count,
             locked_until: r.locked_until,

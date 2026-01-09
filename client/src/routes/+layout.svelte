@@ -23,7 +23,10 @@
 	];
 
 	$: isLogin = $page.url.pathname === '/login';
-	$: canSeeAdmin = $authState.status === 'authenticated' && $authState.user?.role === 'admin';
+	$: canSeeAdmin =
+		$authState.status === 'authenticated' &&
+		$authState.user?.role === 'admin' &&
+		!$authState.offline;
 	$: canSeeBackups =
 		$authState.status === 'authenticated' &&
 		$authState.user?.role === 'admin' &&

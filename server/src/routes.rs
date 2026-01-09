@@ -1,6 +1,6 @@
 use crate::backup::{self, BackupType};
-use crate::{db::Database, errors::AppError, models::*};
 use crate::middleware::{AdminUser, CurrentUser};
+use crate::{db::Database, errors::AppError, models::*};
 use actix_web::{delete, get, post, put, web, HttpResponse};
 use log::error;
 use serde::Deserialize;
@@ -194,7 +194,10 @@ pub async fn init_logs_directory(_user: CurrentUser) -> HttpResponse {
 }
 
 #[post("/api/logs")]
-pub async fn write_logs(_user: CurrentUser, logs: web::Json<Vec<serde_json::Value>>) -> HttpResponse {
+pub async fn write_logs(
+    _user: CurrentUser,
+    logs: web::Json<Vec<serde_json::Value>>,
+) -> HttpResponse {
     const MAX_LOG_ENTRIES: usize = 1000;
     if logs.len() > MAX_LOG_ENTRIES {
         return HttpResponse::PayloadTooLarge().json(json!({

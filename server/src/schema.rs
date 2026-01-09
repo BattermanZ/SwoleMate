@@ -1,5 +1,5 @@
-use crate::backup;
 use crate::auth::password;
+use crate::backup;
 use chrono::{Datelike, Duration, NaiveDate, TimeZone, Utc};
 use sqlx::Row;
 use sqlx::{Pool, Sqlite};
@@ -83,6 +83,14 @@ pub const SCHEMA_UPDATES: &[(i64, &str)] = &[
         5,
         r#"
         -- Add multi-user auth tables and scope workout data by user.
+        -- Applied via Rust migration logic in `setup_schema` (kept as a placeholder for versioning).
+        SELECT 1;
+        "#,
+    ),
+    (
+        6,
+        r#"
+        -- Ensure user_id foreign keys use ON DELETE CASCADE.
         -- Applied via Rust migration logic in `setup_schema` (kept as a placeholder for versioning).
         SELECT 1;
         "#,
@@ -177,6 +185,15 @@ pub async fn setup_schema(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<(), sqlx::E
 
             if *version == 5 {
                 migrate_multi_user_schema(pool).await?;
+                sqlx::query("INSERT INTO schema_version (version) VALUES (?)")
+                    .bind(*version)
+                    .execute(pool)
+                    .await?;
+                continue;
+            }
+
+            if *version == 6 {
+                migrate_user_fk_cascades(pool).await?;
                 sqlx::query("INSERT INTO schema_version (version) VALUES (?)")
                     .bind(*version)
                     .execute(pool)
@@ -302,8 +319,9 @@ async fn migrate_multi_user_schema(pool: &Pool<Sqlite>) -> Result<(), sqlx::Erro
     }
 
     let password_plain = bootstrap_password.unwrap_or_else(|| "admin".to_string());
-    let password_hash = password::hash_password(&password_plain)
-        .map_err(|e| sqlx::Error::Protocol(format!("Failed to hash bootstrap admin password: {e}")))?;
+    let password_hash = password::hash_password(&password_plain).map_err(|e| {
+        sqlx::Error::Protocol(format!("Failed to hash bootstrap admin password: {e}"))
+    })?;
 
     let mut tx = pool.begin().await?;
 
@@ -531,6 +549,226 @@ async fn migrate_multi_user_schema(pool: &Pool<Sqlite>) -> Result<(), sqlx::Erro
     .execute(&mut *tx)
     .await?;
 
+    if has_settings > 0 {
+        sqlx::query("DROP TABLE exercise_settings_old")
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    sqlx::query("PRAGMA foreign_keys = ON")
+        .execute(&mut *tx)
+        .await?;
+
+    tx.commit().await?;
+    Ok(())
+}
+
+async fn migrate_user_fk_cascades(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
+    let workouts_exist: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='workouts'",
+    )
+    .fetch_one(pool)
+    .await?;
+    if workouts_exist > 0 {
+        let workout_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM workouts")
+            .fetch_one(pool)
+            .await?;
+        if workout_count > 0 {
+            backup::create_backup(backup::BackupType::Auto)
+                .await
+                .map_err(|e| sqlx::Error::Protocol(format!("Failed to create backup: {e}")))?;
+        }
+    }
+
+    let mut tx = pool.begin().await?;
+    sqlx::query("PRAGMA foreign_keys = OFF")
+        .execute(&mut *tx)
+        .await?;
+
+    // Sessions (user_id FK cascade).
+    sqlx::query("ALTER TABLE sessions RENAME TO sessions_old")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query(
+        r#"
+        CREATE TABLE sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            session_hash TEXT NOT NULL UNIQUE,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at DATETIME NOT NULL,
+            revoked_at DATETIME,
+            rotated_from_session_id INTEGER,
+            user_agent TEXT,
+            ip TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+        CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
+        "#,
+    )
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        r#"
+        INSERT INTO sessions (id, user_id, session_hash, created_at, last_seen_at, expires_at, revoked_at, rotated_from_session_id, user_agent, ip)
+        SELECT id, user_id, session_hash, created_at, last_seen_at, expires_at, revoked_at, rotated_from_session_id, user_agent, ip
+        FROM sessions_old
+        "#,
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    // Workouts (user_id FK cascade).
+    sqlx::query("ALTER TABLE workouts RENAME TO workouts_old")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query(
+        r#"
+        CREATE TABLE workouts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            date DATETIME NOT NULL,
+            start_time DATETIME NOT NULL,
+            end_time DATETIME NOT NULL,
+            notes TEXT,
+            feedback TEXT CHECK(feedback IN ('😊', '😐', '😞') OR feedback IS NULL),
+            timezone_offset_minutes INTEGER,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_workouts_user_date ON workouts(user_id, date DESC);
+        "#,
+    )
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        r#"
+        INSERT INTO workouts (id, user_id, date, start_time, end_time, notes, feedback, timezone_offset_minutes)
+        SELECT id, user_id, date, start_time, end_time, notes, feedback, timezone_offset_minutes
+        FROM workouts_old
+        "#,
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    // Exercises (user_id FK cascade).
+    sqlx::query("ALTER TABLE exercises RENAME TO exercises_old")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query(
+        r#"
+        CREATE TABLE exercises (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            workout_id INTEGER NOT NULL,
+            exercise_type TEXT NOT NULL,
+            start_time DATETIME NOT NULL,
+            end_time DATETIME NOT NULL,
+            notes TEXT,
+            per_side_weight INTEGER NOT NULL DEFAULT 0,
+            split_weight INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (workout_id) REFERENCES workouts(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_exercises_user_workout_id_composite ON exercises(user_id, workout_id, id);
+        "#,
+    )
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        r#"
+        INSERT INTO exercises (id, user_id, workout_id, exercise_type, start_time, end_time, notes, per_side_weight, split_weight)
+        SELECT id, user_id, workout_id, exercise_type, start_time, end_time, notes, per_side_weight, split_weight
+        FROM exercises_old
+        "#,
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    // Sets (user_id FK cascade).
+    sqlx::query("ALTER TABLE sets RENAME TO sets_old")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query(
+        r#"
+        CREATE TABLE sets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            exercise_id INTEGER NOT NULL,
+            reps INTEGER NOT NULL,
+            weight REAL NOT NULL,
+            weight_left REAL,
+            weight_right REAL,
+            notes TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_sets_user_exercise_id_composite ON sets(user_id, exercise_id, id);
+        "#,
+    )
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        r#"
+        INSERT INTO sets (id, user_id, exercise_id, reps, weight, weight_left, weight_right, notes)
+        SELECT id, user_id, exercise_id, reps, weight, weight_left, weight_right, notes
+        FROM sets_old
+        "#,
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    // Exercise settings (user_id FK cascade).
+    let has_settings: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='exercise_settings'",
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+    if has_settings > 0 {
+        sqlx::query("ALTER TABLE exercise_settings RENAME TO exercise_settings_old")
+            .execute(&mut *tx)
+            .await?;
+    }
+    sqlx::query(
+        r#"
+        CREATE TABLE exercise_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            exercise_id INTEGER NOT NULL,
+            setting_key TEXT NOT NULL,
+            setting_value TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_exercise_settings_user_exercise_id_composite
+            ON exercise_settings(user_id, exercise_id, id);
+        "#,
+    )
+    .execute(&mut *tx)
+    .await?;
+    if has_settings > 0 {
+        sqlx::query(
+            r#"
+            INSERT INTO exercise_settings (id, user_id, exercise_id, setting_key, setting_value)
+            SELECT id, user_id, exercise_id, setting_key, setting_value
+            FROM exercise_settings_old
+            "#,
+        )
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    sqlx::query(
+        r#"
+        DROP TABLE sessions_old;
+        DROP TABLE workouts_old;
+        DROP TABLE exercises_old;
+        DROP TABLE sets_old;
+        "#,
+    )
+    .execute(&mut *tx)
+    .await?;
     if has_settings > 0 {
         sqlx::query("DROP TABLE exercise_settings_old")
             .execute(&mut *tx)

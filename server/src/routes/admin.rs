@@ -1,5 +1,5 @@
-use crate::auth::{normalize_username, Role};
 use crate::auth::password;
+use crate::auth::{normalize_username, Role};
 use crate::db::Database;
 use crate::errors::AppError;
 use crate::middleware::AdminUser;
@@ -29,7 +29,10 @@ pub struct UserListItem {
 }
 
 #[get("/api/admin/users")]
-pub async fn list_users(_admin: AdminUser, db: web::Data<Database>) -> Result<HttpResponse, AppError> {
+pub async fn list_users(
+    _admin: AdminUser,
+    db: web::Data<Database>,
+) -> Result<HttpResponse, AppError> {
     let users = db.list_users().await?;
     Ok(HttpResponse::Ok().json(
         users
@@ -68,6 +71,9 @@ pub async fn disable_user(
     db: web::Data<Database>,
     id: web::Path<i64>,
 ) -> Result<HttpResponse, AppError> {
+    if db.get_user_by_id(*id).await?.is_none() {
+        return Err(AppError::NotFound("User not found".to_string()));
+    }
     db.disable_user(*id).await?;
     db.revoke_all_sessions_for_user(*id).await?;
     Ok(HttpResponse::Ok().json(serde_json::json!({ "status": "ok" })))
@@ -80,6 +86,9 @@ pub async fn reset_user_password(
     id: web::Path<i64>,
     body: web::Json<ResetPasswordRequest>,
 ) -> Result<HttpResponse, AppError> {
+    if db.get_user_by_id(*id).await?.is_none() {
+        return Err(AppError::NotFound("User not found".to_string()));
+    }
     let new_hash = password::hash_password(&body.new_password).map_err(AppError::BadRequest)?;
     db.update_password_hash(*id, &new_hash).await?;
     db.revoke_all_sessions_for_user(*id).await?;

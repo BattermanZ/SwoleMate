@@ -66,7 +66,10 @@ pub async fn login(
         .get(actix_web::http::header::USER_AGENT)
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string());
-    let ip = req.connection_info().realip_remote_addr().map(|s| s.to_string());
+    let ip = req
+        .connection_info()
+        .realip_remote_addr()
+        .map(|s| s.to_string());
 
     db.create_session(user.id, &session_hash, expires_at, None, ua, ip)
         .await?;
@@ -131,7 +134,10 @@ pub async fn change_password(
         .get(actix_web::http::header::USER_AGENT)
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string());
-    let ip = req.connection_info().realip_remote_addr().map(|s| s.to_string());
+    let ip = req
+        .connection_info()
+        .realip_remote_addr()
+        .map(|s| s.to_string());
 
     db.create_session(user.0.id, &session_hash, expires_at, None, ua, ip)
         .await?;

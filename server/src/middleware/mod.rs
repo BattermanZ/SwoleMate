@@ -16,8 +16,8 @@ use uuid::Uuid;
 
 mod session_auth;
 
-pub use session_auth::{AdminUser, CurrentUser, SessionAuth};
 pub use session_auth::logout_response;
+pub use session_auth::{AdminUser, CurrentUser, SessionAuth};
 
 pub struct RequestLogger;
 
