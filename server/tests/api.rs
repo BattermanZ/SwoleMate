@@ -203,6 +203,36 @@ async fn create_user_as_admin(
 }
 
 #[actix_web::test]
+async fn workout_stats_empty_workouts_returns_empty_arrays() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    let username = "user-zero";
+    let password = "user-zero-password";
+    create_user_as_admin(&app, &admin_cookie, username, password).await;
+    let user_cookie = login_cookie(&app, username, password).await;
+
+    let req = with_cookie(test::TestRequest::get(), &user_cookie)
+        .uri("/api/progress/workout-stats")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+
+    let body = json_body(resp).await;
+    assert!(
+        body["popular_hours"].as_array().is_some(),
+        "popular_hours should be an array, got: {body}"
+    );
+    assert!(
+        body["duration_distribution"].as_array().is_some(),
+        "duration_distribution should be an array, got: {body}"
+    );
+
+    assert_eq!(body["popular_hours"].as_array().unwrap().len(), 0);
+    assert_eq!(body["duration_distribution"].as_array().unwrap().len(), 0);
+}
+
+#[actix_web::test]
 async fn health_check_works() {
     let _env = TestEnv::new();
     let (_db, _admin_cookie, app) = setup_test_app().await;

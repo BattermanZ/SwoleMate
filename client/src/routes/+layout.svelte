@@ -116,7 +116,7 @@
 </script>
 
 <div class="app-shell">
-	<AppBar class="app-shell-header bg-surface-100-800-token border-b-2">
+	<AppBar class="app-shell-header bg-surface-100-800-token border-b-2 relative z-50">
 		<AppBar.Toolbar class="grid grid-cols-[1fr_auto] items-center gap-3">
 			<AppBar.Lead>
 				<a href="/" class="flex items-center gap-2">

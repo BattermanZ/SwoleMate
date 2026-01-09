@@ -63,6 +63,10 @@
 			return;
 		}
 
+		const durationDistribution = Array.isArray(workoutStats.duration_distribution)
+			? workoutStats.duration_distribution
+			: [];
+
 		const base = baseOptions(theme);
 		const basePlugins = (base.plugins ?? {}) as unknown as Record<string, unknown>;
 		const baseScales = (base.scales ?? {}) as unknown as {
@@ -270,36 +274,41 @@
 			timeDistributionChart = null;
 		}
 
-		durationDistributionChart = upsertChart(durationDistributionChart, durationCanvas, {
-			type: 'bar',
-			data: {
-				labels: workoutStats.duration_distribution.map((d) => `${d.range} min`),
-				datasets: [
-					{
-						label: 'Workouts',
-						data: workoutStats.duration_distribution.map((d) => d.count),
-						backgroundColor: rgba(theme.secondary, theme.isDark ? 0.72 : 0.62),
-						borderColor: rgba(theme.secondary, theme.isDark ? 0.92 : 0.85),
-						borderWidth: 1,
-						borderRadius: 8
-					}
-				]
-			},
-			options: {
-				...base,
-				scales: {
-					x: {
-						...(baseScales.x ?? {}),
-						title: { display: true, text: 'Duration bucket', color: theme.mutedText }
-					},
-					y: {
-						...(baseScales.y ?? {}),
-						beginAtZero: true,
-						title: { display: true, text: 'Workouts', color: theme.mutedText }
+		if (durationDistribution.length) {
+			durationDistributionChart = upsertChart(durationDistributionChart, durationCanvas, {
+				type: 'bar',
+				data: {
+					labels: durationDistribution.map((d) => `${d.range} min`),
+					datasets: [
+						{
+							label: 'Workouts',
+							data: durationDistribution.map((d) => d.count),
+							backgroundColor: rgba(theme.secondary, theme.isDark ? 0.72 : 0.62),
+							borderColor: rgba(theme.secondary, theme.isDark ? 0.92 : 0.85),
+							borderWidth: 1,
+							borderRadius: 8
+						}
+					]
+				},
+				options: {
+					...base,
+					scales: {
+						x: {
+							...(baseScales.x ?? {}),
+							title: { display: true, text: 'Duration bucket', color: theme.mutedText }
+						},
+						y: {
+							...(baseScales.y ?? {}),
+							beginAtZero: true,
+							title: { display: true, text: 'Workouts', color: theme.mutedText }
+						}
 					}
 				}
-			}
-		});
+			});
+		} else {
+			durationDistributionChart?.destroy();
+			durationDistributionChart = null;
+		}
 	}
 
 	onMount(() => {
@@ -334,7 +343,7 @@
 				<p class="text-sm opacity-70">How sessions have been rated.</p>
 			</div>
 		</div>
-		<div class="mt-3 h-64">
+		<div class="mt-3 h-64 relative overflow-hidden">
 			<canvas bind:this={feedbackCanvas}></canvas>
 		</div>
 	</div>
@@ -346,7 +355,7 @@
 				<p class="text-sm opacity-70">Rolling last 12 months.</p>
 			</div>
 		</div>
-		<div class="mt-3 h-64">
+		<div class="mt-3 h-64 relative overflow-hidden">
 			<canvas bind:this={monthlySessionsCanvas}></canvas>
 		</div>
 	</div>
@@ -358,7 +367,7 @@
 				<p class="text-sm opacity-70">Session pace over time.</p>
 			</div>
 		</div>
-		<div class="mt-3 h-64">
+		<div class="mt-3 h-64 relative overflow-hidden">
 			<canvas bind:this={avgExerciseDurationCanvas}></canvas>
 		</div>
 	</div>
@@ -370,7 +379,7 @@
 				<p class="text-sm opacity-70">When you most often train.</p>
 			</div>
 		</div>
-		<div class="mt-3 h-64">
+		<div class="mt-3 h-64 relative overflow-hidden">
 			<canvas bind:this={timeCanvas}></canvas>
 		</div>
 	</div>
@@ -382,7 +391,7 @@
 				<p class="text-sm opacity-70">Your typical session length.</p>
 			</div>
 		</div>
-		<div class="mt-3 h-64">
+		<div class="mt-3 h-64 relative overflow-hidden">
 			<canvas bind:this={durationCanvas}></canvas>
 		</div>
 	</div>

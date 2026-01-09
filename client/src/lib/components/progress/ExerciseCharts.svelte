@@ -272,7 +272,7 @@
 				<p class="text-sm opacity-70">Volume and best estimated 1RM per week.</p>
 			</div>
 		</div>
-		<div class="mt-3 h-72">
+		<div class="mt-3 h-72 relative overflow-hidden">
 			<canvas bind:this={volumeCanvas}></canvas>
 		</div>
 	</div>
@@ -284,7 +284,7 @@
 				<p class="text-sm opacity-70">Tracks your top weight for the chosen exercise.</p>
 			</div>
 		</div>
-		<div class="mt-3 h-72">
+		<div class="mt-3 h-72 relative overflow-hidden">
 			<canvas bind:this={progressCanvas}></canvas>
 		</div>
 	</div>
@@ -297,7 +297,7 @@
 			<p class="text-sm opacity-70">Smoother long-term trend.</p>
 		</div>
 	</div>
-	<div class="mt-3 h-64">
+	<div class="mt-3 h-64 relative overflow-hidden">
 		<canvas bind:this={monthlyVolumeCanvas}></canvas>
 	</div>
 </div>

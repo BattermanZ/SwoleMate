@@ -200,46 +200,42 @@ impl Database {
 
         let popular_hours_raw = stats.popular_hours.unwrap_or_default();
         let popular_hours = if popular_hours_raw.is_empty() {
-            None
+            Vec::new()
         } else {
-            Some(
-                popular_hours_raw
-                    .split(',')
-                    .filter_map(|pair| {
-                        let parts: Vec<&str> = pair.split(':').collect();
-                        if parts.len() == 2 {
-                            Some(json!({
-                                "hour": parts[0],
-                                "count": parts[1].parse::<i64>().unwrap_or(0)
-                            }))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>(),
-            )
+            popular_hours_raw
+                .split(',')
+                .filter_map(|pair| {
+                    let parts: Vec<&str> = pair.split(':').collect();
+                    if parts.len() == 2 {
+                        Some(json!({
+                            "hour": parts[0],
+                            "count": parts[1].parse::<i64>().unwrap_or(0)
+                        }))
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
         };
 
         let duration_distribution_raw = stats.duration_distribution.unwrap_or_default();
         let duration_distribution = if duration_distribution_raw.is_empty() {
-            None
+            Vec::new()
         } else {
-            Some(
-                duration_distribution_raw
-                    .split(',')
-                    .filter_map(|pair| {
-                        let parts: Vec<&str> = pair.split(':').collect();
-                        if parts.len() == 2 {
-                            Some(json!({
-                                "range": parts[0],
-                                "count": parts[1].parse::<i64>().unwrap_or(0)
-                            }))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>(),
-            )
+            duration_distribution_raw
+                .split(',')
+                .filter_map(|pair| {
+                    let parts: Vec<&str> = pair.split(':').collect();
+                    if parts.len() == 2 {
+                        Some(json!({
+                            "range": parts[0],
+                            "count": parts[1].parse::<i64>().unwrap_or(0)
+                        }))
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
         };
 
         let monthly_rows = sqlx::query(
