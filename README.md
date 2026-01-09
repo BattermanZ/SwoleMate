@@ -1,95 +1,178 @@
-# SwoleMate - Your Personal Fitness Tracking App
+# SwoleMate (v2.0.0)
 
-SwoleMate is a modern fitness tracking application that helps you monitor and visualize your workout progress over time.
+SwoleMate is a self-hosted workout logging web app designed for fast, phone-first session tracking:
 
-## Features
+- Log a workout as you train (exercises, sets, notes, equipment settings).
+- Review recent sessions in History (including details) to quickly remember what you did.
+- Use Progress charts to see trends (strength, volume, time-of-day patterns).
+- Keep your data local in a SQLite database and export/restore backups.
 
-- Track exercises with detailed information (type, sets, reps, weights, notes)
-- Visualize progress through interactive graphs
-- Compare performance across different time periods
-- PWA support for iOS devices
-- Offline functionality
+It runs as:
+- A frontend (SvelteKit SPA/PWA) served as static files.
+- A backend (Rust + Actix) that stores data in SQLite and provides a JSON API.
 
-## Tech Stack
+## How the app works (non-technical overview)
 
-### Frontend
-- Svelte + SvelteKit
-- Skeleton UI
-- TailwindCSS
-- Chart.js for data visualization
-- PWA support with service workers
-- SSR disabled (SPA-first) to keep cookie auth + offline flows consistent
+- You sign in with a username and password.
+- You start a session, add exercises, then add sets and notes.
+- When you mark an exercise done, its inputs are locked unless you explicitly edit it again.
+- If you forget to end a session, the server can automatically close it after inactivity (configurable). Auto-closed sessions are marked so you can adjust the times later.
+- Your data stays on your server. Backups are available to restore or download.
 
-### Backend
-- Rust with Actix-web framework
-- SQLite database
-- JSON structured logging
-- RESTful API
+## Key features
 
-## Getting Started
+- Phone-first session logging (sets, notes, optional equipment settings, per-side weights).
+- History and session details (including the ability to edit start/end times, notes, and rating).
+- Progress charts (exercise focus and overall trends).
+- Admin-only user management and admin-only backups.
+- Automatic backups and a retention policy designed to keep a useful set of restore points.
+- Optional offline logging on the Today page (local-first queue + later sync).
 
-### Prerequisites
-- Node.js (v20.19+ / v22.12+ / v24+)
-- Rust (latest stable)
-- SQLite
+## Tech stack (for developers)
 
-### Backend Setup
-1. Navigate to the server directory:
-   ```bash
-   cd server
-   ```
-2. Install Rust dependencies and run the server:
-   ```bash
-   cargo run
-   ```
+**Frontend**
+- SvelteKit SPA (SSR disabled for consistency with cookie auth + PWA/offline behavior)
+- Skeleton UI + Tailwind
+- Chart.js
+- Service worker (production only)
 
-### Frontend Setup
-1. Navigate to the client directory:
-   ```bash
-   cd client
-   ```
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Start the development server:
-   ```bash
-   npm run dev
-   ```
+**Backend**
+- Rust + Actix-web
+- SQLite via SQLx (offline query metadata checked into `server/.sqlx/`)
+- Cookie-based sessions (HttpOnly, SameSite=Lax; Secure in production)
+- Logs to stdout (Docker-friendly)
 
-## Development
+## Running locally (development)
 
-- Frontend runs on `http://localhost:2470`
-- Backend API runs on `http://localhost:2469`
+**Backend**
+```bash
+cd server
+cargo run
+```
 
-## Security / Production
+**Frontend**
+```bash
+cd client
+npm install
+npm run dev -- --host 0.0.0.0
+```
 
-When exposing the backend behind an HTTPS reverse proxy, use cookie sessions + admin/user roles:
+Default ports:
+- Frontend: `http://localhost:2470`
+- Backend: `http://localhost:2469`
 
-- `APP_ENV=production` (enables stricter startup checks)
-- `BOOTSTRAP_ADMIN_PASSWORD=...` (required in production; creates the initial admin user)
-- `BOOTSTRAP_ADMIN_USERNAME=admin` (optional)
+### Development API routing (Vite proxy)
+
+In development, the frontend can call the backend via same-origin `/api/...` and Vite will proxy it to the backend.
+
+- `client/vite.config.ts` proxies `/api` to `VITE_API_PROXY_TARGET` (default `http://127.0.0.1:2469`).
+- `client/.env.local` is a convenient place for local-only settings:
+  - `VITE_API_URL=` (empty means the frontend uses same-origin `/api`)
+  - `VITE_API_PROXY_TARGET=http://127.0.0.1:2469`
+
+`client/.env.local` is for development only and should not be baked into production images.
+
+## Auth and roles
+
+SwoleMate uses username/password authentication with cookie sessions.
+
+- **Admin** users can manage users and backups.
+- **Normal** users can log and view their own data, but cannot access admin endpoints.
+
+Password rules:
+- Passwords must be at least 12 characters.
+
+First-login password change:
+- On a brand-new database, the bootstrap admin account is created with a forced password change on first login.
+- When an admin resets another user’s password, that user is also forced to change their password on the next login.
+- For existing (legacy) databases upgraded to v2.0.0, users are not forced to change passwords by default.
+
+## Data and backups
+
+**Database**
+- SQLite file (default `database/swolemate.db`).
+- The backend writes WAL/SHM files next to the DB when WAL is enabled.
+
+**Backups**
+- Backups are `.tar.gz` archives containing a consistent DB snapshot.
+- Auto backups run weekly (Monday at 01:00 local time).
+- Auto backup retention (max 12):
+  - Keep the most recent 6 weekly auto backups.
+  - Keep 1 monthly checkpoint for each of the last 6 months (earliest auto backup in the month).
+
+## Configuration
+
+Backend configuration is via environment variables. See `server.env.example` for the full list.
+
+Common variables:
+- `SERVER_PORT` (default `2469`)
+- `DATABASE_URL` (default `sqlite:database/swolemate.db`)
+- `APP_ENV` (`development` or `production`)
+- `BOOTSTRAP_ADMIN_USERNAME` (default `admin`)
+- `BOOTSTRAP_ADMIN_PASSWORD` (required in production)
+- `CORS_ALLOWED_ORIGINS` (recommended for production behind HTTPS)
+- `ENABLE_HSTS` / `HSTS_MAX_AGE` (only if you always serve HTTPS)
+- `AUTO_CLOSE_INACTIVITY_MINUTES` and `AUTO_CLOSE_POLL_SECONDS` (session auto-close)
+
+## Docker and reverse proxy (production)
+
+Recommended production routing is same-origin:
+
+- Serve the frontend at `https://your-domain/`
+- Proxy `https://your-domain/api/...` to the backend container on port `2469`
+
+This avoids hardcoding a backend URL in the frontend build and keeps cookies and CORS simple.
 
 Notes:
+- In production (`APP_ENV=production`), session cookies are Secure, so you must serve the app via HTTPS.
+- Distroless backend images run without a shell; make sure you mount writable `database/` and `backups/` volumes.
 
-- The session cookie is Secure in production, so you must serve via HTTPS.
-- Backups and user management are admin-only (`/api/backups*`, `/api/admin/*`).
+## Docker Compose (example)
 
-Optional hardening knobs:
+This repo includes an example `docker-compose.yml` that runs:
 
-- `CORS_ALLOWED_ORIGINS=https://example.com,https://www.example.com` (override single `FRONTEND_URL`)
-- `ENABLE_HSTS=1` + `HSTS_MAX_AGE=31536000` (adds `Strict-Transport-Security`; only enable if you always serve via HTTPS)
-- `API_MAX_INFLIGHT`, `API_MAX_INFLIGHT_LOGS`, `API_MAX_INFLIGHT_BACKUPS`, `API_MAX_INFLIGHT_BACKUP_RESTORE`, `API_CONCURRENCY_TIMEOUT_MS`
+- `client` on port `2470` (static frontend served by nginx)
+- `server` on port `2469` (internal; proxied by the client container or your reverse proxy)
 
-## Project Structure
+Important details:
+
+- The backend container is built to run as a distroless image (no shell, no package manager). It runs from the working directory `/data`.
+- The compose file mounts the host directories into `/data/database` and `/data/backups` so the server can create the SQLite DB and write backups.
+- If you are bind-mounting an existing (legacy) database created on the host, you may need to run the server container as your host UID/GID (example: `user: "1000:1000"`) so SQLite can create WAL/SHM files and migrations can write.
+- The client container’s nginx config proxies `/api/...` requests to the backend container (so the frontend can call `/api` on the same origin).
+
+If you use an external reverse proxy (recommended for HTTPS), use the same-origin approach:
+
+- `https://your-domain/` serves the client
+- `https://your-domain/api/...` proxies to the server on port `2469`
+
+## Testing
+
+**Backend**
+```bash
+cd server
+cargo test
+```
+
+**Frontend**
+```bash
+cd client
+npm run test:unit
+npm run check
+npm run lint
+```
+
+## Project structure
 
 ```
-swolemate/
-├── client/          # Frontend Svelte application
-├── server/          # Rust backend
-│   ├── src/
-│   │   ├── models/  # Data models
-│   │   ├── routes/  # API endpoints
-│   │   └── db/      # Database operations
+SwoleMate/
+├── client/                 # SvelteKit frontend (static build + nginx container)
+├── server/                 # Rust backend
+│   ├── src/                # app code (routes, db modules, middleware)
+│   ├── tests/              # integration tests
+│   └── .sqlx/              # SQLx offline metadata (checked into git)
+├── scripts/                # helper scripts (node)
+├── docker-compose.yml      # example compose layout
+├── server.env.example      # documented backend env vars
 └── README.md
-``` 
+```
