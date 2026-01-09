@@ -68,8 +68,15 @@ pub async fn update_workout_times(
 ) -> Result<HttpResponse, AppError> {
     req.validate().map_err(|e| AppError::BadRequest(e))?;
 
-    db.update_workout_times(user.0.id, *id, req.start_time, req.end_time)
-        .await?;
+    db.update_workout_times(
+        user.0.id,
+        *id,
+        req.start_time,
+        req.end_time,
+        req.notes.clone(),
+        req.feedback.clone(),
+    )
+    .await?;
 
     Ok(HttpResponse::Ok().json(json!({
         "message": "Workout times updated successfully"

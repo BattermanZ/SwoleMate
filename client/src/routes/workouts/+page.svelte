@@ -185,14 +185,23 @@
 		editTimesOpen = true;
 	}
 
-	async function handleSaveTimes(e: CustomEvent<{ start_time: string; end_time: string }>) {
+	async function handleSaveTimes(
+		e: CustomEvent<{
+			start_time: string;
+			end_time: string;
+			notes: string | null;
+			feedback: '😊' | '😐' | '😞' | null;
+		}>
+	) {
 		if (!selectedId) return;
 		editTimesSaving = true;
 		editTimesError = null;
 		try {
 			await updateWorkoutTimes(selectedId, {
 				start_time: e.detail.start_time,
-				end_time: e.detail.end_time
+				end_time: e.detail.end_time,
+				notes: e.detail.notes,
+				feedback: e.detail.feedback
 			});
 			editTimesOpen = false;
 			await refreshWorkouts();

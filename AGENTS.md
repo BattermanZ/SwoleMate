@@ -1,6 +1,6 @@
 # agent.md — Project AI Agent Protocol
-Version: 1.1
-Last updated: 2026-01-08
+Version: 1.2
+Last updated: 2026-01-09
 Scope: Entire repository (unless a subdirectory explicitly extends this file)
 
 This file defines strict role segmentation and workflow rules for AI-assisted programming.
@@ -125,13 +125,15 @@ If no role is specified, default to **Coordinator**.
 ---
 
 ### 4.4 Reviewer (quality, testing, debugging, security, performance)
-**Purpose:** Independently assess correctness and risks. Includes testing strategy and debug triage.
+**Purpose:** Independently assess correctness and risks. Includes testing strategy, debug triage and provide commit messages.
 
 **Allowed outputs**
 - Review notes, bug hypotheses, reproduction steps
 - Test plan + proposed tests (implementation requires approval)
 - Security and performance concerns (proportional, concrete)
 - Suggested fixes (but do not implement without approval)
+- Use emojis to make clear what is correctly implemented and what requires attention
+
 
 **Forbidden**
 - Implementing fixes without approval

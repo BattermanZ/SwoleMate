@@ -11,6 +11,7 @@ const MAX_SETTINGS_PER_EXERCISE: usize = 24;
 const MAX_REPS: i64 = 500;
 const MAX_WEIGHT_KG: f64 = 2000.0;
 const MAX_TIMEZONE_OFFSET_MINUTES: i64 = 14 * 60;
+const ALLOWED_FEEDBACK: [&str; 3] = ["😊", "😐", "😞"];
 
 fn validate_opt_len(name: &str, value: &Option<String>, max: usize) -> Result<(), String> {
     let Some(value) = value.as_ref() else {
@@ -20,6 +21,37 @@ fn validate_opt_len(name: &str, value: &Option<String>, max: usize) -> Result<()
         return Err(format!("{name} must be at most {max} characters"));
     }
     Ok(())
+}
+
+fn validate_opt_opt_len(name: &str, value: &Option<Option<String>>, max: usize) -> Result<(), String> {
+    let Some(value) = value.as_ref() else {
+        return Ok(());
+    };
+    let Some(value) = value.as_ref() else {
+        return Ok(());
+    };
+    if value.len() > max {
+        return Err(format!("{name} must be at most {max} characters"));
+    }
+    Ok(())
+}
+
+fn validate_feedback(value: &Option<String>) -> Result<(), String> {
+    let Some(value) = value.as_ref() else {
+        return Ok(());
+    };
+    if ALLOWED_FEEDBACK.iter().any(|allowed| allowed == value) {
+        Ok(())
+    } else {
+        Err("feedback must be one of 😊, 😐, 😞".to_string())
+    }
+}
+
+fn validate_opt_opt_feedback(value: &Option<Option<String>>) -> Result<(), String> {
+    let Some(value) = value.as_ref() else {
+        return Ok(());
+    };
+    validate_feedback(value)
 }
 
 fn validate_nonempty_len(name: &str, value: &str, max: usize) -> Result<(), String> {
@@ -141,6 +173,7 @@ impl UpdateWorkoutRequest {
     pub fn validate(&self) -> Result<(), String> {
         validate_opt_len("notes", &self.notes, MAX_NOTES_LEN)?;
         validate_opt_len("feedback", &self.feedback, MAX_FEEDBACK_LEN)?;
+        validate_feedback(&self.feedback)?;
         Ok(())
     }
 }
@@ -149,10 +182,17 @@ impl UpdateWorkoutRequest {
 pub struct UpdateWorkoutTimesRequest {
     pub start_time: DateTime<Utc>,
     pub end_time: DateTime<Utc>,
+    #[serde(default)]
+    pub notes: Option<Option<String>>,
+    #[serde(default)]
+    pub feedback: Option<Option<String>>,
 }
 
 impl UpdateWorkoutTimesRequest {
     pub fn validate(&self) -> Result<(), String> {
+        validate_opt_opt_len("notes", &self.notes, MAX_NOTES_LEN)?;
+        validate_opt_opt_len("feedback", &self.feedback, MAX_FEEDBACK_LEN)?;
+        validate_opt_opt_feedback(&self.feedback)?;
         if self.end_time < self.start_time {
             return Err("end_time must be greater than or equal to start_time".to_string());
         }

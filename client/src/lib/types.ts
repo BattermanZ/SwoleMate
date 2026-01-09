@@ -46,6 +46,8 @@ export interface UpdateWorkoutRequest {
 export interface UpdateWorkoutTimesRequest {
 	start_time: string; // ISO date string
 	end_time: string; // ISO date string
+	notes?: string | null;
+	feedback?: FeedbackEmoji | null;
 }
 
 export interface CreateExerciseRequest {

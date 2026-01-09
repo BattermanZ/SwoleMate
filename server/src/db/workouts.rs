@@ -80,6 +80,8 @@ impl Database {
         id: i64,
         start_time: DateTime<Utc>,
         end_time: DateTime<Utc>,
+        notes: Option<Option<String>>,
+        feedback: Option<Option<String>>,
     ) -> Result<(), AppError> {
         debug!(
             target: "database",
@@ -89,16 +91,29 @@ impl Database {
             end_time
         );
 
+        let update_notes = notes.is_some();
+        let notes_value = notes.unwrap_or(None);
+        let update_feedback = feedback.is_some();
+        let feedback_value = feedback.unwrap_or(None);
+
         let pool = self.pool().await;
         let res = sqlx::query!(
             r#"
             UPDATE workouts
-            SET date = ?, start_time = ?, end_time = ?
+            SET date = ?,
+                start_time = ?,
+                end_time = ?,
+                notes = CASE WHEN ? THEN ? ELSE notes END,
+                feedback = CASE WHEN ? THEN ? ELSE feedback END
             WHERE id = ? AND user_id = ?
             "#,
             start_time,
             start_time,
             end_time,
+            update_notes,
+            notes_value,
+            update_feedback,
+            feedback_value,
             id,
             user_id,
         )

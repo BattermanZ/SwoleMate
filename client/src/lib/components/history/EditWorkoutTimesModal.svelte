@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
-	import type { Workout } from '$lib/types';
+	import type { FeedbackEmoji, Workout } from '$lib/types';
 	import { formatDateShort, formatTime } from '$lib/utils/date';
 
 	export let open = false;
@@ -10,11 +10,13 @@
 
 	const dispatch = createEventDispatcher<{
 		cancel: undefined;
-		submit: { start_time: string; end_time: string };
+		submit: { start_time: string; end_time: string; notes: string | null; feedback: FeedbackEmoji | null };
 	}>();
 
 	let startLocal = '';
 	let endLocal = '';
+	let notes = '';
+	let feedback: FeedbackEmoji | '' = '';
 	let localError: string | null = null;
 
 	function toDateTimeLocal(iso: string): string {
@@ -33,6 +35,8 @@
 	$: if (open && workout) {
 		startLocal = toDateTimeLocal(workout.start_time);
 		endLocal = toDateTimeLocal(workout.end_time);
+		notes = workout.notes ?? '';
+		feedback = workout.feedback ?? '';
 		localError = null;
 	}
 
@@ -61,7 +65,12 @@
 			localError = 'Invalid date/time.';
 			return;
 		}
-		dispatch('submit', { start_time: startIso, end_time: endIso });
+		dispatch('submit', {
+			start_time: startIso,
+			end_time: endIso,
+			notes: notes.trim() ? notes : null,
+			feedback: feedback ? feedback : null
+		});
 	}
 </script>
 
@@ -90,6 +99,28 @@
 				<label class="block">
 					<span class="text-sm font-semibold opacity-80">End</span>
 					<input type="datetime-local" class="input mt-1 w-full" bind:value={endLocal} {disabled} />
+				</label>
+			</div>
+
+			<div class="grid gap-3 sm:grid-cols-2">
+				<label class="block">
+					<span class="text-sm font-semibold opacity-80">Mood</span>
+					<select class="select mt-1 w-full" bind:value={feedback} {disabled}>
+						<option value="">—</option>
+						<option value="😊">😊 Good</option>
+						<option value="😐">😐 Neutral</option>
+						<option value="😞">😞 Bad</option>
+					</select>
+				</label>
+
+				<label class="block sm:col-span-2">
+					<span class="text-sm font-semibold opacity-80">Notes</span>
+					<textarea
+						class="textarea mt-1 w-full min-h-[96px]"
+						placeholder="Optional notes…"
+						bind:value={notes}
+						{disabled}
+					></textarea>
 				</label>
 			</div>
 
