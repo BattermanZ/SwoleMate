@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT id as \"id?\", exercise_id, setting_key, setting_value\n            FROM exercise_settings\n            WHERE exercise_id = ? AND user_id = ?\n            ORDER BY id ASC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id?",
+        "ordinal": 0,
+        "type_info": "Int64"
+      },
+      {
+        "name": "exercise_id",
+        "ordinal": 1,
+        "type_info": "Int64"
+      },
+      {
+        "name": "setting_key",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "setting_value",
+        "ordinal": 3,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f652220662f3b0ce90561933e6b35aa988ee7ddc5ed65e7024764a0c7a041644"
+}

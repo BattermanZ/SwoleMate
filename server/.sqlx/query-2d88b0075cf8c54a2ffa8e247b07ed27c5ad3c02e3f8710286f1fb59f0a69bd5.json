@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT COUNT(*) as \"count!: i64\"\n            FROM users\n            WHERE role = 'admin' AND disabled_at IS NULL\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "count!: i64",
+        "ordinal": 0,
+        "type_info": "Int"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2d88b0075cf8c54a2ffa8e247b07ed27c5ad3c02e3f8710286f1fb59f0a69bd5"
+}

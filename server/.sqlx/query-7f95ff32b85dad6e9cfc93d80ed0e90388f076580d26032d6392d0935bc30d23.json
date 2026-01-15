@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE users\n            SET failed_login_count = failed_login_count + 1,\n                locked_until = CASE\n                    WHEN failed_login_count + 1 >= 5 THEN datetime('now', '+5 minutes')\n                    ELSE locked_until\n                END\n            WHERE id = ?\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "7f95ff32b85dad6e9cfc93d80ed0e90388f076580d26032d6392d0935bc30d23"
+}

@@ -1,35 +1,28 @@
-version: '3.8'
-
 services:
   client:
-    image: swolemate-client:v0.5.1
+    image: 192.168.31.233:5000/swolemate-client:latest
     container_name: swolemate-client
     ports:
       - "2470:2470"  # Frontend port
-    networks:
-      - cinelink_default
     restart: unless-stopped
     depends_on:
       - server
-        
+
   server:
-    image: swolemate-server:v0.5.4
+    image: 192.168.31.233:5000/swolemate-server:latest
     container_name: swolemate-server
-    expose:  
-      - 2469  # Backend port
+    expose:
+      - "2469" # Backend port (internal)
+    working_dir: /data
+    user: "1000:1000"
     volumes:
-      - ./logs:/app/logs
-      - ./database:/app/database
-      - ./backups:/app/backups
-      - ./server.env:/app/server.env
-    networks:
-      - cinelink_default
+      - ./database:/data/database
+      - ./backups:/data/backups
+      - ./server.env:/data/server.env:ro
+    environment:
+      - TZ=Europe/Amsterdam
     restart: unless-stopped
-
-volumes:
-  database:
-  logs:
-
-networks:
-  cinelink_default:
-    external: true 
+    networks:
+      default:
+        aliases:
+          - swolemate-server

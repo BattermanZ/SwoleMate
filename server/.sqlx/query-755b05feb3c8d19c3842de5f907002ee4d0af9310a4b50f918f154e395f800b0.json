@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT id as \"id!: i64\", username, role as \"role!: String\", disabled_at as \"disabled_at: DateTime<Utc>\"\n            FROM users\n            ORDER BY id ASC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Int64"
+      },
+      {
+        "name": "username",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "role!: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "disabled_at: DateTime<Utc>",
+        "ordinal": 3,
+        "type_info": "Datetime"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "755b05feb3c8d19c3842de5f907002ee4d0af9310a4b50f918f154e395f800b0"
+}

@@ -1,1 +1,239 @@
-app.postcss
+@config '../tailwind.config.js';
+
+@import 'tailwindcss';
+
+@import '@skeletonlabs/skeleton';
+@import '@skeletonlabs/skeleton-svelte';
+@import '@skeletonlabs/skeleton/themes/rocket';
+
+/* Restore a few Skeleton v2 token pairings that changed in v4 (e.g. 50-900 vs 50-950). */
+:root {
+	--color-surface-50-900: var(--color-surface-50);
+	--color-surface-100-800: var(--color-surface-100);
+}
+
+html.dark {
+	--color-surface-50-900: var(--color-surface-900);
+	--color-surface-100-800: var(--color-surface-800);
+}
+
+/* Many Skeleton tokens use `light-dark()` which keys off `color-scheme`. */
+html {
+	color-scheme: light;
+}
+
+html.dark {
+	color-scheme: dark;
+}
+
+[data-theme='rocket'] {
+	--base-font-family:
+		ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
+		Arial, 'Apple Color Emoji', 'Segoe UI Emoji';
+	--heading-font-family:
+		ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
+		Arial, 'Apple Color Emoji', 'Segoe UI Emoji';
+	--heading-font-weight: 700;
+	--heading-letter-spacing: -0.005em;
+	--body-background-color: var(--color-surface-50);
+	--body-background-color-dark: var(--color-surface-950);
+}
+
+/* Global readability defaults */
+body {
+	text-rendering: optimizeLegibility;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+.list-nav {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+html.dark .variant-ghost {
+	background-color: color-mix(in oklab, var(--color-surface-950) 20%, transparent) !important;
+}
+
+html.dark .variant-soft {
+	background-color: color-mix(in oklab, var(--color-surface-950) 30%, transparent) !important;
+}
+
+/* Compatibility aliases for legacy Skeleton v2 class names used throughout the app. */
+@utility variant-filled {
+	@apply preset-filled;
+}
+@utility variant-filled-surface {
+	@apply preset-filled;
+}
+@utility variant-filled-primary {
+	@apply preset-filled-primary-500;
+}
+@utility variant-filled-secondary {
+	@apply preset-filled-secondary-500;
+}
+@utility variant-filled-tertiary {
+	@apply preset-filled-tertiary-500;
+}
+@utility variant-filled-success {
+	@apply preset-filled-success-500;
+}
+@utility variant-filled-warning {
+	@apply preset-filled-warning-500;
+}
+@utility variant-filled-error {
+	@apply preset-filled-error-500;
+}
+
+@utility variant-soft {
+	@apply preset-tonal;
+}
+@utility variant-soft-primary {
+	@apply preset-tonal-primary;
+}
+@utility variant-soft-secondary {
+	@apply preset-tonal-secondary;
+}
+@utility variant-soft-tertiary {
+	@apply preset-tonal-tertiary;
+}
+@utility variant-soft-success {
+	@apply preset-tonal-success;
+}
+@utility variant-soft-warning {
+	@apply preset-tonal-warning;
+}
+@utility variant-soft-error {
+	@apply preset-tonal-error;
+}
+@utility variant-soft-surface {
+	@apply preset-tonal-surface;
+}
+
+/* Contrast helpers for interactive pills (buttons/badges/chips). */
+.btn[class*='variant-filled-'],
+.badge[class*='variant-filled-'],
+.chip[class*='variant-filled-'] {
+	border: 1px solid color-mix(in oklab, currentColor 22%, transparent);
+	box-shadow:
+		0 1px 0 color-mix(in oklab, var(--color-surface-950-50) 18%, transparent),
+		0 10px 24px color-mix(in oklab, var(--color-surface-950) 14%, transparent);
+}
+
+.btn.variant-soft,
+.btn.variant-soft-primary,
+.btn.variant-soft-secondary,
+.btn.variant-soft-tertiary,
+.btn.variant-soft-success,
+.btn.variant-soft-warning,
+.btn.variant-soft-error,
+.btn.variant-soft-surface,
+.badge.variant-soft,
+.chip.variant-soft {
+	border: 1px solid color-mix(in oklab, var(--color-surface-950-50) 16%, transparent);
+}
+
+/* Increase contrast for the neutral "soft" variant (used for secondary actions + inline setting badges). */
+.btn.variant-soft,
+.badge.variant-soft,
+.chip.variant-soft {
+	background-color: color-mix(in oklab, var(--color-surface-950) 10%, var(--color-surface-50));
+	color: var(--color-surface-950);
+}
+
+html.dark .btn.variant-soft,
+html.dark .badge.variant-soft,
+html.dark .chip.variant-soft {
+	background-color: color-mix(in oklab, var(--color-surface-50) 10%, var(--color-surface-900));
+	color: var(--color-surface-50);
+}
+
+/* Add a little more character to accent-filled controls. */
+.btn.variant-filled-primary,
+.badge.variant-filled-primary,
+.chip.variant-filled-primary {
+	background-image: linear-gradient(
+		135deg,
+		color-mix(in oklab, var(--color-primary-500) 92%, white),
+		color-mix(in oklab, var(--color-primary-600) 92%, black)
+	);
+}
+
+.btn.variant-filled-secondary,
+.badge.variant-filled-secondary,
+.chip.variant-filled-secondary {
+	background-image: linear-gradient(
+		135deg,
+		color-mix(in oklab, var(--color-secondary-500) 92%, white),
+		color-mix(in oklab, var(--color-secondary-600) 92%, black)
+	);
+}
+
+.btn.variant-filled-tertiary,
+.badge.variant-filled-tertiary,
+.chip.variant-filled-tertiary {
+	background-image: linear-gradient(
+		135deg,
+		color-mix(in oklab, var(--color-tertiary-500) 92%, white),
+		color-mix(in oklab, var(--color-tertiary-600) 92%, black)
+	);
+}
+
+html.dark .btn.variant-filled-primary,
+html.dark .badge.variant-filled-primary,
+html.dark .chip.variant-filled-primary,
+html.dark .btn.variant-filled-secondary,
+html.dark .badge.variant-filled-secondary,
+html.dark .chip.variant-filled-secondary,
+html.dark .btn.variant-filled-tertiary,
+html.dark .badge.variant-filled-tertiary,
+html.dark .chip.variant-filled-tertiary {
+	filter: saturate(1.05) brightness(1.05);
+}
+
+/* v2 "ghost" and "glass" variants were custom-ish; approximate them as user-generated presets. */
+@utility variant-ghost {
+	background-color: transparent;
+}
+@utility variant-ghost-primary {
+	@apply text-primary-500;
+	@variant hover {
+		@apply preset-tonal-primary;
+	}
+}
+
+@utility variant-glass-surface {
+	@apply preset-tonal-surface;
+	background-color: color-mix(in oklab, var(--color-surface-50-950) 75%, transparent);
+	backdrop-filter: blur(12px);
+	-webkit-backdrop-filter: blur(12px);
+}
+
+/* Legacy token utility aliases (v2) -> v4 theme colors. */
+.bg-surface-50-900-token {
+	background-color: var(--color-surface-50-900);
+}
+.bg-surface-100-800-token {
+	background-color: var(--color-surface-100-800);
+}
+
+/* Global form ergonomics */
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+	appearance: none;
+	margin: 0;
+}
+input[type='number'] {
+	appearance: textfield;
+	-moz-appearance: textfield;
+}
+
+/* Prevent iOS zoom on focus */
+@media (pointer: coarse) {
+	input[type='number'],
+	input[type='text'],
+	textarea {
+		font-size: 16px;
+	}
+}

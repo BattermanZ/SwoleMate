@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE workouts\n            SET end_time = datetime(COALESCE(last_activity_time, start_time), '+' || ? || ' minutes'),\n                auto_closed_at = ?\n            WHERE auto_closed_at IS NULL\n              AND end_time <= start_time\n              AND (julianday(?) - julianday(COALESCE(last_activity_time, start_time))) * 24 * 60 >= ?\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "b6264c34091fb7d37eaecca8ef0e4f7d2fcec4ec2403855fa743994e0937b8a1"
+}

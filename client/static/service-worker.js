@@ -1,106 +1,133 @@
-// Cache name
-const STATIC_CACHE = 'swolemate-static-v2';
-const API_CACHE = 'swolemate-api-v1';
+// Cache name (bump to invalidate old cached bundles)
+const CACHE_NAME = 'swolemate-cache-v3';
 
 // Assets to cache
 const ASSETS_TO_CACHE = [
-    './',
-    './manifest.json',
-    './favicon.png',
-    './pwa-192.png',
-    './pwa-512.png',
-    './_app/immutable/',  // SvelteKit assets
-    './app.css'
+	'/',
+	'/offline.html',
+	'/manifest.json',
+	'/favicon.png',
+	'/pwa-192.png',
+	'/pwa-512.png'
 ];
+
+async function precacheAppShell(cache) {
+	try {
+		const response = await fetch('/', { cache: 'no-cache' });
+		const html = await response.text();
+		const matches = Array.from(html.matchAll(/(?:href|src)=["'](\/_app\/immutable\/[^"']+)["']/g));
+		const urls = Array.from(new Set(matches.map((m) => m[1])));
+		if (urls.length) await cache.addAll(urls);
+	} catch (err) {
+		console.warn('App shell pre-cache failed', err);
+	}
+}
 
 // Install event
 self.addEventListener('install', (event) => {
-    event.waitUntil(
-        caches.open(STATIC_CACHE)
-            .then((cache) => {
-                console.log('Opened cache');
-                return cache.addAll(ASSETS_TO_CACHE);
-            })
-            .then(() => {
-                return self.skipWaiting();
-            })
-    );
+	event.waitUntil(
+		(async () => {
+			const cache = await caches.open(CACHE_NAME);
+			await cache.addAll(ASSETS_TO_CACHE);
+			await precacheAppShell(cache);
+			await self.skipWaiting();
+		})()
+	);
 });
 
 // Activate event
 self.addEventListener('activate', (event) => {
-    event.waitUntil(
-        Promise.all([
-            // Clean up old caches
-            caches.keys().then((cacheNames) => {
-                return Promise.all(
-                    cacheNames.map((cacheName) => {
-                        if (![STATIC_CACHE, API_CACHE].includes(cacheName)) {
-                            return caches.delete(cacheName);
-                        }
-                    })
-                );
-            }),
-            // Take control of all pages immediately
-            self.clients.claim()
-        ])
-    );
+	event.waitUntil(
+		Promise.all([
+			// Clean up old caches
+			caches.keys().then((cacheNames) => {
+				return Promise.all(
+					cacheNames.map((cacheName) => {
+						if (cacheName !== CACHE_NAME) {
+							return caches.delete(cacheName);
+						}
+					})
+				);
+			}),
+			// Take control of all pages immediately
+			self.clients.claim()
+		])
+	);
 });
 
 // Fetch event with network-first strategy for API calls and cache-first for assets
 self.addEventListener('fetch', (event) => {
-    if (event.request.method !== 'GET') {
-        return;
-    }
+	const url = new URL(event.request.url);
 
-    const url = new URL(event.request.url);
-    
-    // Network-first strategy for API calls
-    if (url.pathname.startsWith('/api/')) {
-        event.respondWith(networkFirst(event.request));
-        return;
-    }
+	// Don't interfere with cross-origin requests (e.g. API hosted on a different domain/port).
+	if (url.origin !== self.location.origin) return;
 
-    // Cache-first strategy for assets and other requests
-    event.respondWith(
-        caches.match(event.request).then((response) => {
-            if (response) {
-                return response;
-            }
-            return fetch(event.request).then((networkResponse) => {
-                if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-                    return networkResponse;
-                }
+	// Cache-first for built assets (critical for iOS offline PWA reliability).
+	if (url.pathname.startsWith('/_app/immutable/')) {
+		event.respondWith(
+			caches.open(CACHE_NAME).then(async (cache) => {
+				const cached = await cache.match(event.request);
+				if (cached) return cached;
+				const response = await fetch(event.request);
+				if (response.ok) cache.put(event.request, response.clone());
+				return response;
+			})
+		);
+		return;
+	}
 
-                const cachedResponse = networkResponse.clone();
+	// Always go to the network first for navigations so new deployments aren't stuck on a stale cache.
+	if (event.request.mode === 'navigate') {
+		event.respondWith(
+			fetch(event.request).catch(async () => {
+				const cache = await caches.open(CACHE_NAME);
+				return (
+					(await cache.match(event.request)) ??
+					(await cache.match('/')) ??
+					(await cache.match('/offline.html'))
+				);
+			})
+		);
+		return;
+	}
 
-                caches.open(STATIC_CACHE).then((cache) => {
-                    cache.put(event.request, cachedResponse);
-                });
+	// Network-first strategy for API calls
+	if (url.pathname.startsWith('/api/')) {
+		if (event.request.method !== 'GET') return;
+		event.respondWith(
+			fetch(event.request)
+				.then((response) => {
+					const responseToCache = response.clone();
+					caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
+					return response;
+				})
+				.catch(() => {
+					return caches.match(event.request);
+				})
+		);
+		return;
+	}
 
-                return networkResponse;
-            }).catch(async () => {
-                const cache = await caches.open(STATIC_CACHE);
-                const fallback = await cache.match('./');
-                return fallback || new Response('Offline', { status: 503, statusText: 'Offline' });
-            });
-        })
-    );
+	// Cache-first strategy for assets and other requests
+	event.respondWith(
+		caches.open(CACHE_NAME).then(async (cache) => {
+			const response = await cache.match(event.request);
+			if (response) {
+				return response;
+			}
+			return fetch(event.request).then((response) => {
+				// Check if we received a valid response
+				if (!response || response.status !== 200 || response.type !== 'basic') {
+					return response;
+				}
+
+				// Clone the response as it can only be consumed once
+				const responseToCache = response.clone();
+
+				cache.put(event.request, responseToCache);
+
+				return response;
+			});
+		})
+	);
 });
-
-async function networkFirst(request) {
-    const cache = await caches.open(API_CACHE);
-    try {
-        const networkResponse = await fetch(request);
-        if (networkResponse && networkResponse.status === 200) {
-            cache.put(request, networkResponse.clone());
-        }
-        return networkResponse;
-    } catch (error) {
-        const cachedResponse = await cache.match(request);
-        if (cachedResponse) {
-            return cachedResponse;
-        }
-        return new Response('Offline', { status: 503, statusText: 'Offline' });
-    }
-}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE users\n            SET disabled_at = COALESCE(disabled_at, CURRENT_TIMESTAMP)\n            WHERE id = ?\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "cc9b83df7b4a33c2fb06bc1702ea5ad8fbfa20f6215f5c7b8660824754b56735"
+}

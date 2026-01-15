@@ -24,6 +24,14 @@ export default tseslint.config(
 			parserOptions: {
 				parser: tseslint.parser
 			}
+		},
+		rules: {
+			// Prefer SvelteKit conventions used throughout this codebase.
+			'svelte/no-navigation-without-resolve': 'off',
+			// Keyed each blocks are optional; avoid turning this into a hard requirement.
+			'svelte/require-each-key': 'off',
+			// This project uses standard JS Dates instead of Svelte runes-specific helpers.
+			'svelte/prefer-svelte-reactivity': 'off'
 		}
 	},
 	{

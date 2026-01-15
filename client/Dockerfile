@@ -1,10 +1,6 @@
 # Stage 1: Build
-FROM node:22-slim AS builder
+FROM node:24-slim AS builder
 WORKDIR /app
-
-# Handle build-time variables
-ARG VITE_API_URL
-ENV VITE_API_URL="http://192.168.31.49:2470"
 
 # Install dependencies
 COPY package*.json ./

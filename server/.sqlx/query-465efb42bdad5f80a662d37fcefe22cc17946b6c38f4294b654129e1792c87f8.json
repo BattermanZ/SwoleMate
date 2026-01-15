@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT\n                id as \"id!: i64\",\n                username,\n                password_hash,\n                role as \"role!: String\",\n                disabled_at as \"disabled_at: DateTime<Utc>\",\n                must_change_password as \"must_change_password!: i64\",\n                failed_login_count as \"failed_login_count!: i64\",\n                locked_until as \"locked_until: DateTime<Utc>\"\n            FROM users\n            WHERE LOWER(username) = LOWER(?)\n            LIMIT 1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Int64"
+      },
+      {
+        "name": "username",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "password_hash",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "role!: String",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "disabled_at: DateTime<Utc>",
+        "ordinal": 4,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "must_change_password!: i64",
+        "ordinal": 5,
+        "type_info": "Int64"
+      },
+      {
+        "name": "failed_login_count!: i64",
+        "ordinal": 6,
+        "type_info": "Int64"
+      },
+      {
+        "name": "locked_until: DateTime<Utc>",
+        "ordinal": 7,
+        "type_info": "Datetime"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "465efb42bdad5f80a662d37fcefe22cc17946b6c38f4294b654129e1792c87f8"
+}

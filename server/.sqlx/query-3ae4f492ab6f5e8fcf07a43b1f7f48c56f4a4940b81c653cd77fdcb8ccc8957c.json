@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE users\n            SET failed_login_count = 0, locked_until = NULL\n            WHERE id = ?\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "3ae4f492ab6f5e8fcf07a43b1f7f48c56f4a4940b81c653cd77fdcb8ccc8957c"
+}

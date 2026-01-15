@@ -1,0 +1,70 @@
+import { getWorkout, getWorkouts } from '$lib/api';
+import { kvSet } from '$lib/offline/storage';
+import { toUiSession, workoutIsActive } from '$lib/today/backend';
+import { get } from 'svelte/store';
+import {
+	findInProgressOffline,
+	hydrateOfflineState,
+	RECENT_SESSIONS_KEY,
+	refreshPendingSyncCount,
+	setOffline
+} from '../offline';
+import type { TodayState } from '../state';
+import { getErrorMessage, isNetworkFailure } from '../utils';
+import { resetLocalSessionUi } from './shared';
+
+export async function refreshFromBackend(state: TodayState) {
+	state.loading.set(true);
+	state.error.set(null);
+
+	try {
+		const workouts = await getWorkouts();
+		const active = workouts.find((w) => workoutIsActive(w) && w.id != null);
+
+		if (active?.id != null) {
+			const data = await getWorkout(active.id);
+			const next = toUiSession(data.workout, data.exercises);
+			state.currentSession.set(next);
+			state.sessionNotes.set(next.notes);
+			state.openExerciseId.set(next.exercises[0]?.id ?? null);
+		} else {
+			const offlineInProgress = await findInProgressOffline();
+			if (offlineInProgress?.session) {
+				state.currentSession.set(offlineInProgress.session);
+				state.sessionNotes.set(offlineInProgress.session.notes);
+				state.openExerciseId.set(offlineInProgress.session.exercises[0]?.id ?? null);
+				state.notice.set('Local session in progress. You can keep logging and sync later.');
+			} else {
+				state.currentSession.set(null);
+				state.sessionNotes.set('');
+				state.openExerciseId.set(null);
+			}
+		}
+
+		const completed = workouts.filter((w) => w.id != null && !workoutIsActive(w)).slice(0, 2);
+		const recent = await Promise.all(completed.map((w) => getWorkout(w.id!)));
+		const nextRecent = recent.map((d) => toUiSession(d.workout, d.exercises));
+		state.recentSessions.set(nextRecent);
+		void kvSet(RECENT_SESSIONS_KEY, nextRecent);
+
+		resetLocalSessionUi(state);
+		state.offlineMode.set(false);
+		await refreshPendingSyncCount(state);
+		if (get(state.pendingSyncCount) && !get(state.notice)) {
+			state.notice.set('Offline changes pending sync.');
+		}
+		if (!get(state.pendingSyncCount) && !get(state.currentSession)) {
+			state.notice.set(null);
+		}
+	} catch (e) {
+		if (isNetworkFailure(e)) {
+			if (!get(state.offlineMode)) setOffline(state);
+			state.error.set(null);
+			await hydrateOfflineState(state);
+		} else {
+			state.error.set(getErrorMessage(e));
+		}
+	} finally {
+		state.loading.set(false);
+	}
+}

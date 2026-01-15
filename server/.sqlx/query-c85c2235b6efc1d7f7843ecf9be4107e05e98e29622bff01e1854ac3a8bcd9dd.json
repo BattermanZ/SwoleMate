@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT\n                start_time as \"start_time: DateTime<Utc>\",\n                timezone_offset_minutes\n            FROM workouts\n            WHERE end_time > start_time\n              AND user_id = ?\n              AND date(start_time) >= date('now', 'start of month', '-11 months')\n            ORDER BY start_time ASC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "start_time: DateTime<Utc>",
+        "ordinal": 0,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "timezone_offset_minutes",
+        "ordinal": 1,
+        "type_info": "Int64"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "c85c2235b6efc1d7f7843ecf9be4107e05e98e29622bff01e1854ac3a8bcd9dd"
+}

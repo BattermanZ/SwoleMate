@@ -15,6 +15,10 @@ vite.config.ts.timestamp-*
 server/database/*.db
 server/database/*.db-shm
 server/database/*.db-wal
+*.bak
+
+# SQLx offline query cache
+# Keep `server/.sqlx/` tracked when building with `SQLX_OFFLINE=true` (see `server/Dockerfile`).
 
 # Environment files
 *.env
@@ -45,9 +49,14 @@ pnpm-debug.log*
 
 # Build
 /build
+client/build/
 .svelte-kit
 /package 
-server/Cargo.lock
+
+# (Former Playwright) leftover artifacts
+client/test-results/
+client/playwright-report/
+
 
 # backups
 server/backups/

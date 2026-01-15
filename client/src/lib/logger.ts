@@ -3,159 +3,176 @@ import { config } from './config';
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 interface LogEntry {
-    timestamp: string;
-    level: LogLevel;
-    target: string;
-    message: string;
-    metadata?: Record<string, unknown>;
+	timestamp: string;
+	level: LogLevel;
+	target: string;
+	message: string;
+	metadata?: Record<string, unknown>;
 }
 
 class Logger {
-    private static instance: Logger;
-    private logQueue: LogEntry[] = [];
-    private isProcessing: boolean = false;
-    private readonly API_BASE = config.apiUrl;
-    private isBrowser: boolean;
+	private static instance: Logger;
+	private logQueue: LogEntry[] = [];
+	private isProcessing: boolean = false;
+	private remoteEnabled: boolean = false;
+	private readonly API_BASE = config.apiUrl;
+	private isBrowser: boolean;
+	private readonly MAX_QUEUE = 500;
 
-    private constructor() {
-        this.isBrowser = typeof window !== 'undefined';
-        
-        if (this.isBrowser) {
-            // Create logs directory if it doesn't exist
-            this.createLogsDirectory();
-            
-            // Process queued logs periodically
-            setInterval(() => this.processLogQueue(), 1000);
-            
-            // Process logs before page unload
-            window.addEventListener('beforeunload', () => {
-                this.processLogQueue();
-            });
+	private constructor() {
+		this.isBrowser = typeof window !== 'undefined';
 
-            // Log application startup
-            this.info('app', 'Frontend application started', {
-                url: window.location.href,
-                userAgent: navigator.userAgent
-            });
-        }
-    }
+		if (this.isBrowser) {
+			// Process queued logs periodically
+			setInterval(() => this.processLogQueue(), 1000);
 
-    public static getInstance(): Logger {
-        if (!Logger.instance) {
-            Logger.instance = new Logger();
-        }
-        return Logger.instance;
-    }
+			// Process logs before page unload
+			window.addEventListener('beforeunload', () => {
+				this.processLogQueue();
+			});
 
-    private async createLogsDirectory() {
-        if (!this.isBrowser) return;
+			// Best-effort flush when the page is being hidden (more reliable than beforeunload on mobile).
+			window.addEventListener('pagehide', () => {
+				void this.processLogQueue();
+			});
 
-        try {
-            const response = await fetch(`${this.API_BASE}/api/logs/init`, {
-                method: 'POST',
-            });
-            if (!response.ok) {
-                console.error('Failed to create logs directory');
-            } else {
-                this.info('logger', 'Logs directory initialized');
-            }
-        } catch (error) {
-            console.error('Error creating logs directory:', error);
-        }
-    }
+			document.addEventListener('visibilitychange', () => {
+				if (document.visibilityState === 'hidden') {
+					void this.processLogQueue();
+				}
+			});
 
-    private createLogEntry(
-        level: LogLevel,
-        target: string,
-        message: string,
-        metadata?: Record<string, unknown>
-    ): LogEntry {
-        return {
-            timestamp: new Date().toLocaleString('en-GB', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: false
-            }).replace(',', ' -'),
-            level,
-            target,
-            message,
-            metadata
-        };
-    }
+			window.addEventListener('online', () => {
+				void this.processLogQueue();
+			});
 
-    private formatLogEntry(entry: LogEntry): string {
-        let log = `[${entry.timestamp}] ${entry.level.toUpperCase()} - ${entry.target} - ${entry.message}`;
-        if (entry.metadata && Object.keys(entry.metadata).length > 0) {
-            log += ` | ${JSON.stringify(entry.metadata)}`;
-        }
-        return log;
-    }
+			// Log application startup
+			this.info('app', 'Frontend application started', {
+				url: window.location.href,
+				userAgent: navigator.userAgent
+			});
+		}
+	}
 
-    private async processLogQueue() {
-        if (!this.isBrowser || this.isProcessing || this.logQueue.length === 0) return;
+	public static getInstance(): Logger {
+		if (!Logger.instance) {
+			Logger.instance = new Logger();
+		}
+		return Logger.instance;
+	}
 
-        this.isProcessing = true;
-        const logs = [...this.logQueue];
-        this.logQueue = [];
+	public setRemoteEnabled(enabled: boolean) {
+		if (!this.isBrowser) return;
+		this.remoteEnabled = enabled;
+		if (enabled) void this.processLogQueue();
+	}
 
-        try {
-            const response = await fetch(`${this.API_BASE}/api/logs`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(logs.map(this.formatLogEntry)),
-            });
+	private createLogEntry(
+		level: LogLevel,
+		target: string,
+		message: string,
+		metadata?: Record<string, unknown>
+	): LogEntry {
+		return {
+			timestamp: new Date().toISOString(),
+			level,
+			target,
+			message,
+			metadata
+		};
+	}
 
-            if (!response.ok) {
-                // If failed, add logs back to queue
-                this.logQueue.unshift(...logs);
-                console.error('Failed to send logs to server');
-            }
-        } catch (error) {
-            // If failed, add logs back to queue
-            this.logQueue.unshift(...logs);
-            console.error('Failed to write logs:', error);
-        } finally {
-            this.isProcessing = false;
-        }
-    }
+	private formatLogEntry(entry: LogEntry): string {
+		let log = `[${entry.timestamp}] ${entry.level.toUpperCase()} - ${entry.target} - ${entry.message}`;
+		if (entry.metadata && Object.keys(entry.metadata).length > 0) {
+			log += ` | ${JSON.stringify(entry.metadata)}`;
+		}
+		return log;
+	}
 
-    private log(level: LogLevel, target: string, message: string, metadata?: Record<string, unknown>) {
-        // Skip logging during SSR
-        if (!this.isBrowser) return;
+	private async processLogQueue() {
+		if (!this.isBrowser || this.isProcessing || this.logQueue.length === 0) return;
+		if (!this.remoteEnabled) return;
 
-        const logEntry = this.createLogEntry(level, target, message, metadata);
-        
-        // Add to queue for file logging
-        this.logQueue.push(logEntry);
-        
-        // Also log to console in development
-        if (import.meta.env.DEV) {
-            const consoleMethod = level === 'debug' ? 'log' : level;
-            console[consoleMethod](this.formatLogEntry(logEntry));
-        }
-    }
+		this.isProcessing = true;
+		const logs = [...this.logQueue];
+		this.logQueue = [];
 
-    public debug(target: string, message: string, metadata?: Record<string, unknown>) {
-        this.log('debug', target, message, metadata);
-    }
+		try {
+			const response = await fetch(`${this.API_BASE}/api/logs`, {
+				method: 'POST',
+				credentials: 'include',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify(logs)
+			});
 
-    public info(target: string, message: string, metadata?: Record<string, unknown>) {
-        this.log('info', target, message, metadata);
-    }
+			if (!response.ok) {
+				if (response.status === 401 || response.status === 403) {
+					// Don't retry until explicitly enabled again.
+					this.remoteEnabled = false;
+					return;
+				}
+				// If failed, add logs back to queue
+				this.logQueue.unshift(...logs);
+			}
+		} catch {
+			// If failed, add logs back to queue
+			this.logQueue.unshift(...logs);
+		} finally {
+			this.isProcessing = false;
+		}
+	}
 
-    public warn(target: string, message: string, metadata?: Record<string, unknown>) {
-        this.log('warn', target, message, metadata);
-    }
+	private shouldSendRemotely(level: LogLevel): boolean {
+		// Keep remote logs minimal to avoid noise/PII; send warnings+errors only.
+		return level === 'warn' || level === 'error';
+	}
 
-    public error(target: string, message: string, metadata?: Record<string, unknown>) {
-        this.log('error', target, message, metadata);
-    }
+	private log(
+		level: LogLevel,
+		target: string,
+		message: string,
+		metadata?: Record<string, unknown>
+	) {
+		// Skip logging during SSR
+		if (!this.isBrowser) return;
+
+		const logEntry = this.createLogEntry(level, target, message, metadata);
+
+		// Queue for server-side ingestion (stdout) when enabled.
+		if (this.remoteEnabled && this.shouldSendRemotely(level)) {
+			this.logQueue.push(logEntry);
+			if (this.logQueue.length > this.MAX_QUEUE) {
+				this.logQueue.splice(0, this.logQueue.length - this.MAX_QUEUE);
+			}
+		}
+
+		// Console logging:
+		// - dev: all levels
+		// - prod: warn+error only
+		if (import.meta.env.DEV || level === 'warn' || level === 'error') {
+			const consoleMethod = level === 'debug' ? 'log' : level;
+			console[consoleMethod](this.formatLogEntry(logEntry));
+		}
+	}
+
+	public debug(target: string, message: string, metadata?: Record<string, unknown>) {
+		this.log('debug', target, message, metadata);
+	}
+
+	public info(target: string, message: string, metadata?: Record<string, unknown>) {
+		this.log('info', target, message, metadata);
+	}
+
+	public warn(target: string, message: string, metadata?: Record<string, unknown>) {
+		this.log('warn', target, message, metadata);
+	}
+
+	public error(target: string, message: string, metadata?: Record<string, unknown>) {
+		this.log('error', target, message, metadata);
+	}
 }
 
-export const logger = Logger.getInstance(); 
+export const logger = Logger.getInstance();
