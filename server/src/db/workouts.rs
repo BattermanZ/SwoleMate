@@ -81,7 +81,7 @@ impl Database {
             r#"
             INSERT INTO workouts (user_id, date, start_time, end_time, notes, timezone_offset_minutes, last_activity_time)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-            RETURNING id
+            RETURNING id as "id!: i64"
             "#,
             user_id,
             req.date,

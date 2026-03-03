@@ -6,27 +6,27 @@
       {
         "name": "total_workouts",
         "ordinal": 0,
-        "type_info": "Int"
+        "type_info": "Integer"
       },
       {
         "name": "avg_duration",
         "ordinal": 1,
-        "type_info": "Int"
+        "type_info": "Integer"
       },
       {
         "name": "good_workouts",
         "ordinal": 2,
-        "type_info": "Int"
+        "type_info": "Integer"
       },
       {
         "name": "neutral_workouts",
         "ordinal": 3,
-        "type_info": "Int"
+        "type_info": "Integer"
       },
       {
         "name": "bad_workouts",
         "ordinal": 4,
-        "type_info": "Int"
+        "type_info": "Integer"
       },
       {
         "name": "popular_hours",
@@ -36,7 +36,7 @@
       {
         "name": "avg_workouts_per_week",
         "ordinal": 6,
-        "type_info": "Int"
+        "type_info": "Integer"
       },
       {
         "name": "duration_distribution",
@@ -46,12 +46,12 @@
       {
         "name": "frequency_trend",
         "ordinal": 8,
-        "type_info": "Int"
+        "type_info": "Integer"
       },
       {
         "name": "duration_trend",
         "ordinal": 9,
-        "type_info": "Int"
+        "type_info": "Integer"
       }
     ],
     "parameters": {

@@ -6,7 +6,7 @@
       {
         "name": "id!",
         "ordinal": 0,
-        "type_info": "Int64"
+        "type_info": "Integer"
       },
       {
         "name": "date: DateTime<Utc>",
@@ -36,7 +36,7 @@
       {
         "name": "timezone_offset_minutes",
         "ordinal": 6,
-        "type_info": "Int64"
+        "type_info": "Integer"
       },
       {
         "name": "auto_closed_at: DateTime<Utc>",
@@ -46,22 +46,22 @@
       {
         "name": "exercise_count!: i64",
         "ordinal": 8,
-        "type_info": "Null"
+        "type_info": "Integer"
       }
     ],
     "parameters": {
       "Right": 1
     },
     "nullable": [
-      true,
       false,
       false,
       false,
+      false,
       true,
       true,
       true,
       true,
-      null
+      false
     ]
   },
   "hash": "dba7a995a460d6ed4e57e43a28fff6a418e06f3f8441147f096331a8ef946df3"

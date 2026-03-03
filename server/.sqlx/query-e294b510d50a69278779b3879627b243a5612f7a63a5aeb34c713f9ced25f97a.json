@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                INSERT INTO sets (user_id, exercise_id, reps, weight, weight_left, weight_right, notes)\n                VALUES (?, ?, ?, ?, ?, ?, ?)\n                RETURNING id as \"id!: i64\"\n                ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "e294b510d50a69278779b3879627b243a5612f7a63a5aeb34c713f9ced25f97a"
+}

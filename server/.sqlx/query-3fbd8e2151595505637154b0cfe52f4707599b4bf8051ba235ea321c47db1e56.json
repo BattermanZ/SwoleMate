@@ -21,7 +21,7 @@
       {
         "name": "exercise_count!: i64",
         "ordinal": 3,
-        "type_info": "Null"
+        "type_info": "Integer"
       },
       {
         "name": "avg_minutes!: f64",
@@ -36,7 +36,7 @@
       false,
       false,
       null,
-      null,
+      false,
       null
     ]
   },
