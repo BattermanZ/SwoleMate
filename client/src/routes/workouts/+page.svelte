@@ -217,7 +217,7 @@
 			error = 'Invalid workout ID';
 			return;
 		}
-		if (!$online) {
+		if (typeof navigator !== 'undefined' && !navigator.onLine) {
 			error = 'Offline mode: delete workouts when you are back online.';
 			return;
 		}

@@ -234,7 +234,7 @@
 	{/if}
 
 	<main class="container mx-auto p-4 flex-1 flex flex-col app-content h-full">
-		{#if !$online}
+		{#if $authState.offline}
 			<div class="offline-banner">
 				<span>Offline mode: showing cached data. Some actions are disabled.</span>
 			</div>
