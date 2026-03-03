@@ -1438,6 +1438,28 @@ async fn validation_boundaries_reject_out_of_range_and_oversized_payloads() {
 
     let req = with_cookie(test::TestRequest::post(), &cookie)
         .uri("/api/workouts")
+        .set_json(json!({
+            "date": now,
+            "start_time": now,
+            "timezone_offset_minutes": -841
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri("/api/workouts")
+        .set_json(json!({
+            "date": now,
+            "start_time": now,
+            "notes": "N".repeat(2001)
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri("/api/workouts")
         .set_json(json!({ "date": now, "start_time": now, "notes": "ok" }))
         .to_request();
     let workout_id = json_body(test::call_service(&app, req).await).await["id"]
@@ -1449,6 +1471,17 @@ async fn validation_boundaries_reject_out_of_range_and_oversized_payloads() {
         .set_json(json!({
             "end_time": now + chrono::Duration::minutes(1),
             "feedback": "amazing"
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+
+    let req = with_cookie(test::TestRequest::put(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}/times"))
+        .set_json(json!({
+            "start_time": now,
+            "end_time": now + chrono::Duration::minutes(2),
+            "feedback": "excellent"
         }))
         .to_request();
     let resp = test::call_service(&app, req).await;
@@ -1472,6 +1505,29 @@ async fn validation_boundaries_reject_out_of_range_and_oversized_payloads() {
             "exercise_type": "Rows",
             "start_time": now,
             "settings": [{ "key": long_key, "value": "1" }]
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+
+    let long_value = "V".repeat(129);
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}/exercises"))
+        .set_json(json!({
+            "exercise_type": "Rows",
+            "start_time": now,
+            "settings": [{ "key": "pin", "value": long_value }]
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}/exercises"))
+        .set_json(json!({
+            "exercise_type": "Rows",
+            "start_time": now,
+            "notes": "N".repeat(2001)
         }))
         .to_request();
     let resp = test::call_service(&app, req).await;
@@ -1530,8 +1586,34 @@ async fn backup_failure_paths_are_handled_without_crashing() {
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success());
+}
 
-    // Keep this last because restore closes the active DB pool.
+#[actix_web::test]
+async fn malformed_backup_restore_fails_safely() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    let malformed_name = "swolemate_2099-01-02_00-00_manual.tar.gz";
+    let malformed_path = std::env::current_dir()
+        .expect("cwd")
+        .join("backups")
+        .join(malformed_name);
+    let mut f = std::fs::File::create(&malformed_path).expect("create malformed backup");
+    f.write_all(b"not-a-valid-tar-gz")
+        .expect("write malformed backup");
+
+    let req = with_cookie(test::TestRequest::post(), &admin_cookie)
+        .uri(&format!("/api/backups/{malformed_name}/restore"))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 500);
+}
+
+#[actix_web::test]
+async fn missing_backup_restore_fails_safely() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
     let missing_name = "swolemate_2099-01-01_00-00_manual.tar.gz";
     let req = with_cookie(test::TestRequest::post(), &admin_cookie)
         .uri(&format!("/api/backups/{missing_name}/restore"))
