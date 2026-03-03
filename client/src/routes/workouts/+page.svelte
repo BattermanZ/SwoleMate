@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { getWorkout, getWorkouts, cancelWorkout, updateWorkoutTimes } from '$lib/api';
 	import type { FeedbackEmoji, Workout, WorkoutWithExercises } from '$lib/types';
+	import { auth } from '$lib/auth';
 	import { logger } from '$lib/logger';
 	import { formatDateRelative } from '$lib/utils/date';
 	import EditWorkoutTimesModal from '$lib/components/history/EditWorkoutTimesModal.svelte';
@@ -11,6 +12,7 @@
 	let workouts = data.workouts;
 	let loading = false;
 	let error: string | null = null;
+	const authState = auth.state;
 
 	type SortOrder = 'newest' | 'oldest' | 'longest' | 'shortest';
 
@@ -217,7 +219,7 @@
 			error = 'Invalid workout ID';
 			return;
 		}
-		if (typeof navigator !== 'undefined' && !navigator.onLine) {
+		if ($authState.offline) {
 			error = 'Offline mode: delete workouts when you are back online.';
 			return;
 		}

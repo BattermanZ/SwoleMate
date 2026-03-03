@@ -1,4 +1,4 @@
-import { render } from '@testing-library/svelte';
+import { fireEvent, render } from '@testing-library/svelte';
 import { readable, writable } from 'svelte/store';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -10,6 +10,22 @@ vi.mock('$app/stores', () => ({
 
 vi.mock('$app/navigation', () => ({
 	goto: vi.fn(async () => {})
+}));
+
+const authStateStore = writable({
+	status: 'authenticated' as const,
+	user: { id: 1, username: 'admin', role: 'admin' as const, must_change_password: false },
+	offline: false
+});
+
+vi.mock('$lib/auth', () => ({
+	auth: {
+		state: authStateStore,
+		refresh: vi.fn(async () => undefined),
+		login: vi.fn(async () => undefined),
+		logout: vi.fn(async () => undefined),
+		changePassword: vi.fn(async () => undefined)
+	}
 }));
 
 vi.mock('$lib/logger', () => ({
@@ -54,7 +70,17 @@ vi.mock('$lib/api', () => {
 		authLogout: vi.fn(async () => undefined),
 		authChangePassword: vi.fn(async () => undefined),
 		getWorkouts: vi.fn(async () => []),
-		getWorkout: vi.fn(async () => ({ workout: null, exercises: [] })),
+		getWorkout: vi.fn(async (id: number) => ({
+			workout: {
+				id,
+				date: '2026-01-01T10:00:00.000Z',
+				start_time: '2026-01-01T10:00:00.000Z',
+				end_time: '2026-01-01T11:00:00.000Z',
+				notes: '',
+				feedback: null
+			},
+			exercises: []
+		})),
 		cancelWorkout: vi.fn(async () => undefined),
 		updateWorkoutTimes: vi.fn(async () => undefined),
 		getBackups: vi.fn(async () => []),
@@ -140,6 +166,11 @@ describe('route smoke', () => {
 	});
 
 	it('renders workouts page with basic data', async () => {
+		authStateStore.set({
+			status: 'authenticated',
+			user: { id: 1, username: 'admin', role: 'admin', must_change_password: false },
+			offline: false
+		});
 		const WorkoutsPage = await importComponent('../routes/workouts/+page.svelte');
 		const { getByText } = render(
 			WorkoutsPage as never,
@@ -148,7 +179,46 @@ describe('route smoke', () => {
 		expect(getByText('History')).toBeInTheDocument();
 	});
 
+	it('blocks workout delete when auth state is offline', async () => {
+		const { cancelWorkout } = await import('$lib/api');
+		authStateStore.set({
+			status: 'authenticated',
+			user: { id: 1, username: 'admin', role: 'admin', must_change_password: false },
+			offline: true
+		});
+
+		const WorkoutsPage = await importComponent('../routes/workouts/+page.svelte');
+		const { getByRole, findByText } = render(
+			WorkoutsPage as never,
+			{
+				props: {
+					data: {
+						workouts: [
+							{
+								id: 7,
+								date: '2026-01-01T10:00:00.000Z',
+								start_time: '2026-01-01T10:00:00.000Z',
+								end_time: '2026-01-01T11:00:00.000Z',
+								notes: '',
+								feedback: null
+							}
+						]
+					}
+				}
+			} as never
+		);
+
+		await fireEvent.click(getByRole('button', { name: 'Delete' }));
+		expect(await findByText('Offline mode: delete workouts when you are back online.')).toBeInTheDocument();
+		expect(cancelWorkout).not.toHaveBeenCalled();
+	});
+
 	it('renders backups page with basic data', async () => {
+		authStateStore.set({
+			status: 'authenticated',
+			user: { id: 1, username: 'admin', role: 'admin', must_change_password: false },
+			offline: false
+		});
 		const BackupsPage = await importComponent('../routes/backups/+page.svelte');
 		const { getByText } = render(
 			BackupsPage as never,
