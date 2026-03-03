@@ -33,11 +33,11 @@ describe('offline storage fallback', () => {
 		]);
 	});
 
-	it('throws on invalid fallback JSON payloads', async () => {
+	it('returns null on invalid fallback JSON payloads', async () => {
 		vi.stubGlobal('indexedDB', undefined);
 		const { kvGet } = await import('$lib/offline/storage');
 		localStorage.setItem('swolemate:broken', '{bad-json');
 
-		await expect(kvGet('broken')).rejects.toBeInstanceOf(SyntaxError);
+		await expect(kvGet('broken')).resolves.toBeNull();
 	});
 });
