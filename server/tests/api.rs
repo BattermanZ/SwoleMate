@@ -1,4 +1,4 @@
-use actix_web::{test, web, App};
+use actix_web::{test, web, App, HttpResponse};
 use once_cell::sync::Lazy;
 use serde_json::{json, Value};
 use sqlx::sqlite::SqlitePoolOptions;
@@ -13,6 +13,29 @@ static TEST_ENV_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 const ADMIN_USERNAME: &str = "admin";
 const ADMIN_PASSWORD: &str = "test-admin-password";
 const ADMIN_PASSWORD_CHANGED: &str = "test-admin-password-changed";
+
+struct EnvVarGuard {
+    key: &'static str,
+    prev: Option<String>,
+}
+
+impl EnvVarGuard {
+    fn set(key: &'static str, value: &str) -> Self {
+        let prev = std::env::var(key).ok();
+        std::env::set_var(key, value);
+        Self { key, prev }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        if let Some(prev) = self.prev.take() {
+            std::env::set_var(self.key, prev);
+        } else {
+            std::env::remove_var(self.key);
+        }
+    }
+}
 
 struct TestEnv {
     _lock: std::sync::MutexGuard<'static, ()>,
@@ -134,6 +157,94 @@ async fn setup_test_app_raw() -> (
     (database, app)
 }
 
+async fn setup_test_app_raw_with_cfg(
+    session_cfg: auth::SessionConfig,
+) -> (
+    Database,
+    impl actix_web::dev::Service<
+        actix_http::Request,
+        Response = actix_web::dev::ServiceResponse,
+        Error = actix_web::Error,
+    >,
+) {
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite:database/swolemate.db")
+        .await
+        .expect("connect sqlite");
+
+    schema::setup_schema(&pool).await.expect("setup_schema");
+
+    for pragma in [
+        "PRAGMA foreign_keys = ON",
+        "PRAGMA journal_mode = WAL",
+        "PRAGMA synchronous = NORMAL",
+        "PRAGMA busy_timeout = 5000",
+    ] {
+        sqlx::query(pragma).execute(&pool).await.expect("pragma");
+    }
+
+    let database = Database::new(pool);
+    let app = test::init_service(
+        App::new()
+            .wrap(swolemate_server::middleware::SessionAuth::new(
+                database.clone(),
+                session_cfg.clone(),
+            ))
+            .app_data(web::Data::new(database.clone()))
+            .app_data(web::Data::new(session_cfg))
+            .configure(routes::config),
+    )
+    .await;
+
+    (database, app)
+}
+
+async fn setup_test_app_raw_with_cfg_and_concurrency(
+    session_cfg: auth::SessionConfig,
+) -> (
+    Database,
+    impl actix_web::dev::Service<
+        actix_http::Request,
+        Response = actix_web::dev::ServiceResponse,
+        Error = actix_web::Error,
+    >,
+) {
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite:database/swolemate.db")
+        .await
+        .expect("connect sqlite");
+
+    schema::setup_schema(&pool).await.expect("setup_schema");
+
+    for pragma in [
+        "PRAGMA foreign_keys = ON",
+        "PRAGMA journal_mode = WAL",
+        "PRAGMA synchronous = NORMAL",
+        "PRAGMA busy_timeout = 5000",
+    ] {
+        sqlx::query(pragma).execute(&pool).await.expect("pragma");
+    }
+
+    let database = Database::new(pool);
+    let app = test::init_service(
+        App::new()
+            .wrap(swolemate_server::middleware::SessionAuth::new(
+                database.clone(),
+                session_cfg.clone(),
+            ))
+            .wrap(swolemate_server::middleware::ApiConcurrency::from_env())
+            .app_data(web::Data::new(database.clone()))
+            .app_data(web::Data::new(session_cfg))
+            .configure(routes::config)
+            .service(test_slow_route),
+    )
+    .await;
+
+    (database, app)
+}
+
 async fn setup_test_app() -> (
     Database,
     actix_web::cookie::Cookie<'static>,
@@ -148,6 +259,12 @@ async fn setup_test_app() -> (
     let admin_cookie =
         change_password_cookie(&app, &admin_cookie, ADMIN_PASSWORD, ADMIN_PASSWORD_CHANGED).await;
     (database, admin_cookie, app)
+}
+
+#[actix_web::get("/api/test/slow")]
+async fn test_slow_route(_user: swolemate_server::middleware::CurrentUser) -> HttpResponse {
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    HttpResponse::Ok().json(json!({ "status": "ok" }))
 }
 
 async fn json_body(resp: actix_web::dev::ServiceResponse) -> Value {
@@ -1015,6 +1132,205 @@ async fn invalid_backup_filenames_are_rejected_before_io() {
 
     let req = with_cookie(test::TestRequest::delete(), &admin_cookie)
         .uri("/api/backups/not-a-backup.zip")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+}
+
+#[actix_web::test]
+async fn login_is_rate_limited_after_repeated_failed_attempts() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+    create_user_as_admin(&app, &admin_cookie, "lockme", "lockme-password").await;
+
+    for _ in 0..5 {
+        let req = test::TestRequest::post()
+            .uri("/api/auth/login")
+            .set_json(json!({ "username": "lockme", "password": "wrong-password" }))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), 401);
+    }
+
+    let req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(json!({ "username": "lockme", "password": "wrong-password" }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 429);
+}
+
+#[actix_web::test]
+async fn admin_disable_user_revokes_existing_session() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    let user_id = create_user_as_admin(&app, &admin_cookie, "disableme", "passwordpassword").await;
+    let user_cookie = login_cookie_active(&app, "disableme", "passwordpassword").await;
+
+    let req = with_cookie(test::TestRequest::post(), &admin_cookie)
+        .uri(&format!("/api/admin/users/{user_id}/disable"))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+
+    let req = with_cookie(test::TestRequest::get(), &user_cookie)
+        .uri("/api/workouts")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 401);
+}
+
+#[actix_web::test]
+async fn session_is_rotated_when_near_expiry() {
+    let _env = TestEnv::new();
+    let mut session_cfg = auth::SessionConfig::for_env("development");
+    session_cfg.session_ttl_days = 90;
+    session_cfg.rotate_if_expires_within_days = 30;
+    let (db, app) = setup_test_app_raw_with_cfg(session_cfg).await;
+
+    let cookie = login_cookie(&app, ADMIN_USERNAME, ADMIN_PASSWORD).await;
+    let cookie = change_password_cookie(&app, &cookie, ADMIN_PASSWORD, ADMIN_PASSWORD_CHANGED).await;
+    let old_token = cookie.value().to_string();
+    let old_hash = auth::hash_session_token(&old_token);
+
+    let pool = db.pool().await;
+    sqlx::query(
+        r#"
+        UPDATE sessions
+        SET expires_at = datetime('now', '+1 day')
+        WHERE session_hash = ?
+        "#,
+    )
+    .bind(&old_hash)
+    .execute(&pool)
+    .await
+    .expect("set session expiry");
+
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri("/api/workouts")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+    let set_cookie = resp
+        .headers()
+        .get(actix_web::http::header::SET_COOKIE)
+        .expect("rotation set-cookie")
+        .to_str()
+        .expect("set-cookie str")
+        .to_string();
+    let new_cookie = actix_web::cookie::Cookie::parse(
+        set_cookie
+            .split(';')
+            .next()
+            .expect("cookie pair")
+            .to_string(),
+    )
+    .expect("parse cookie")
+    .into_owned();
+    assert_ne!(new_cookie.value(), old_token);
+
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri("/api/workouts")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 401);
+
+    let req = with_cookie(test::TestRequest::get(), &new_cookie)
+        .uri("/api/workouts")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+}
+
+#[actix_web::test]
+async fn api_concurrency_returns_503_when_queue_times_out() {
+    let _env = TestEnv::new();
+    let _max_inflight = EnvVarGuard::set("API_MAX_INFLIGHT", "1");
+    let _timeout_ms = EnvVarGuard::set("API_CONCURRENCY_TIMEOUT_MS", "25");
+
+    let (_db, app) =
+        setup_test_app_raw_with_cfg_and_concurrency(auth::SessionConfig::for_env("development"))
+            .await;
+    let cookie = login_cookie(&app, ADMIN_USERNAME, ADMIN_PASSWORD).await;
+    let cookie = change_password_cookie(&app, &cookie, ADMIN_PASSWORD, ADMIN_PASSWORD_CHANGED).await;
+
+    let slow_req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri("/api/test/slow")
+        .to_request();
+    let busy_req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri("/api/workouts")
+        .to_request();
+
+    let slow_call = test::call_service(&app, slow_req);
+    let busy_call = async {
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        test::call_service(&app, busy_req).await
+    };
+
+    let (slow_resp, busy_resp) = tokio::join!(slow_call, busy_call);
+    assert!(slow_resp.status().is_success());
+    assert_eq!(busy_resp.status(), 503);
+}
+
+#[actix_web::test]
+async fn replace_sets_endpoint_replaces_existing_sets_and_validates_payload() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "sets-user", "passwordpassword").await;
+    let cookie = login_cookie_active(&app, "sets-user", "passwordpassword").await;
+    let now = chrono::Utc::now();
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri("/api/workouts")
+        .set_json(json!({ "date": now, "start_time": now, "notes": "sets workout" }))
+        .to_request();
+    let workout_id = json_body(test::call_service(&app, req).await).await["id"]
+        .as_i64()
+        .expect("workout id");
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}/exercises"))
+        .set_json(json!({ "exercise_type": "Squat", "start_time": now }))
+        .to_request();
+    let exercise_id = json_body(test::call_service(&app, req).await).await["id"]
+        .as_i64()
+        .expect("exercise id");
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/exercises/{exercise_id}/sets"))
+        .set_json(json!({ "reps": 5, "weight": 80.0 }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 201);
+
+    let req = with_cookie(test::TestRequest::put(), &cookie)
+        .uri(&format!("/api/exercises/{exercise_id}/sets"))
+        .set_json(json!([
+            { "reps": 3, "weight": 90.0, "notes": "heavy" },
+            { "reps": 8, "weight": 70.0 }
+        ]))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+    let replaced = json_body(resp).await;
+    assert_eq!(replaced.as_array().unwrap().len(), 2);
+
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}"))
+        .to_request();
+    let workout = json_body(test::call_service(&app, req).await).await;
+    let sets = workout["exercises"][0]["sets"].as_array().unwrap();
+    assert_eq!(sets.len(), 2);
+    assert_eq!(sets[0]["reps"], 3);
+    assert_eq!(sets[0]["weight"], 90.0);
+
+    let req = with_cookie(test::TestRequest::put(), &cookie)
+        .uri(&format!("/api/exercises/{exercise_id}/sets"))
+        .set_json(json!([
+            { "reps": 10, "weight": 20.0, "weight_left": 10.0 }
+        ]))
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 400);
