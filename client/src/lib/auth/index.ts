@@ -121,9 +121,12 @@ function isNetworkFailure(e: unknown): boolean {
 }
 
 function createAuthStore() {
+	const initialUser = readStoredUser();
+	setActiveUserId(initialUser?.id ?? null);
+
 	const state = writable<AuthState>({
 		status: 'unknown',
-		user: readStoredUser(),
+		user: initialUser,
 		offline: false
 	});
 

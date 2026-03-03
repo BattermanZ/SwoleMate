@@ -46,4 +46,36 @@ describe('auth store', () => {
 		expect(state.user?.username).toBe('alice');
 		expect(state.offline).toBe(true);
 	});
+
+	it('initializes user scope from stored auth user before refresh', async () => {
+		localStorage.setItem(
+			'auth.lastUser',
+			JSON.stringify({
+				id: 7,
+				username: 'bob',
+				role: 'user',
+				must_change_password: false
+			})
+		);
+
+		vi.resetModules();
+		vi.doMock('$app/environment', () => ({ browser: true }));
+		await import('$lib/auth');
+		const { getActiveUserId } = await import('$lib/auth/scope');
+		const { saveWorkoutState } = await import('$lib/workoutState');
+
+		expect(getActiveUserId()).toBe('7');
+
+		saveWorkoutState({
+			workout: null,
+			exercises: [],
+			activeExerciseId: null,
+			sessionNotes: '',
+			sessionFeedback: null
+		});
+
+		expect(localStorage.getItem('u7:swolemate:currentWorkoutState')).toBeTruthy();
+		expect(localStorage.getItem('swolemate:currentWorkoutState')).toBeNull();
+		vi.doUnmock('$app/environment');
+	});
 });
