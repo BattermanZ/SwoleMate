@@ -3,6 +3,7 @@ use once_cell::sync::Lazy;
 use serde_json::{json, Value};
 use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::Row;
+use std::io::Write;
 use std::sync::Mutex;
 use tempfile::TempDir;
 
@@ -1313,4 +1314,228 @@ async fn replace_sets_endpoint_replaces_existing_sets_and_validates_payload() {
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 400);
+}
+
+#[actix_web::test]
+async fn exercise_and_progress_endpoints_are_covered() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "phase2-user", "passwordpassword").await;
+    let cookie = login_cookie_active(&app, "phase2-user", "passwordpassword").await;
+    let now = chrono::Utc::now();
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri("/api/workouts")
+        .set_json(json!({ "date": now, "start_time": now, "notes": "phase2" }))
+        .to_request();
+    let workout_id = json_body(test::call_service(&app, req).await).await["id"]
+        .as_i64()
+        .expect("workout id");
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}/exercises"))
+        .set_json(json!({
+            "exercise_type": "Incline Bench",
+            "start_time": now,
+            "notes": "first"
+        }))
+        .to_request();
+    let exercise_id = json_body(test::call_service(&app, req).await).await["id"]
+        .as_i64()
+        .expect("exercise id");
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/exercises/{exercise_id}/sets"))
+        .set_json(json!({ "reps": 6, "weight": 70.0 }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 201);
+
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri("/api/exercises/types")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+    let types = json_body(resp).await;
+    assert!(types
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|t| t.as_str() == Some("Incline Bench")));
+
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri("/api/exercises/last/Incline%20Bench")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+    let last = json_body(resp).await;
+    assert_eq!(last["exercise"]["id"], exercise_id);
+    assert_eq!(last["sets"].as_array().unwrap().len(), 1);
+
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri("/api/progress/exercise/Incline%20Bench")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+    let progress = json_body(resp).await;
+    assert!(!progress.as_array().unwrap().is_empty());
+
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri("/api/progress/volume?exercise_type=Incline%20Bench")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+    let volume = json_body(resp).await;
+    assert!(volume["weekly_volume"].is_array());
+    assert!(volume["monthly_volume"].is_array());
+    assert!(volume["personal_records"].is_object());
+
+    let req = with_cookie(test::TestRequest::delete(), &cookie)
+        .uri(&format!("/api/exercises/{exercise_id}"))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}"))
+        .to_request();
+    let workout = json_body(test::call_service(&app, req).await).await;
+    assert_eq!(workout["exercises"].as_array().unwrap().len(), 0);
+
+    let req = with_cookie(test::TestRequest::delete(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}"))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}"))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 404);
+}
+
+#[actix_web::test]
+async fn validation_boundaries_reject_out_of_range_and_oversized_payloads() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "bounds-user", "passwordpassword").await;
+    let cookie = login_cookie_active(&app, "bounds-user", "passwordpassword").await;
+    let now = chrono::Utc::now();
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri("/api/workouts")
+        .set_json(json!({
+            "date": now,
+            "start_time": now,
+            "timezone_offset_minutes": 900
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri("/api/workouts")
+        .set_json(json!({ "date": now, "start_time": now, "notes": "ok" }))
+        .to_request();
+    let workout_id = json_body(test::call_service(&app, req).await).await["id"]
+        .as_i64()
+        .expect("workout id");
+
+    let req = with_cookie(test::TestRequest::put(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}/end"))
+        .set_json(json!({
+            "end_time": now + chrono::Duration::minutes(1),
+            "feedback": "amazing"
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+
+    let long_type = "X".repeat(81);
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}/exercises"))
+        .set_json(json!({
+            "exercise_type": long_type,
+            "start_time": now
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+
+    let long_key = "K".repeat(65);
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}/exercises"))
+        .set_json(json!({
+            "exercise_type": "Rows",
+            "start_time": now,
+            "settings": [{ "key": long_key, "value": "1" }]
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}/exercises"))
+        .set_json(json!({
+            "exercise_type": "Rows",
+            "start_time": now
+        }))
+        .to_request();
+    let exercise_id = json_body(test::call_service(&app, req).await).await["id"]
+        .as_i64()
+        .expect("exercise id");
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/exercises/{exercise_id}/sets"))
+        .set_json(json!({ "reps": 501, "weight": 80.0 }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/exercises/{exercise_id}/sets"))
+        .set_json(json!({ "reps": 8, "weight": 2001.0 }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+}
+
+#[actix_web::test]
+async fn backup_failure_paths_are_handled_without_crashing() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    let malformed_name = "swolemate_2099-01-02_00-00_manual.tar.gz";
+    let malformed_path = std::env::current_dir()
+        .expect("cwd")
+        .join("backups")
+        .join(malformed_name);
+    let mut f = std::fs::File::create(&malformed_path).expect("create malformed backup");
+    f.write_all(b"not-a-valid-tar-gz")
+        .expect("write malformed backup");
+
+    let req = with_cookie(test::TestRequest::get(), &admin_cookie)
+        .uri("/api/backups")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+    let backups = json_body(resp).await;
+    assert!(backups.is_array());
+
+    let req = with_cookie(test::TestRequest::delete(), &admin_cookie)
+        .uri("/api/backups/swolemate_2099-01-03_00-00_manual.tar.gz")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+
+    // Keep this last because restore closes the active DB pool.
+    let missing_name = "swolemate_2099-01-01_00-00_manual.tar.gz";
+    let req = with_cookie(test::TestRequest::post(), &admin_cookie)
+        .uri(&format!("/api/backups/{missing_name}/restore"))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 500);
 }
