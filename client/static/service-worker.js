@@ -91,22 +91,9 @@ self.addEventListener('fetch', (event) => {
 		return;
 	}
 
-	// Network-first strategy for API calls
-	if (url.pathname.startsWith('/api/')) {
-		if (event.request.method !== 'GET') return;
-		event.respondWith(
-			fetch(event.request)
-				.then((response) => {
-					const responseToCache = response.clone();
-					caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
-					return response;
-				})
-				.catch(() => {
-					return caches.match(event.request);
-				})
-		);
-		return;
-	}
+	// Never cache API responses in the service worker.
+	// This avoids leaking authenticated data across logout/user switches.
+	if (url.pathname.startsWith('/api/')) return;
 
 	// Cache-first strategy for assets and other requests
 	event.respondWith(

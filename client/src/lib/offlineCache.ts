@@ -1,3 +1,5 @@
+import { scopedKey } from './auth/scope';
+
 const CACHE_PREFIX = 'swolemate-cache:';
 
 const isBrowser = typeof window !== 'undefined';
@@ -14,7 +16,7 @@ export function saveToCache<T>(key: string, data: T): void {
             timestamp: Date.now(),
             data
         };
-        localStorage.setItem(`${CACHE_PREFIX}${key}`, JSON.stringify(payload));
+        localStorage.setItem(`${CACHE_PREFIX}${scopedKey(key)}`, JSON.stringify(payload));
     } catch (error) {
         console.error('Failed to save to offline cache', error);
     }
@@ -23,7 +25,7 @@ export function saveToCache<T>(key: string, data: T): void {
 export function getFromCache<T>(key: string): T | null {
     if (!isBrowser) return null;
     try {
-        const value = localStorage.getItem(`${CACHE_PREFIX}${key}`);
+        const value = localStorage.getItem(`${CACHE_PREFIX}${scopedKey(key)}`);
         if (!value) return null;
         const parsed = JSON.parse(value) as CachedValue<T>;
         return parsed.data;
@@ -35,7 +37,7 @@ export function getFromCache<T>(key: string): T | null {
 
 export function clearCache(key: string): void {
     if (!isBrowser) return;
-    localStorage.removeItem(`${CACHE_PREFIX}${key}`);
+    localStorage.removeItem(`${CACHE_PREFIX}${scopedKey(key)}`);
 }
 
 export function isOnline(): boolean {

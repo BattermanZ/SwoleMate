@@ -421,9 +421,10 @@ async fn migrate_multi_user_schema(pool: &Pool<Sqlite>) -> Result<(), sqlx::Erro
         .ok()
         .filter(|v| !v.trim().is_empty());
 
-    if app_env == "production" && bootstrap_password.is_none() {
+    let allow_default_bootstrap = matches!(app_env.as_str(), "development" | "test" | "local");
+    if !allow_default_bootstrap && bootstrap_password.is_none() {
         return Err(sqlx::Error::Protocol(
-            "schema v5 requires BOOTSTRAP_ADMIN_PASSWORD in production".into(),
+            "schema v5 requires BOOTSTRAP_ADMIN_PASSWORD outside development/test/local".into(),
         ));
     }
 

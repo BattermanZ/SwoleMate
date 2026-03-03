@@ -1,5 +1,6 @@
 import type { UiMood, UiSession } from '$lib/today/types';
 import { kvDelete, kvGet, kvListKeys, kvSet } from '$lib/offline/storage';
+import { scopedKey } from '$lib/auth/scope';
 
 export type OfflineSessionStatus = 'in_progress' | 'pending_sync';
 
@@ -18,8 +19,12 @@ export type OfflineSessionRecord = {
 
 const PREFIX = 'offline.today.session.';
 
+function sessionPrefix(): string {
+	return scopedKey(PREFIX);
+}
+
 export function sessionKeyForId(sessionId: number): string {
-	return `${PREFIX}${sessionId}`;
+	return `${sessionPrefix()}${sessionId}`;
 }
 
 export async function saveOfflineSession(record: OfflineSessionRecord): Promise<void> {
@@ -35,7 +40,7 @@ export async function deleteOfflineSession(key: string): Promise<void> {
 }
 
 export async function listOfflineSessions(): Promise<OfflineSessionRecord[]> {
-	const keys = await kvListKeys(PREFIX);
+	const keys = await kvListKeys(sessionPrefix());
 	const records = await Promise.all(keys.map((k) => kvGet<OfflineSessionRecord>(k)));
 	return records
 		.filter((r): r is OfflineSessionRecord => Boolean(r))

@@ -51,7 +51,10 @@ describe('history components', () => {
 				{
 					exercise: {
 						id: 1,
+						workout_id: 1,
 						exercise_type: 'Bench Press',
+						start_time: '2026-01-01T10:05:00.000Z',
+						end_time: '2026-01-01T10:55:00.000Z',
 						notes: 'Pause reps',
 						per_side_weight: false,
 						split_weight: false,

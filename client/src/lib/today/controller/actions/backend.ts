@@ -4,8 +4,8 @@ import { toUiSession, workoutIsActive } from '$lib/today/backend';
 import { get } from 'svelte/store';
 import {
 	findInProgressOffline,
+	getRecentSessionsStorageKey,
 	hydrateOfflineState,
-	RECENT_SESSIONS_KEY,
 	refreshPendingSyncCount,
 	setOffline
 } from '../offline';
@@ -45,7 +45,7 @@ export async function refreshFromBackend(state: TodayState) {
 		const recent = await Promise.all(completed.map((w) => getWorkout(w.id!)));
 		const nextRecent = recent.map((d) => toUiSession(d.workout, d.exercises));
 		state.recentSessions.set(nextRecent);
-		void kvSet(RECENT_SESSIONS_KEY, nextRecent);
+		void kvSet(getRecentSessionsStorageKey(), nextRecent);
 
 		resetLocalSessionUi(state);
 		state.offlineMode.set(false);

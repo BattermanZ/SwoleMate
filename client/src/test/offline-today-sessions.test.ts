@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const storageMocks = vi.hoisted(() => ({
 	kvSet: vi.fn(async () => undefined),
-	kvGet: vi.fn(async () => null),
+	kvGet: vi.fn<(key: string) => Promise<{ key: string; updated_at: string } | null>>(
+		async (_key: string) => null
+	),
 	kvDelete: vi.fn(async () => undefined),
-	kvListKeys: vi.fn(async () => [])
+	kvListKeys: vi.fn<(prefix: string) => Promise<string[]>>(async (_prefix: string) => [])
 }));
 
 vi.mock('$lib/offline/storage', () => storageMocks);

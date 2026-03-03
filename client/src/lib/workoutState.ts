@@ -1,4 +1,5 @@
 import type { Exercise, Set, Workout, FeedbackEmoji } from './types';
+import { scopedKey } from './auth/scope';
 
 export type StoredExerciseState = {
     exercise: Exercise;
@@ -21,7 +22,7 @@ const isBrowser = typeof window !== 'undefined';
 export function saveWorkoutState(state: StoredWorkoutState): void {
     if (!isBrowser) return;
     try {
-        localStorage.setItem(STATE_KEY, JSON.stringify(state));
+        localStorage.setItem(scopedKey(STATE_KEY), JSON.stringify(state));
     } catch (error) {
         console.error('Failed to persist workout state', error);
     }
@@ -30,7 +31,7 @@ export function saveWorkoutState(state: StoredWorkoutState): void {
 export function loadWorkoutState(): StoredWorkoutState | null {
     if (!isBrowser) return null;
     try {
-        const raw = localStorage.getItem(STATE_KEY);
+        const raw = localStorage.getItem(scopedKey(STATE_KEY));
         return raw ? (JSON.parse(raw) as StoredWorkoutState) : null;
     } catch (error) {
         console.error('Failed to read workout state', error);
@@ -40,14 +41,15 @@ export function loadWorkoutState(): StoredWorkoutState | null {
 
 export function clearWorkoutState(): void {
     if (!isBrowser) return;
-    localStorage.removeItem(STATE_KEY);
+    localStorage.removeItem(scopedKey(STATE_KEY));
 }
 
 export function updateStoredWorkoutId(oldId: number, newId: number): void {
     if (!isBrowser) return;
-    const savedId = localStorage.getItem(CURRENT_WORKOUT_ID_KEY);
+    const key = scopedKey(CURRENT_WORKOUT_ID_KEY);
+    const savedId = localStorage.getItem(key);
     if (savedId && Number(savedId) === oldId) {
-        localStorage.setItem(CURRENT_WORKOUT_ID_KEY, String(newId));
+        localStorage.setItem(key, String(newId));
     }
 }
 
