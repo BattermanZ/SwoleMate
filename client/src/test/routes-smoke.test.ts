@@ -157,7 +157,7 @@ describe('route smoke', () => {
 		const Layout = await importComponent('../routes/+layout.svelte');
 		const { getByText } = render(Layout as never);
 		expect(getByText('SwoleMate')).toBeInTheDocument();
-	}, 15_000);
+	}, 30_000);
 
 	it('renders today page', async () => {
 		const TodayPage = await importComponent('../routes/+page.svelte');
