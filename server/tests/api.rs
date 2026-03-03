@@ -209,7 +209,10 @@ async fn setup_test_app_raw_with_cfg_and_concurrency(
             .app_data(web::Data::new(database.clone()))
             .app_data(web::Data::new(session_cfg))
             .configure(routes::config)
-            .service(test_slow_route),
+            .service(test_slow_route)
+            .service(test_logs_slow)
+            .service(test_backups_slow)
+            .service(test_restore_slow),
     )
     .await;
 
@@ -234,6 +237,24 @@ async fn setup_test_app() -> (
 
 #[actix_web::get("/api/test/slow")]
 async fn test_slow_route(_user: swolemate_server::middleware::CurrentUser) -> HttpResponse {
+    tokio::time::sleep(std::time::Duration::from_millis(350)).await;
+    HttpResponse::Ok().json(json!({ "status": "ok" }))
+}
+
+#[actix_web::post("/api/logs-slow")]
+async fn test_logs_slow(_user: swolemate_server::middleware::CurrentUser) -> HttpResponse {
+    tokio::time::sleep(std::time::Duration::from_millis(350)).await;
+    HttpResponse::Ok().json(json!({ "status": "ok" }))
+}
+
+#[actix_web::post("/api/backups-slow")]
+async fn test_backups_slow(_user: swolemate_server::middleware::CurrentUser) -> HttpResponse {
+    tokio::time::sleep(std::time::Duration::from_millis(350)).await;
+    HttpResponse::Ok().json(json!({ "status": "ok" }))
+}
+
+#[actix_web::post("/api/backups-slow/restore")]
+async fn test_restore_slow(_user: swolemate_server::middleware::CurrentUser) -> HttpResponse {
     tokio::time::sleep(std::time::Duration::from_millis(350)).await;
     HttpResponse::Ok().json(json!({ "status": "ok" }))
 }
@@ -1620,4 +1641,143 @@ async fn missing_backup_restore_fails_safely() {
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 500);
+}
+
+#[actix_web::test]
+async fn auth_negative_paths_are_rejected() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "auth-neg", "passwordpassword").await;
+    let cookie = login_cookie_active(&app, "auth-neg", "passwordpassword").await;
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri("/api/auth/change-password")
+        .set_json(json!({
+            "current_password": "wrong-password",
+            "new_password": "passwordpassword-changed"
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 401);
+
+    let req = test::TestRequest::post().uri("/api/auth/logout").to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 401);
+}
+
+#[actix_web::test]
+async fn admin_list_users_returns_expected_shape_and_members() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    let _ = create_user_as_admin(&app, &admin_cookie, "list-user-a", "passwordpassword").await;
+    let _ = create_user_as_admin(&app, &admin_cookie, "list-user-b", "passwordpassword").await;
+
+    let req = with_cookie(test::TestRequest::get(), &admin_cookie)
+        .uri("/api/admin/users")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+    let users = json_body(resp).await;
+    let arr = users.as_array().expect("users array");
+    assert!(arr.iter().any(|u| u["username"] == "admin" && u["role"] == "admin"));
+    assert!(arr
+        .iter()
+        .any(|u| u["username"] == "list-user-a" && u["role"] == "user"));
+    assert!(arr
+        .iter()
+        .any(|u| u["username"] == "list-user-b" && u["role"] == "user"));
+    assert!(arr.iter().all(|u| {
+        u.get("id").is_some()
+            && u.get("username").is_some()
+            && u.get("role").is_some()
+            && u.get("disabled_at").is_some()
+    }));
+}
+
+#[actix_web::test]
+async fn negative_contract_paths_return_expected_errors() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "neg-user", "passwordpassword").await;
+    let cookie = login_cookie_active(&app, "neg-user", "passwordpassword").await;
+
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri("/api/exercises/last/NoSuchExercise")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+    let body = json_body(resp).await;
+    assert!(body.is_null());
+
+    let req = with_cookie(test::TestRequest::delete(), &cookie)
+        .uri("/api/exercises/999999")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 404);
+
+    let req = with_cookie(test::TestRequest::delete(), &cookie)
+        .uri("/api/workouts/999999")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 404);
+
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri("/api/progress/volume")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+}
+
+#[actix_web::test]
+async fn api_concurrency_enforces_logs_backups_and_restore_class_limits() {
+    let _env = TestEnv::new();
+    let _global = EnvVarGuard::set("API_MAX_INFLIGHT", "8");
+    let _logs = EnvVarGuard::set("API_MAX_INFLIGHT_LOGS", "1");
+    let _backups = EnvVarGuard::set("API_MAX_INFLIGHT_BACKUPS", "1");
+    let _restore = EnvVarGuard::set("API_MAX_INFLIGHT_BACKUP_RESTORE", "1");
+    let _timeout = EnvVarGuard::set("API_CONCURRENCY_TIMEOUT_MS", "15");
+
+    let (_db, app) =
+        setup_test_app_raw_with_cfg_and_concurrency(auth::SessionConfig::for_env("development"))
+            .await;
+    let cookie = login_cookie(&app, ADMIN_USERNAME, ADMIN_PASSWORD).await;
+    let cookie = change_password_cookie(&app, &cookie, ADMIN_PASSWORD, ADMIN_PASSWORD_CHANGED).await;
+
+    for (slow_uri, same_class_uri) in [
+        ("/api/logs-slow", "/api/logs-slow"),
+        ("/api/backups-slow", "/api/backups-slow"),
+        ("/api/backups-slow/restore", "/api/backups-slow/restore"),
+    ] {
+        let hold = async {
+            let req = with_cookie(test::TestRequest::post(), &cookie)
+                .uri(slow_uri)
+                .to_request();
+            test::call_service(&app, req).await
+        };
+
+        let contended = async {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            let req = with_cookie(test::TestRequest::post(), &cookie)
+                .uri(same_class_uri)
+                .to_request();
+            test::call_service(&app, req).await
+        };
+
+        let unaffected_global = async {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            let req = with_cookie(test::TestRequest::get(), &cookie)
+                .uri("/api/workouts")
+                .to_request();
+            test::call_service(&app, req).await
+        };
+
+        let (hold_resp, contended_resp, global_resp) =
+            tokio::join!(hold, contended, unaffected_global);
+        assert!(hold_resp.status().is_success());
+        assert_eq!(contended_resp.status(), 503, "uri={same_class_uri}");
+        assert!(global_resp.status().is_success(), "uri={same_class_uri}");
+    }
 }
