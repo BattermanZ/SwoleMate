@@ -75,18 +75,18 @@ describe('progress route page', () => {
 		await waitFor(() => {
 			expect(apiMocks.getWorkoutStats).toHaveBeenCalledTimes(1);
 			expect(apiMocks.getExerciseTypes).toHaveBeenCalledTimes(1);
-			expect(apiMocks.getVolumeStats).toHaveBeenCalled();
-			expect(apiMocks.getExerciseProgress).toHaveBeenCalled();
+			expect(apiMocks.getVolumeStats).toHaveBeenCalledWith('Bench Press');
+			expect(apiMocks.getExerciseProgress).toHaveBeenCalledWith('Bench Press');
 		});
 	}, 15_000);
 
 	it('reloads exercise-specific data when selection changes', async () => {
 		const { default: ProgressPage } = await import('../routes/progress/+page.svelte');
-		const { getAllByRole } = render(ProgressPage as never);
+		const { getByRole } = render(ProgressPage as never);
 
 		await waitFor(() => expect(apiMocks.getVolumeStats).toHaveBeenCalledWith('Bench Press'));
 
-		const [targetSelect] = getAllByRole('combobox', { name: 'Exercise' });
+		const targetSelect = getByRole('combobox', { name: 'Exercise' });
 		await fireEvent.change(targetSelect, { target: { value: 'Squat' } });
 
 		await waitFor(() => {

@@ -1,11 +1,12 @@
 import { fireEvent, render } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
+import type { Workout, WorkoutWithExercises } from '$lib/types';
 import EditWorkoutTimesModal from '$lib/components/history/EditWorkoutTimesModal.svelte';
 import WorkoutDetailsCard from '$lib/components/history/WorkoutDetailsCard.svelte';
 
 describe('history components', () => {
 	it('validates times and emits submit from edit modal', async () => {
-		const workout = {
+		const workout: Workout = {
 			id: 1,
 			date: '2026-01-01T10:00:00.000Z',
 			start_time: '2026-01-01T10:00:00.000Z',
@@ -16,7 +17,7 @@ describe('history components', () => {
 
 		const onSubmit = vi.fn();
 		const { getByText, getAllByDisplayValue } = render(EditWorkoutTimesModal, {
-			props: { open: true, workout: workout as never, disabled: false, error: null },
+			props: { open: true, workout, disabled: false, error: null },
 			events: { submit: onSubmit }
 		});
 
@@ -38,7 +39,7 @@ describe('history components', () => {
 	});
 
 	it('renders summary metrics and exercise details in workout details card', () => {
-		const workout = {
+		const workout: WorkoutWithExercises = {
 			id: 1,
 			date: '2026-01-01T10:00:00.000Z',
 			start_time: '2026-01-01T10:00:00.000Z',
@@ -62,7 +63,7 @@ describe('history components', () => {
 		};
 
 		const { getByText } = render(WorkoutDetailsCard, {
-			props: { workout: workout as never, loading: false, error: null }
+			props: { workout, loading: false, error: null }
 		});
 
 		expect(getByText('Workout details')).toBeInTheDocument();

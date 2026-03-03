@@ -40,5 +40,5 @@ describe('Layout theme toggle', () => {
 		await fireEvent.click(toggle);
 		expect(document.documentElement.classList.contains('dark')).toBe(false);
 		expect(localStorage.getItem('theme')).toBe('light');
-	}, 30_000);
+	}, 15_000);
 });

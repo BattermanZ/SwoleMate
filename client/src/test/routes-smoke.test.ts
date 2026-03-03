@@ -157,12 +157,12 @@ describe('route smoke', () => {
 		const Layout = await importComponent('../routes/+layout.svelte');
 		const { getByText } = render(Layout as never);
 		expect(getByText('SwoleMate')).toBeInTheDocument();
-	}, 30_000);
+	}, 15_000);
 
 	it('renders today page', async () => {
 		const TodayPage = await importComponent('../routes/+page.svelte');
-		const { getByText } = render(TodayPage as never);
-		expect(getByText('Today')).toBeInTheDocument();
+		const { getByRole } = render(TodayPage as never);
+		expect(getByRole('heading', { name: 'Today' })).toBeInTheDocument();
 	});
 
 	it('renders workouts page with basic data', async () => {
