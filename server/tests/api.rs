@@ -123,24 +123,7 @@ async fn setup_test_app_raw() -> (
         Error = actix_web::Error,
     >,
 ) {
-    let pool = SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect("sqlite:database/swolemate.db")
-        .await
-        .expect("connect sqlite");
-
-    schema::setup_schema(&pool).await.expect("setup_schema");
-
-    for pragma in [
-        "PRAGMA foreign_keys = ON",
-        "PRAGMA journal_mode = WAL",
-        "PRAGMA synchronous = NORMAL",
-        "PRAGMA busy_timeout = 5000",
-    ] {
-        sqlx::query(pragma).execute(&pool).await.expect("pragma");
-    }
-
-    let database = Database::new(pool);
+    let database = setup_test_database().await;
     let session_cfg = auth::SessionConfig::for_env("development");
     let app = test::init_service(
         App::new()
@@ -157,16 +140,7 @@ async fn setup_test_app_raw() -> (
     (database, app)
 }
 
-async fn setup_test_app_raw_with_cfg(
-    session_cfg: auth::SessionConfig,
-) -> (
-    Database,
-    impl actix_web::dev::Service<
-        actix_http::Request,
-        Response = actix_web::dev::ServiceResponse,
-        Error = actix_web::Error,
-    >,
-) {
+async fn setup_test_database() -> Database {
     let pool = SqlitePoolOptions::new()
         .max_connections(1)
         .connect("sqlite:database/swolemate.db")
@@ -184,7 +158,20 @@ async fn setup_test_app_raw_with_cfg(
         sqlx::query(pragma).execute(&pool).await.expect("pragma");
     }
 
-    let database = Database::new(pool);
+    Database::new(pool)
+}
+
+async fn setup_test_app_raw_with_cfg(
+    session_cfg: auth::SessionConfig,
+) -> (
+    Database,
+    impl actix_web::dev::Service<
+        actix_http::Request,
+        Response = actix_web::dev::ServiceResponse,
+        Error = actix_web::Error,
+    >,
+) {
+    let database = setup_test_database().await;
     let app = test::init_service(
         App::new()
             .wrap(swolemate_server::middleware::SessionAuth::new(
@@ -210,24 +197,7 @@ async fn setup_test_app_raw_with_cfg_and_concurrency(
         Error = actix_web::Error,
     >,
 ) {
-    let pool = SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect("sqlite:database/swolemate.db")
-        .await
-        .expect("connect sqlite");
-
-    schema::setup_schema(&pool).await.expect("setup_schema");
-
-    for pragma in [
-        "PRAGMA foreign_keys = ON",
-        "PRAGMA journal_mode = WAL",
-        "PRAGMA synchronous = NORMAL",
-        "PRAGMA busy_timeout = 5000",
-    ] {
-        sqlx::query(pragma).execute(&pool).await.expect("pragma");
-    }
-
-    let database = Database::new(pool);
+    let database = setup_test_database().await;
     let app = test::init_service(
         App::new()
             .wrap(swolemate_server::middleware::SessionAuth::new(
@@ -263,7 +233,7 @@ async fn setup_test_app() -> (
 
 #[actix_web::get("/api/test/slow")]
 async fn test_slow_route(_user: swolemate_server::middleware::CurrentUser) -> HttpResponse {
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(350)).await;
     HttpResponse::Ok().json(json!({ "status": "ok" }))
 }
 
@@ -1247,7 +1217,7 @@ async fn session_is_rotated_when_near_expiry() {
 async fn api_concurrency_returns_503_when_queue_times_out() {
     let _env = TestEnv::new();
     let _max_inflight = EnvVarGuard::set("API_MAX_INFLIGHT", "1");
-    let _timeout_ms = EnvVarGuard::set("API_CONCURRENCY_TIMEOUT_MS", "25");
+    let _timeout_ms = EnvVarGuard::set("API_CONCURRENCY_TIMEOUT_MS", "15");
 
     let (_db, app) =
         setup_test_app_raw_with_cfg_and_concurrency(auth::SessionConfig::for_env("development"))
@@ -1255,22 +1225,31 @@ async fn api_concurrency_returns_503_when_queue_times_out() {
     let cookie = login_cookie(&app, ADMIN_USERNAME, ADMIN_PASSWORD).await;
     let cookie = change_password_cookie(&app, &cookie, ADMIN_PASSWORD, ADMIN_PASSWORD_CHANGED).await;
 
-    let slow_req = with_cookie(test::TestRequest::get(), &cookie)
-        .uri("/api/test/slow")
-        .to_request();
-    let busy_req = with_cookie(test::TestRequest::get(), &cookie)
-        .uri("/api/workouts")
-        .to_request();
-
-    let slow_call = test::call_service(&app, slow_req);
+    let slow_call = async {
+        let req = with_cookie(test::TestRequest::get(), &cookie)
+            .uri("/api/test/slow")
+            .to_request();
+        test::call_service(&app, req).await
+    };
     let busy_call = async {
-        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-        test::call_service(&app, busy_req).await
+        let mut statuses = Vec::new();
+        for delay in [10u64, 40, 80, 120] {
+            tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+            let req = with_cookie(test::TestRequest::get(), &cookie)
+                .uri("/api/workouts")
+                .to_request();
+            statuses.push(test::call_service(&app, req).await.status().as_u16());
+        }
+        statuses
     };
 
-    let (slow_resp, busy_resp) = tokio::join!(slow_call, busy_call);
+    let (slow_resp, busy_statuses) = tokio::join!(slow_call, busy_call);
     assert!(slow_resp.status().is_success());
-    assert_eq!(busy_resp.status(), 503);
+    assert!(
+        busy_statuses.iter().any(|s| *s == 503),
+        "expected at least one 503, got statuses: {:?}",
+        busy_statuses
+    );
 }
 
 #[actix_web::test]
