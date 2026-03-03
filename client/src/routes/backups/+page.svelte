@@ -107,6 +107,11 @@
 			return;
 		}
 
+		if (!$online) {
+			error = 'Offline mode: restore backups when online.';
+			return;
+		}
+
 		try {
 			loading = true;
 			error = null;

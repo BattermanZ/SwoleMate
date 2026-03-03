@@ -217,6 +217,10 @@
 			error = 'Invalid workout ID';
 			return;
 		}
+		if (!$online) {
+			error = 'Offline mode: delete workouts when you are back online.';
+			return;
+		}
 
 		if (!confirm('Are you sure you want to delete this workout? This action cannot be undone.')) {
 			return;
