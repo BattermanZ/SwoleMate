@@ -20,9 +20,18 @@ describe('today components', () => {
 		await fireEvent.click(getByText('Bench Press'));
 		await fireEvent.click(getByText('Squat'));
 
-		expect(onAdd).toHaveBeenNthCalledWith(1, expect.objectContaining({ detail: { name: 'Bench Press' } }));
-		expect(onAdd).toHaveBeenNthCalledWith(2, expect.objectContaining({ detail: { name: 'Bench Press' } }));
-		expect(onAdd).toHaveBeenNthCalledWith(3, expect.objectContaining({ detail: { name: 'Squat' } }));
+		expect(onAdd).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining({ detail: { name: 'Bench Press' } })
+		);
+		expect(onAdd).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({ detail: { name: 'Bench Press' } })
+		);
+		expect(onAdd).toHaveBeenNthCalledWith(
+			3,
+			expect.objectContaining({ detail: { name: 'Squat' } })
+		);
 	});
 
 	it('requires mood before submit in end session modal', async () => {

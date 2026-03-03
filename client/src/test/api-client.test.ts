@@ -100,7 +100,11 @@ describe('api client behavior', () => {
 
 		const volumeFetcher = vi.fn(async (input: URL | RequestInfo) => {
 			seenUrls.push(String(input));
-			return jsonResponse({ weekly_volume: [], monthly_volume: [], personal_records: { all_time_max_weight: 0, max_volume: 0, estimated_max_1rm: 0 } });
+			return jsonResponse({
+				weekly_volume: [],
+				monthly_volume: [],
+				personal_records: { all_time_max_weight: 0, max_volume: 0, estimated_max_1rm: 0 }
+			});
 		});
 		await getVolumeStats(exerciseType, volumeFetcher as unknown as typeof fetch);
 		expect(seenUrls[1]).toContain(`exercise_type=${encoded}`);

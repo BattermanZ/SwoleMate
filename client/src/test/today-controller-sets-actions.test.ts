@@ -63,7 +63,11 @@ describe('today controller set actions', () => {
 			9,
 			expect.objectContaining({ reps: 8, weight: 100, notes: undefined })
 		);
-		expect(get(state.currentSession)!.exercises[0]!.sets[0]).toMatchObject({ id: 88, reps: 8, weight: 100 });
+		expect(get(state.currentSession)!.exercises[0]!.sets[0]).toMatchObject({
+			id: 88,
+			reps: 8,
+			weight: 100
+		});
 	});
 
 	it('falls back to offline add-set flow on network failure', async () => {

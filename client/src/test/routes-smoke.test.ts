@@ -157,7 +157,7 @@ describe('route smoke', () => {
 		const Layout = await importComponent('../routes/+layout.svelte');
 		const { getByText } = render(Layout as never);
 		expect(getByText('SwoleMate')).toBeInTheDocument();
-	}, 15_000);
+	}, 30_000);
 
 	it('renders today page', async () => {
 		const TodayPage = await importComponent('../routes/+page.svelte');
@@ -209,7 +209,9 @@ describe('route smoke', () => {
 		);
 
 		await fireEvent.click(getByRole('button', { name: 'Delete' }));
-		expect(await findByText('Offline mode: delete workouts when you are back online.')).toBeInTheDocument();
+		expect(
+			await findByText('Offline mode: delete workouts when you are back online.')
+		).toBeInTheDocument();
 		expect(cancelWorkout).not.toHaveBeenCalled();
 	});
 

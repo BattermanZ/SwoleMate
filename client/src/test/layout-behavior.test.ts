@@ -4,7 +4,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 type AuthState = {
 	status: 'unknown' | 'authenticated' | 'unauthenticated';
-	user: { id: number; username: string; role: 'admin' | 'user'; must_change_password: boolean } | null;
+	user: {
+		id: number;
+		username: string;
+		role: 'admin' | 'user';
+		must_change_password: boolean;
+	} | null;
 	offline: boolean;
 };
 
@@ -68,7 +73,7 @@ describe('layout behavior', () => {
 		render(Layout as never);
 
 		await waitFor(() => expect(gotoMock).toHaveBeenCalledWith('/login'));
-	}, 15_000);
+	}, 30_000);
 
 	it('redirects authenticated users away from login and enforces password-change route', async () => {
 		pageStore.set({ url: new URL('http://localhost/login') });

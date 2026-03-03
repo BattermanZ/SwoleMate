@@ -16,7 +16,12 @@ vi.mock('$app/environment', () => ({
 
 type AuthState = {
 	status: 'authenticated' | 'unauthenticated';
-	user: { id: number; username: string; role: 'admin' | 'user'; must_change_password: boolean } | null;
+	user: {
+		id: number;
+		username: string;
+		role: 'admin' | 'user';
+		must_change_password: boolean;
+	} | null;
 	offline: boolean;
 };
 
@@ -59,7 +64,11 @@ const apiMocks = vi.hoisted(() => ({
 	cancelWorkout: vi.fn(async () => undefined),
 	updateWorkoutTimes: vi.fn(async () => undefined),
 	getBackups: vi.fn(async () => []),
-	createBackup: vi.fn(async () => ({ filename: 'a', created_at: new Date().toISOString(), backup_type: 'Manual' })),
+	createBackup: vi.fn(async () => ({
+		filename: 'a',
+		created_at: new Date().toISOString(),
+		backup_type: 'Manual'
+	})),
 	restoreBackup: vi.fn(async () => undefined),
 	deleteBackup: vi.fn(async () => undefined),
 	adminListUsers: vi.fn(async () => []),
@@ -91,30 +100,39 @@ beforeEach(() => {
 		user: { id: 1, username: 'admin', role: 'admin', must_change_password: false },
 		offline: false
 	});
-	vi.stubGlobal('confirm', vi.fn(() => true));
-	vi.stubGlobal('prompt', vi.fn(() => 'user-a'));
+	vi.stubGlobal(
+		'confirm',
+		vi.fn(() => true)
+	);
+	vi.stubGlobal(
+		'prompt',
+		vi.fn(() => 'user-a')
+	);
 });
 
 describe('route behaviors', () => {
 	it('workouts page shows refresh error and honors delete confirm', async () => {
 		apiMocks.getWorkouts.mockRejectedValueOnce(new Error('refresh failed'));
 		const { default: WorkoutsPage } = await import('../routes/workouts/+page.svelte');
-		const { getByText, getByRole, findByText } = render(WorkoutsPage as never, {
-			props: {
-				data: {
-					workouts: [
-						{
-							id: 10,
-							date: '2026-01-01T10:00:00.000Z',
-							start_time: '2026-01-01T10:00:00.000Z',
-							end_time: '2026-01-01T11:00:00.000Z',
-							notes: '',
-							feedback: null
-						}
-					]
+		const { getByText, getByRole, findByText } = render(
+			WorkoutsPage as never,
+			{
+				props: {
+					data: {
+						workouts: [
+							{
+								id: 10,
+								date: '2026-01-01T10:00:00.000Z',
+								start_time: '2026-01-01T10:00:00.000Z',
+								end_time: '2026-01-01T11:00:00.000Z',
+								notes: '',
+								feedback: null
+							}
+						]
+					}
 				}
-			}
-		} as never);
+			} as never
+		);
 
 		await fireEvent.click(getByText('Refresh'));
 		expect(await findByText('refresh failed')).toBeInTheDocument();
@@ -145,23 +163,30 @@ describe('route behaviors', () => {
 			offline: false
 		});
 		apiMocks.getWorkouts.mockRejectedValueOnce(new Error('export failed'));
-		view = render(BackupsPage as never, {
-			props: {
-				data: {
-					backups: [
-						{ filename: 'snap.tar.gz', created_at: '2026-01-01T00:00:00.000Z', backup_type: 'Manual' }
-					]
+		view = render(
+			BackupsPage as never,
+			{
+				props: {
+					data: {
+						backups: [
+							{
+								filename: 'snap.tar.gz',
+								created_at: '2026-01-01T00:00:00.000Z',
+								backup_type: 'Manual'
+							}
+						]
+					}
 				}
-			}
-		} as never);
+			} as never
+		);
 		await fireEvent.click(view.getByText('Export JSON'));
 		expect(await view.findByText('export failed')).toBeInTheDocument();
 	});
 
 	it('admin page validates create/reset and handles blocked state', async () => {
-		apiMocks.adminListUsers.mockResolvedValueOnce(
-			[{ id: 3, username: 'user-a', role: 'user', disabled_at: null }] as never
-		);
+		apiMocks.adminListUsers.mockResolvedValueOnce([
+			{ id: 3, username: 'user-a', role: 'user', disabled_at: null }
+		] as never);
 		const { default: AdminPage } = await import('../routes/admin/+page.svelte');
 		let view = render(AdminPage as never);
 		await view.findByText('user-a');
@@ -174,7 +199,11 @@ describe('route behaviors', () => {
 		expect(await view.findByText('New password is required.')).toBeInTheDocument();
 		view.unmount();
 
-		authStateStore.set({ status: 'authenticated', user: { id: 1, username: 'admin', role: 'admin', must_change_password: false }, offline: true });
+		authStateStore.set({
+			status: 'authenticated',
+			user: { id: 1, username: 'admin', role: 'admin', must_change_password: false },
+			offline: true
+		});
 		view = render(AdminPage as never);
 		expect(view.getByText('Admin access required.')).toBeInTheDocument();
 	});

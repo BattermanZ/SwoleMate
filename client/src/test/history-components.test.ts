@@ -35,7 +35,9 @@ describe('history components', () => {
 			end_time: string;
 		};
 		expect(payload).toBeTruthy();
-		expect(new Date(payload.end_time).getTime()).toBeGreaterThan(new Date(payload.start_time).getTime());
+		expect(new Date(payload.end_time).getTime()).toBeGreaterThan(
+			new Date(payload.start_time).getTime()
+		);
 	});
 
 	it('renders summary metrics and exercise details in workout details card', () => {

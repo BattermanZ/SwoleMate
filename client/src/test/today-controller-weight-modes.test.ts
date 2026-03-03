@@ -63,7 +63,12 @@ describe('today controller weight mode actions', () => {
 		const exercise = get(state.currentSession)!.exercises[0]!;
 		expect(exercise.perSideWeight).toBe(false);
 		expect(exercise.splitWeight).toBe(false);
-		expect(exercise.sets[0]).toMatchObject({ id: 70, weight: 37, weightLeft: undefined, weightRight: undefined });
+		expect(exercise.sets[0]).toMatchObject({
+			id: 70,
+			weight: 37,
+			weightLeft: undefined,
+			weightRight: undefined
+		});
 		expect(apiMocks.endExercise).toHaveBeenCalledWith(
 			21,
 			expect.objectContaining({ per_side_weight: false, split_weight: false })

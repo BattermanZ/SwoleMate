@@ -41,7 +41,10 @@ describe('logger', () => {
 		await vi.advanceTimersByTimeAsync(1_100);
 
 		expect(fetchMock).toHaveBeenCalledTimes(1);
-		const [, init] = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit | undefined];
+		const [, init] = fetchMock.mock.calls[0] as unknown as [
+			RequestInfo | URL,
+			RequestInit | undefined
+		];
 		const body = JSON.parse(String(init?.body ?? '[]'));
 		expect(body.map((entry: { level: string }) => entry.level)).toEqual(['warn', 'error']);
 	});
@@ -59,7 +62,10 @@ describe('logger', () => {
 
 		await vi.advanceTimersByTimeAsync(1_100);
 
-		const [, init] = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit | undefined];
+		const [, init] = fetchMock.mock.calls[0] as unknown as [
+			RequestInfo | URL,
+			RequestInit | undefined
+		];
 		const body = JSON.parse(String(init?.body ?? '[]'));
 		expect(body).toHaveLength(500);
 		expect(body[0]?.message).toBe('entry 120');

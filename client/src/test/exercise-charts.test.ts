@@ -5,7 +5,11 @@ import type { ExerciseProgress, VolumeStats } from '$lib/types';
 
 const chartingMocks = vi.hoisted(() => ({
 	upsertChart: vi.fn<
-		(current: unknown, canvas: HTMLCanvasElement | null, config: { type?: string }) => {
+		(
+			current: unknown,
+			canvas: HTMLCanvasElement | null,
+			config: { type?: string }
+		) => {
 			destroy: () => void;
 		}
 	>(() => ({ destroy: vi.fn() })),
@@ -37,7 +41,9 @@ const sampleVolumeStats: VolumeStats = {
 			max_estimated_1rm: 120
 		}
 	],
-	monthly_volume: [{ month: '2026-01', total_volume: 4000, max_weight: 120, total_reps: 200, total_sets: 40 }],
+	monthly_volume: [
+		{ month: '2026-01', total_volume: 4000, max_weight: 120, total_reps: 200, total_sets: 40 }
+	],
 	personal_records: {
 		all_time_max_weight: 120,
 		estimated_max_1rm: 130,
@@ -77,9 +83,7 @@ describe('ExerciseCharts', () => {
 			}
 		});
 
-		const types = chartingMocks.upsertChart.mock.calls
-			.map((call) => call[2]?.type)
-			.filter(Boolean);
+		const types = chartingMocks.upsertChart.mock.calls.map((call) => call[2]?.type).filter(Boolean);
 		expect(types).toContain('line');
 		expect(types).toContain('bar');
 		expect(types).not.toContain('scatter');
@@ -106,9 +110,7 @@ describe('ExerciseCharts', () => {
 			}
 		});
 
-		const types = chartingMocks.upsertChart.mock.calls
-			.map((call) => call[2]?.type)
-			.filter(Boolean);
+		const types = chartingMocks.upsertChart.mock.calls.map((call) => call[2]?.type).filter(Boolean);
 		expect(types).toContain('scatter');
 	});
 });
