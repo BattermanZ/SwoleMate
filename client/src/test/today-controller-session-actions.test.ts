@@ -205,4 +205,22 @@ describe('today controller session actions', () => {
 			'Saved locally. Sync when you’re back online.'
 		);
 	});
+
+	it('surfaces start-session non-network errors', async () => {
+		apiMocks.createWorkout.mockRejectedValueOnce(new Error('server rejected payload'));
+
+		const state = createTodayState();
+		const refreshFromBackend = vi.fn(async () => undefined);
+		const actions = createSessionActions({
+			state,
+			addExercise: vi.fn(async () => undefined),
+			refreshFromBackend
+		});
+
+		await actions.startSession('empty');
+
+		expect(offlineActionMocks.setOffline).not.toHaveBeenCalled();
+		expect(get(state.error)).toBe('server rejected payload');
+		expect(refreshFromBackend).toHaveBeenCalledTimes(1);
+	});
 });

@@ -133,4 +133,36 @@ describe('today controller set actions', () => {
 		expect(get(state.currentSession)!.exercises[0]!.status).toBe('done');
 		expect(get(state.openExerciseId)).toBeNull();
 	});
+
+	it('sets error on non-network addSet failures', async () => {
+		apiMocks.createSet.mockRejectedValueOnce(new Error('validation failed'));
+
+		const state = createTodayState();
+		state.currentSession.set({
+			id: 6,
+			startedAt: '2026-01-01T10:00:00.000Z',
+			notes: '',
+			exercises: [
+				{
+					id: 10,
+					name: 'Deadlift',
+					notes: '',
+					startedAt: '2026-01-01T10:00:00.000Z',
+					endedAt: '2026-01-01T10:05:00.000Z',
+					status: 'active',
+					perSideWeight: false,
+					splitWeight: false,
+					settings: [],
+					sets: []
+				}
+			]
+		});
+
+		const actions = createExerciseSetActions({ state });
+		await actions.addSet(10, 5, 140);
+
+		expect(offlineMocks.setOffline).not.toHaveBeenCalled();
+		expect(offlineMocks.hydrateOfflineState).not.toHaveBeenCalled();
+		expect(get(state.error)).toBe('validation failed');
+	});
 });

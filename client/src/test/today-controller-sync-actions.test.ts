@@ -1,5 +1,5 @@
 import { get } from 'svelte/store';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTodayState } from '$lib/today/controller/state';
 import { createSyncActions } from '$lib/today/controller/actions/sync';
 
@@ -65,6 +65,10 @@ describe('today controller sync actions', () => {
 		vi.clearAllMocks();
 	});
 
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
 	it('syncPendingSessions clears notice when there are no offline records', async () => {
 		sessionMocks.listOfflineSessions.mockResolvedValueOnce([]);
 		const state = createTodayState();
@@ -119,6 +123,21 @@ describe('today controller sync actions', () => {
 			expect.anything(),
 			'Still offline. Your changes are safe and will sync later.'
 		);
+	});
+
+	it('syncPendingSessions sets error for non-network failures', async () => {
+		sessionMocks.listOfflineSessions.mockRejectedValueOnce(new Error('server exploded'));
+		const state = createTodayState();
+		const actions = createSyncActions({
+			state,
+			refreshFromBackend: vi.fn(async () => undefined),
+			hydrateExerciseLibrary: vi.fn(async () => undefined)
+		});
+
+		await actions.syncPendingSessions();
+
+		expect(offlineMocks.setOffline).not.toHaveBeenCalled();
+		expect(get(state.error)).toBe('server exploded');
 	});
 
 	it('start wires online/offline listeners and returns cleanup', async () => {

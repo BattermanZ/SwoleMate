@@ -138,4 +138,37 @@ describe('today controller weight mode actions', () => {
 		expect(offlineMocks.persistInProgressSession).toHaveBeenCalledTimes(1);
 		expect(refreshFromBackend).not.toHaveBeenCalled();
 	});
+
+	it('sets error and refreshes backend for non-network failures', async () => {
+		apiMocks.endExercise.mockRejectedValueOnce(new Error('bad request'));
+
+		const state = createTodayState();
+		state.currentSession.set({
+			id: 15,
+			startedAt: '2026-01-01T10:00:00.000Z',
+			notes: '',
+			exercises: [
+				{
+					id: 25,
+					name: 'Lat Pulldown',
+					notes: '',
+					startedAt: '2026-01-01T10:00:00.000Z',
+					endedAt: '2026-01-01T10:05:00.000Z',
+					status: 'active',
+					perSideWeight: false,
+					splitWeight: false,
+					settings: [],
+					sets: [{ id: 1, reps: 8, weight: 50 }]
+				}
+			]
+		});
+
+		const refreshFromBackend = vi.fn(async () => undefined);
+		const actions = createExerciseWeightModeActions({ state, refreshFromBackend });
+		await actions.toggleExercisePerSideWeight(25, true);
+
+		expect(offlineMocks.setOffline).not.toHaveBeenCalled();
+		expect(get(state.error)).toBe('bad request');
+		expect(refreshFromBackend).toHaveBeenCalledTimes(1);
+	});
 });
