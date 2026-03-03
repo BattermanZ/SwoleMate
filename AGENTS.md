@@ -1,7 +1,7 @@
 # agent.md — Minimal AI Agent Protocol
 
-Version: 2.1
-Last updated: 2026-03-02
+Version: 2.2
+Last updated: 2026-03-03
 Scope: Entire repository (unless a subdirectory explicitly overrides this file)
 
 This protocol exists to:
@@ -148,3 +148,18 @@ Use these only as fallbacks, and only for the affected component.
 3) **Implementer:** provide patch/diff.  
 4) **Reviewer:** review + confirm the smallest relevant command set to run.
 5) **Security Reviewer:** run a dedicated security pass when the change touches auth, secrets, external input, file handling, networking, public endpoints, or dependencies.
+
+---
+
+## 7) Commit message format (MUST)
+
+When creating commits, use this format:
+
+1) **Subject line:** `type(scope): concise summary`  
+   Example: `test(client): close remaining frontend coverage gaps`
+
+2) **Body is required** and must use bullet points (`- ...`) only.
+
+3) **No literal `\n` text** in commit messages. Use real line breaks.
+
+4) Keep body bullets concrete and implementation-focused (what changed + why).
