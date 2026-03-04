@@ -1,4 +1,4 @@
-# SwoleMate (v2.0.0)
+# SwoleMate (v2.1.0)
 
 SwoleMate is a self-hosted workout logging web app designed for fast, phone-first session tracking:
 
@@ -85,7 +85,7 @@ Password rules:
 First-login password change:
 - On a brand-new database, the bootstrap admin account is created with a forced password change on first login.
 - When an admin resets another user’s password, that user is also forced to change their password on the next login.
-- For existing (legacy) databases upgraded to v2.0.0, users are not forced to change passwords by default.
+- For existing (legacy) databases upgraded to v2.1.0, users are not forced to change passwords by default.
 
 ## Data and backups
 

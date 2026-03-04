@@ -9,9 +9,18 @@ import {
 } from '$lib/offline/todaySessions';
 import type { Set } from '$lib/types';
 import type { UiSession } from '$lib/today/types';
+import { scopedKey } from '$lib/auth/scope';
 import { get, type Writable } from 'svelte/store';
 
 export const RECENT_SESSIONS_KEY = 'offline.today.recentSessions';
+
+function recentSessionsKey(): string {
+	return scopedKey(RECENT_SESSIONS_KEY);
+}
+
+export function getRecentSessionsStorageKey(): string {
+	return recentSessionsKey();
+}
 
 export type OfflineStoreAccess = {
 	currentSession: Writable<UiSession | null>;
@@ -55,7 +64,7 @@ export async function findInProgressOffline(): Promise<OfflineSessionRecord | nu
 export async function hydrateOfflineState(access: OfflineStoreAccess) {
 	await refreshPendingSyncCount(access);
 
-	const cachedRecent = await kvGet<UiSession[]>(RECENT_SESSIONS_KEY).catch(() => null);
+	const cachedRecent = await kvGet<UiSession[]>(recentSessionsKey()).catch(() => null);
 	if (cachedRecent?.length) access.recentSessions.set(cachedRecent);
 
 	const inProgress = await findInProgressOffline();

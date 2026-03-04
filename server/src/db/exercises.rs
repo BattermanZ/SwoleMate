@@ -42,7 +42,7 @@ impl Database {
             r#"
             INSERT INTO exercises (user_id, workout_id, exercise_type, start_time, end_time, notes, per_side_weight, split_weight)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            RETURNING id
+            RETURNING id as "id!: i64"
             "#,
             user_id,
             workout_id,
@@ -254,7 +254,7 @@ impl Database {
             r#"
             INSERT INTO sets (user_id, exercise_id, reps, weight, weight_left, weight_right, notes)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-            RETURNING id
+            RETURNING id as "id!: i64"
             "#,
             user_id,
             exercise_id,
@@ -333,7 +333,7 @@ impl Database {
                 r#"
                 INSERT INTO sets (user_id, exercise_id, reps, weight, weight_left, weight_right, notes)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-                RETURNING id
+                RETURNING id as "id!: i64"
                 "#,
                 user_id,
                 exercise_id,

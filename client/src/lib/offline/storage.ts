@@ -44,9 +44,13 @@ export async function kvGet<T>(key: string): Promise<T | null> {
 	if (typeof window === 'undefined') return null;
 
 	if (!supportsIdb()) {
-		const raw = localStorage.getItem(lsKey(key));
-		if (!raw) return null;
-		return JSON.parse(raw) as T;
+		try {
+			const raw = localStorage.getItem(lsKey(key));
+			if (!raw) return null;
+			return JSON.parse(raw) as T;
+		} catch {
+			return null;
+		}
 	}
 
 	const entry = await withStore<KvEntry<T> | undefined>('readonly', (store) => store.get(key));

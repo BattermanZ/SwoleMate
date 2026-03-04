@@ -1,5 +1,5 @@
 # Stage 1: Plan
-FROM rust:1.92-slim AS planner
+FROM rust:1.93-slim AS planner
 WORKDIR /usr/src/app
 ENV SQLX_OFFLINE=true
 
@@ -16,7 +16,7 @@ COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
 # Stage 2: Build
-FROM rust:1.92-slim AS builder
+FROM rust:1.93-slim AS builder
 WORKDIR /usr/src/app
 ENV SQLX_OFFLINE=true
 

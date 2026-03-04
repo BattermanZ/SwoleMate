@@ -21,12 +21,12 @@
       {
         "name": "total_reps",
         "ordinal": 3,
-        "type_info": "Int64"
+        "type_info": "Integer"
       },
       {
         "name": "total_sets",
         "ordinal": 4,
-        "type_info": "Int64"
+        "type_info": "Integer"
       }
     ],
     "parameters": {

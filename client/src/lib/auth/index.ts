@@ -8,6 +8,9 @@ import {
 	setUnauthorizedHandler,
 	type PublicUser
 } from '$lib/api';
+import { kvDelete, kvListKeys } from '$lib/offline/storage';
+import { clearWorkoutState } from '$lib/workoutState';
+import { getActiveUserId, setActiveUserId } from './scope';
 import { writable } from 'svelte/store';
 
 type AuthStatus = 'unknown' | 'authenticated' | 'unauthenticated';
@@ -19,6 +22,66 @@ export type AuthState = {
 };
 
 const STORAGE_KEY = 'auth.lastUser';
+const CACHE_STORAGE_PREFIX = 'swolemate-cache';
+
+async function clearClientSensitiveData(): Promise<void> {
+	if (!browser) return;
+
+	clearWorkoutState();
+
+	try {
+		localStorage.removeItem('offline.today.recentSessions');
+	} catch {
+		// ignore
+	}
+
+	try {
+		for (let i = localStorage.length - 1; i >= 0; i--) {
+			const k = localStorage.key(i);
+			if (!k) continue;
+			if (k.startsWith('swolemate-cache:') || k.includes(':swolemate-cache:')) {
+				localStorage.removeItem(k);
+				continue;
+			}
+			if (k.includes('offline.today.session.') || k.includes('offline.today.recentSessions')) {
+				localStorage.removeItem(k);
+				continue;
+			}
+			if (k.includes('currentWorkoutId') || k.includes('swolemate:currentWorkoutState')) {
+				localStorage.removeItem(k);
+			}
+		}
+	} catch {
+		// ignore
+	}
+
+	try {
+		const allKeys = await kvListKeys('');
+		const sensitiveKeys = allKeys.filter(
+			(key) =>
+				key.includes('offline.today.session.') ||
+				key.includes('offline.today.recentSessions') ||
+				key.includes('currentWorkoutId') ||
+				key.includes('swolemate:currentWorkoutState')
+		);
+		await Promise.all(sensitiveKeys.map((key) => kvDelete(key)));
+	} catch {
+		// ignore
+	}
+
+	try {
+		if (typeof caches !== 'undefined') {
+			const cacheNames = await caches.keys();
+			await Promise.all(
+				cacheNames
+					.filter((name) => name.startsWith(CACHE_STORAGE_PREFIX))
+					.map((name) => caches.delete(name))
+			);
+		}
+	} catch {
+		// ignore
+	}
+}
 
 function readStoredUser(): PublicUser | null {
 	if (!browser) return null;
@@ -58,15 +121,20 @@ function isNetworkFailure(e: unknown): boolean {
 }
 
 function createAuthStore() {
+	const initialUser = readStoredUser();
+	setActiveUserId(initialUser?.id ?? null);
+
 	const state = writable<AuthState>({
 		status: 'unknown',
-		user: readStoredUser(),
+		user: initialUser,
 		offline: false
 	});
 
 	function handleUnauthorized() {
 		state.set({ status: 'unauthenticated', user: null, offline: false });
 		persistUser(null);
+		setActiveUserId(null);
+		void clearClientSensitiveData();
 	}
 
 	if (browser) setUnauthorizedHandler(handleUnauthorized);
@@ -74,6 +142,11 @@ function createAuthStore() {
 	async function refresh(fetcher: typeof fetch = fetch) {
 		try {
 			const user = await authMe(fetcher);
+			const previousUserId = getActiveUserId();
+			if (previousUserId && previousUserId !== String(user.id)) {
+				await clearClientSensitiveData();
+			}
+			setActiveUserId(user.id);
 			state.set({ status: 'authenticated', user, offline: false });
 			persistUser(user);
 		} catch (e) {
@@ -94,6 +167,11 @@ function createAuthStore() {
 
 	async function login(username: string, password: string, fetcher: typeof fetch = fetch) {
 		const user = await authLogin(username, password, fetcher);
+		const previousUserId = getActiveUserId();
+		if (previousUserId && previousUserId !== String(user.id)) {
+			await clearClientSensitiveData();
+		}
+		setActiveUserId(user.id);
 		state.set({ status: 'authenticated', user, offline: false });
 		persistUser(user);
 	}

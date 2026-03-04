@@ -199,6 +199,21 @@ struct ClientLogEntry {
     metadata: Option<serde_json::Value>,
 }
 
+fn sanitize_log_field(value: &str, max_len: usize) -> String {
+    let mut out = String::with_capacity(value.len().min(max_len));
+    for c in value.chars() {
+        if c.is_control() {
+            out.push(' ');
+        } else {
+            out.push(c);
+        }
+        if out.len() >= max_len {
+            break;
+        }
+    }
+    out.trim().to_string()
+}
+
 #[post("/api/logs")]
 pub async fn write_logs(_user: CurrentUser, logs: web::Json<Vec<ClientLogEntry>>) -> HttpResponse {
     const MAX_LOG_ENTRIES: usize = 1000;
@@ -215,14 +230,19 @@ pub async fn write_logs(_user: CurrentUser, logs: web::Json<Vec<ClientLogEntry>>
             .unwrap_or("info")
             .trim()
             .to_ascii_lowercase();
-        let target = entry.target.as_deref().unwrap_or("app").trim().to_string();
+        let target = sanitize_log_field(entry.target.as_deref().unwrap_or("app"), 64);
+        let target = if target.is_empty() {
+            "app".to_string()
+        } else {
+            target
+        };
         let message = entry
             .message
             .as_deref()
             .or(entry.msg.as_deref())
             .unwrap_or("<missing message>")
-            .trim()
             .to_string();
+        let message = sanitize_log_field(&message, 2000);
 
         let mut prefix = format!("component={}", target);
         if let Some(ts) = entry.timestamp.as_deref() {

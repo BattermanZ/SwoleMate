@@ -59,7 +59,7 @@ pub struct SessionConfig {
 
 impl SessionConfig {
     pub fn for_env(app_env: &str) -> Self {
-        let secure_cookie = app_env == "production";
+        let secure_cookie = !matches!(app_env, "development" | "test" | "local");
         Self {
             secure_cookie,
             session_ttl_days: 90,

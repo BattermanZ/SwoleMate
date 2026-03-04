@@ -107,7 +107,7 @@
 			return;
 		}
 
-		if (!$online) {
+		if ($authState.offline) {
 			error = 'Offline mode: restore backups when online.';
 			return;
 		}

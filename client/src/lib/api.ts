@@ -13,16 +13,7 @@ import type {
 	VolumeStats
 } from './types';
 import { config } from './config';
-import { saveToCache, getFromCache, isOnline as clientOnlineCheck } from './offlineCache';
-import {
-    loadWorkoutState,
-    replaceExerciseId,
-    replaceSetId,
-    replaceWorkoutId,
-    updateStoredWorkoutId
-} from './workoutState';
 
-const isBrowser = typeof window !== 'undefined';
 const API_BASE = config.apiUrl;
 type Fetcher = typeof fetch;
 
