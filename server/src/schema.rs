@@ -327,10 +327,11 @@ async fn migrate_workout_autoclose(pool: &Pool<Sqlite>) -> Result<(), sqlx::Erro
 }
 
 async fn migrate_user_must_change_password(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
-    let has_users_table: i64 =
-        sqlx::query_scalar(r#"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='users'"#)
-            .fetch_one(pool)
-            .await?;
+    let has_users_table: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='users'"#,
+    )
+    .fetch_one(pool)
+    .await?;
     if has_users_table == 0 {
         return Ok(());
     }
@@ -341,11 +342,9 @@ async fn migrate_user_must_change_password(pool: &Pool<Sqlite>) -> Result<(), sq
     .fetch_one(pool)
     .await?;
     if has_column == 0 {
-        sqlx::query(
-            "ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0",
-        )
-        .execute(pool)
-        .await?;
+        sqlx::query("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0")
+            .execute(pool)
+            .await?;
     }
 
     Ok(())
