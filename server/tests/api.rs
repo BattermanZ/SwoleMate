@@ -271,6 +271,11 @@ fn with_cookie(
     req.cookie(cookie.clone())
 }
 
+fn with_same_origin(req: test::TestRequest) -> test::TestRequest {
+    req.insert_header((actix_web::http::header::HOST, "app.local"))
+        .insert_header((actix_web::http::header::ORIGIN, "http://app.local"))
+}
+
 async fn login_cookie(
     app: &impl actix_web::dev::Service<
         actix_http::Request,
@@ -534,9 +539,13 @@ async fn admin_can_reset_user_password_and_revoke_sessions() {
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 403);
 
-    let changed_cookie =
-        change_password_cookie(&app, &new_cookie, "newpasswordpassword", "newpasswordpassword2")
-            .await;
+    let changed_cookie = change_password_cookie(
+        &app,
+        &new_cookie,
+        "newpasswordpassword",
+        "newpasswordpassword2",
+    )
+    .await;
     let req = with_cookie(test::TestRequest::get(), &changed_cookie)
         .uri("/api/workouts")
         .to_request();
@@ -1153,6 +1162,61 @@ async fn login_is_rate_limited_after_repeated_failed_attempts() {
 }
 
 #[actix_web::test]
+async fn login_is_rate_limited_by_ip_across_usernames() {
+    let _env = TestEnv::new();
+    let _attempts_guard = EnvVarGuard::set("LOGIN_RATE_LIMIT_ATTEMPTS", "3");
+    let _window_guard = EnvVarGuard::set("LOGIN_RATE_LIMIT_WINDOW_SECONDS", "600");
+    let (_db, app) = setup_test_app_raw().await;
+
+    for i in 0..3 {
+        let req = test::TestRequest::post()
+            .uri("/api/auth/login")
+            .insert_header((actix_web::http::header::X_FORWARDED_FOR, "203.0.113.50"))
+            .set_json(json!({ "username": format!("nouser-{i}"), "password": "wrong-password" }))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), 401);
+    }
+
+    let req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .insert_header((actix_web::http::header::X_FORWARDED_FOR, "203.0.113.50"))
+        .set_json(json!({ "username": "another-user", "password": "wrong-password" }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 429);
+}
+
+#[actix_web::test]
+async fn csrf_blocks_mutating_authenticated_requests_without_origin_in_production_mode() {
+    let _env = TestEnv::new();
+    let session_cfg = auth::SessionConfig::for_env("production");
+    let (_db, app) = setup_test_app_raw_with_cfg(session_cfg).await;
+
+    let cookie = login_cookie(&app, ADMIN_USERNAME, ADMIN_PASSWORD).await;
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri("/api/auth/change-password")
+        .set_json(json!({
+            "current_password": ADMIN_PASSWORD,
+            "new_password": ADMIN_PASSWORD_CHANGED
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 403);
+
+    let req = with_same_origin(with_cookie(test::TestRequest::post(), &cookie))
+        .uri("/api/auth/change-password")
+        .set_json(json!({
+            "current_password": ADMIN_PASSWORD,
+            "new_password": ADMIN_PASSWORD_CHANGED
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+}
+
+#[actix_web::test]
 async fn admin_disable_user_revokes_existing_session() {
     let _env = TestEnv::new();
     let (_db, admin_cookie, app) = setup_test_app().await;
@@ -1182,7 +1246,8 @@ async fn session_is_rotated_when_near_expiry() {
     let (db, app) = setup_test_app_raw_with_cfg(session_cfg).await;
 
     let cookie = login_cookie(&app, ADMIN_USERNAME, ADMIN_PASSWORD).await;
-    let cookie = change_password_cookie(&app, &cookie, ADMIN_PASSWORD, ADMIN_PASSWORD_CHANGED).await;
+    let cookie =
+        change_password_cookie(&app, &cookie, ADMIN_PASSWORD, ADMIN_PASSWORD_CHANGED).await;
     let old_token = cookie.value().to_string();
     let old_hash = auth::hash_session_token(&old_token);
 
@@ -1245,7 +1310,8 @@ async fn api_concurrency_returns_503_when_queue_times_out() {
         setup_test_app_raw_with_cfg_and_concurrency(auth::SessionConfig::for_env("development"))
             .await;
     let cookie = login_cookie(&app, ADMIN_USERNAME, ADMIN_PASSWORD).await;
-    let cookie = change_password_cookie(&app, &cookie, ADMIN_PASSWORD, ADMIN_PASSWORD_CHANGED).await;
+    let cookie =
+        change_password_cookie(&app, &cookie, ADMIN_PASSWORD, ADMIN_PASSWORD_CHANGED).await;
 
     let slow_call = async {
         let req = with_cookie(test::TestRequest::get(), &cookie)
@@ -1661,7 +1727,9 @@ async fn auth_negative_paths_are_rejected() {
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 401);
 
-    let req = test::TestRequest::post().uri("/api/auth/logout").to_request();
+    let req = test::TestRequest::post()
+        .uri("/api/auth/logout")
+        .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 401);
 }
@@ -1681,7 +1749,9 @@ async fn admin_list_users_returns_expected_shape_and_members() {
     assert!(resp.status().is_success());
     let users = json_body(resp).await;
     let arr = users.as_array().expect("users array");
-    assert!(arr.iter().any(|u| u["username"] == "admin" && u["role"] == "admin"));
+    assert!(arr
+        .iter()
+        .any(|u| u["username"] == "admin" && u["role"] == "admin"));
     assert!(arr
         .iter()
         .any(|u| u["username"] == "list-user-a" && u["role"] == "user"));
@@ -1744,7 +1814,8 @@ async fn api_concurrency_enforces_logs_backups_and_restore_class_limits() {
         setup_test_app_raw_with_cfg_and_concurrency(auth::SessionConfig::for_env("development"))
             .await;
     let cookie = login_cookie(&app, ADMIN_USERNAME, ADMIN_PASSWORD).await;
-    let cookie = change_password_cookie(&app, &cookie, ADMIN_PASSWORD, ADMIN_PASSWORD_CHANGED).await;
+    let cookie =
+        change_password_cookie(&app, &cookie, ADMIN_PASSWORD, ADMIN_PASSWORD_CHANGED).await;
 
     for (slow_uri, same_class_uri) in [
         ("/api/logs-slow", "/api/logs-slow"),
