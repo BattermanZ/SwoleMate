@@ -3,6 +3,12 @@ import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 import { fileURLToPath } from 'node:url';
 
+const proxyTarget = process.env.VITE_API_PROXY_TARGET ?? 'http://127.0.0.1:2469';
+const backendProxy = {
+	target: proxyTarget,
+	changeOrigin: true
+};
+
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
 	resolve: process.env.VITEST
@@ -28,20 +34,20 @@ export default defineConfig({
 		host: true,
 		port: 2470,
 		proxy: {
-			'/api': {
-				target: process.env.VITE_API_PROXY_TARGET ?? 'http://127.0.0.1:2469',
-				changeOrigin: true
-			}
+			'/api': backendProxy,
+			'/mcp': backendProxy,
+			'/oauth': backendProxy,
+			'/.well-known': backendProxy
 		}
 	},
 	preview: {
 		host: true,
 		port: 2470,
 		proxy: {
-			'/api': {
-				target: process.env.VITE_API_PROXY_TARGET ?? 'http://127.0.0.1:2469',
-				changeOrigin: true
-			}
+			'/api': backendProxy,
+			'/mcp': backendProxy,
+			'/oauth': backendProxy,
+			'/.well-known': backendProxy
 		}
 	}
 });
