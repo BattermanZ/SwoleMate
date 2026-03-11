@@ -324,6 +324,50 @@ pub async fn handle_mcp(
         return rpc_error(rpc.id, -32600, "Invalid Request");
     }
 
+    let now = Utc::now();
+    let rate_limit_key = format!("{}:{}", principal.client_id, principal.user_id);
+    if !rate_limit::admit_request(&rate_limit_key, now) {
+        let name = if rpc.method == "tools/call" {
+            rpc.params
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or("tools/call")
+        } else {
+            rpc.method.as_str()
+        };
+        let args = if rpc.method == "tools/call" {
+            rpc.params
+                .get("arguments")
+                .cloned()
+                .unwrap_or_else(|| json!({}))
+        } else {
+            rpc.params.clone()
+        };
+        let audit_args = summarize_args(&args);
+        let ip = req
+            .connection_info()
+            .realip_remote_addr()
+            .map(str::to_string);
+        let user_agent = req
+            .headers()
+            .get(actix_web::http::header::USER_AGENT)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_string);
+        let _ = db
+            .write_mcp_audit_log(
+                Some(principal.user_id),
+                Some(&principal.client_id),
+                name,
+                false,
+                Some("rate_limited"),
+                Some(&audit_args),
+                ip.as_deref(),
+                user_agent.as_deref(),
+            )
+            .await;
+        return rpc_error(rpc.id, -32029, "Too Many Requests");
+    }
+
     match rpc.method.as_str() {
         "initialize" => rpc_result(
             rpc.id,
@@ -365,24 +409,6 @@ pub async fn handle_mcp(
                 .get(actix_web::http::header::USER_AGENT)
                 .and_then(|value| value.to_str().ok())
                 .map(str::to_string);
-            let now = Utc::now();
-            let rate_limit_key = format!("{}:{}", principal.client_id, principal.user_id);
-            if rate_limit::is_rate_limited(&rate_limit_key, now) {
-                let _ = db
-                    .write_mcp_audit_log(
-                        Some(principal.user_id),
-                        Some(&principal.client_id),
-                        name,
-                        false,
-                        Some("rate_limited"),
-                        Some(&audit_args),
-                        ip.as_deref(),
-                        user_agent.as_deref(),
-                    )
-                    .await;
-                return rpc_error(rpc.id, -32029, "Too Many Requests");
-            }
-            rate_limit::record_request(&rate_limit_key, now);
 
             let response = match call_tool(name, &args, &principal, db.get_ref()).await {
                 Ok(result) => {

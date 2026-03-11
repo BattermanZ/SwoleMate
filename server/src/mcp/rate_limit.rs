@@ -17,26 +17,74 @@ fn mcp_rate_limit_cfg() -> (usize, Duration) {
     (max_requests, Duration::minutes(1))
 }
 
-pub fn is_rate_limited(key: &str, now: DateTime<Utc>) -> bool {
+pub fn admit_request(key: &str, now: DateTime<Utc>) -> bool {
     let (max_requests, window) = mcp_rate_limit_cfg();
     let window_start = now - window;
     let mut map = match mcp_requests_map().lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     };
+
+    map.retain(|_, requests| {
+        requests.retain(|ts| *ts > window_start);
+        !requests.is_empty()
+    });
+
     let requests = map.entry(key.to_string()).or_default();
-    requests.retain(|ts| *ts > window_start);
-    requests.len() >= max_requests
+    if requests.len() >= max_requests {
+        return false;
+    }
+    requests.push(now);
+    true
 }
 
-pub fn record_request(key: &str, now: DateTime<Utc>) {
-    let (_, window) = mcp_rate_limit_cfg();
-    let window_start = now - window;
+#[cfg(test)]
+pub fn tracked_key_count() -> usize {
+    let map = match mcp_requests_map().lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    map.len()
+}
+
+#[cfg(test)]
+pub fn reset() {
     let mut map = match mcp_requests_map().lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     };
-    let requests = map.entry(key.to_string()).or_default();
-    requests.retain(|ts| *ts > window_start);
-    requests.push(now);
+    map.clear();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn admit_request_is_atomic_for_the_limit_boundary() {
+        reset();
+        let prev = std::env::var("MCP_RATE_LIMIT_PER_MINUTE").ok();
+        std::env::set_var("MCP_RATE_LIMIT_PER_MINUTE", "2");
+        let now = Utc::now();
+        assert!(admit_request("client:user", now));
+        assert!(admit_request("client:user", now));
+        assert!(!admit_request("client:user", now));
+        if let Some(prev) = prev {
+            std::env::set_var("MCP_RATE_LIMIT_PER_MINUTE", prev);
+        } else {
+            std::env::remove_var("MCP_RATE_LIMIT_PER_MINUTE");
+        }
+    }
+
+    #[test]
+    fn stale_keys_are_evicted_when_new_requests_arrive() {
+        reset();
+        let now = Utc::now();
+        let stale = now - Duration::minutes(2);
+        assert!(admit_request("stale:key", stale));
+        assert_eq!(tracked_key_count(), 1);
+
+        assert!(admit_request("fresh:key", now));
+        assert_eq!(tracked_key_count(), 1);
+    }
 }

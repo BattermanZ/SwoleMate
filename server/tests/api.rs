@@ -2811,3 +2811,68 @@ async fn mcp_write_rate_limit_returns_json_rpc_error() {
     assert_eq!(body["error"]["code"], -32029);
     assert_eq!(body["error"]["message"], "Too Many Requests");
 }
+
+#[actix_web::test]
+async fn mcp_non_tool_requests_are_rate_limited_too() {
+    let _env = TestEnv::new();
+    let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
+    let _rate_guard = EnvVarGuard::set("MCP_RATE_LIMIT_PER_MINUTE", "2");
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "mcp-init-throttle", "passwordpassword").await;
+    let _user_cookie = login_cookie_active(&app, "mcp-init-throttle", "passwordpassword").await;
+
+    let registered = register_oauth_client(&app, "workouts.read").await;
+    let client_id = registered["client_id"].as_str().unwrap();
+    let verifier = "batch3-init-throttle-verifier";
+    let code = authorize_oauth_code(
+        &app,
+        client_id,
+        "mcp-init-throttle",
+        "passwordpassword-changed",
+        "workouts.read",
+        verifier,
+    )
+    .await;
+    let tokens = exchange_token(&app, client_id, &code, verifier).await;
+    let access_token = tokens["access_token"].as_str().unwrap();
+
+    for id in 1..=2 {
+        let req = test::TestRequest::post()
+            .uri("/mcp")
+            .insert_header((
+                actix_web::http::header::AUTHORIZATION,
+                format!("Bearer {access_token}"),
+            ))
+            .set_json(json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "method": "tools/list",
+                "params": {}
+            }))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), 200);
+        let body = json_body(resp).await;
+        assert!(body.get("result").is_some());
+    }
+
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {access_token}"),
+        ))
+        .set_json(json!({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "ping",
+            "params": {}
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 200);
+    let body = json_body(resp).await;
+    assert_eq!(body["error"]["code"], -32029);
+    assert_eq!(body["error"]["message"], "Too Many Requests");
+}
