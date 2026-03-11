@@ -152,12 +152,11 @@ impl Database {
         Ok(())
     }
 
-    pub async fn consume_oauth_authorization_code(
+    pub async fn get_oauth_authorization_code(
         &self,
         code_hash: &str,
     ) -> Result<Option<OAuthAuthorizationCode>, AppError> {
         let pool = self.pool().await;
-        let mut tx = pool.begin().await.map_err(AppError::DatabaseError)?;
         let row = sqlx::query(
             r#"
             SELECT id, code_hash, client_id, user_id, redirect_uri, scopes_json, pkce_code_challenge, pkce_method, expires_at, used_at
@@ -167,31 +166,13 @@ impl Database {
             "#,
         )
         .bind(code_hash)
-        .fetch_optional(&mut *tx)
+        .fetch_optional(&pool)
         .await
         .map_err(AppError::DatabaseError)?;
 
         let Some(row) = row else {
-            tx.commit().await.map_err(AppError::DatabaseError)?;
             return Ok(None);
         };
-
-        sqlx::query(
-            r#"
-            UPDATE oauth_authorization_codes
-            SET used_at = COALESCE(used_at, CURRENT_TIMESTAMP)
-            WHERE id = ?
-            "#,
-        )
-        .bind(
-            row.try_get::<i64, _>("id")
-                .map_err(AppError::DatabaseError)?,
-        )
-        .execute(&mut *tx)
-        .await
-        .map_err(AppError::DatabaseError)?;
-
-        tx.commit().await.map_err(AppError::DatabaseError)?;
 
         let scopes: String = row
             .try_get("scopes_json")
@@ -214,6 +195,22 @@ impl Database {
             expires_at: row.try_get("expires_at").map_err(AppError::DatabaseError)?,
             used_at: row.try_get("used_at").map_err(AppError::DatabaseError)?,
         }))
+    }
+
+    pub async fn mark_oauth_authorization_code_used(&self, id: i64) -> Result<bool, AppError> {
+        let pool = self.pool().await;
+        let result = sqlx::query(
+            r#"
+            UPDATE oauth_authorization_codes
+            SET used_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND used_at IS NULL
+            "#,
+        )
+        .bind(id)
+        .execute(&pool)
+        .await
+        .map_err(AppError::DatabaseError)?;
+        Ok(result.rows_affected() == 1)
     }
 
     pub async fn create_oauth_access_token(

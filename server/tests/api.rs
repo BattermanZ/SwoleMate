@@ -2067,6 +2067,7 @@ async fn api_concurrency_enforces_logs_backups_and_restore_class_limits() {
 #[actix_web::test]
 async fn oauth_metadata_and_client_registration_work() {
     let _env = TestEnv::new();
+    let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
     let (_db, _admin_cookie, app) = setup_test_app().await;
 
     let req = test::TestRequest::get()
@@ -2100,6 +2101,7 @@ async fn oauth_metadata_and_client_registration_work() {
 #[actix_web::test]
 async fn oauth_token_flow_and_read_only_mcp_tools_work() {
     let _env = TestEnv::new();
+    let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
     let (_db, admin_cookie, app) = setup_test_app().await;
 
     create_user_as_admin(&app, &admin_cookie, "mcp-user", "passwordpassword").await;
@@ -2244,4 +2246,119 @@ async fn oauth_token_flow_and_read_only_mcp_tools_work() {
     let resp = test::call_service(&app, req).await;
     let body = json_body(resp).await;
     assert_eq!(body["error"]["message"], "Forbidden");
+}
+
+#[actix_web::test]
+async fn oauth_registration_is_disabled_by_default() {
+    let _env = TestEnv::new();
+    let (_db, _admin_cookie, app) = setup_test_app().await;
+
+    let req = test::TestRequest::post()
+        .uri("/oauth/register")
+        .set_json(json!({
+            "client_name": "Blocked Client",
+            "redirect_uris": ["https://client.example/callback"],
+            "scope": "workouts.read"
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 404);
+}
+
+#[actix_web::test]
+async fn oauth_authorize_is_rate_limited_by_ip() {
+    let _env = TestEnv::new();
+    let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
+    let _attempts_guard = EnvVarGuard::set("LOGIN_RATE_LIMIT_ATTEMPTS", "2");
+    let _window_guard = EnvVarGuard::set("LOGIN_RATE_LIMIT_WINDOW_SECONDS", "600");
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "oauth-lock", "passwordpassword").await;
+    let _cookie = login_cookie_active(&app, "oauth-lock", "passwordpassword").await;
+    let registered = register_oauth_client(&app, "workouts.read").await;
+    let client_id = registered["client_id"].as_str().unwrap();
+    let redirect_uri = "https://client.example/callback";
+    let challenge = pkce_challenge("oauth-rate-limit-verifier");
+
+    for _ in 0..2 {
+        let req = test::TestRequest::post()
+            .uri("/oauth/authorize")
+            .insert_header((actix_web::http::header::X_FORWARDED_FOR, "203.0.113.60"))
+            .set_form(&[
+                ("response_type", "code"),
+                ("client_id", client_id),
+                ("redirect_uri", redirect_uri),
+                ("scope", "workouts.read"),
+                ("state", "oauth-rate-limit"),
+                ("code_challenge", challenge.as_str()),
+                ("code_challenge_method", "S256"),
+                ("username", "oauth-lock"),
+                ("password", "wrong-password"),
+                ("approve", "yes"),
+            ])
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), 401);
+    }
+
+    let req = test::TestRequest::post()
+        .uri("/oauth/authorize")
+        .insert_header((actix_web::http::header::X_FORWARDED_FOR, "203.0.113.60"))
+        .set_form(&[
+            ("response_type", "code"),
+            ("client_id", client_id),
+            ("redirect_uri", redirect_uri),
+            ("scope", "workouts.read"),
+            ("state", "oauth-rate-limit"),
+            ("code_challenge", challenge.as_str()),
+            ("code_challenge_method", "S256"),
+            ("username", "oauth-lock"),
+            ("password", "wrong-password"),
+            ("approve", "yes"),
+        ])
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 429);
+}
+
+#[actix_web::test]
+async fn invalid_oauth_token_exchange_does_not_burn_authorization_code() {
+    let _env = TestEnv::new();
+    let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "oauth-code", "passwordpassword").await;
+    let _cookie = login_cookie_active(&app, "oauth-code", "passwordpassword").await;
+    let registered = register_oauth_client(&app, "workouts.read").await;
+    let client_id = registered["client_id"].as_str().unwrap();
+    let verifier = "oauth-good-verifier";
+    let code = authorize_oauth_code(
+        &app,
+        client_id,
+        "oauth-code",
+        "passwordpassword-changed",
+        "workouts.read",
+        verifier,
+    )
+    .await;
+
+    let req = test::TestRequest::post()
+        .uri("/oauth/token")
+        .insert_header((
+            actix_web::http::header::CONTENT_TYPE,
+            "application/x-www-form-urlencoded",
+        ))
+        .set_form(&[
+            ("grant_type", "authorization_code"),
+            ("client_id", client_id),
+            ("code", code.as_str()),
+            ("redirect_uri", "https://client.example/callback"),
+            ("code_verifier", "wrong-verifier"),
+        ])
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+
+    let tokens = exchange_token(&app, client_id, &code, verifier).await;
+    assert!(tokens["access_token"].as_str().is_some());
 }

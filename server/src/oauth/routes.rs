@@ -1,9 +1,12 @@
 use crate::auth::password;
+use crate::auth::rate_limit::{
+    clear_ip_failures, is_ip_rate_limited, record_ip_failure, request_ip,
+};
 use crate::auth::{generate_session_token, hash_session_token};
 use crate::db::Database;
 use crate::oauth::OAuthConfig;
 use crate::services::authz::normalize_scopes;
-use actix_web::{get, post, web, HttpResponse};
+use actix_web::{get, post, web, HttpRequest, HttpResponse};
 use base64::Engine;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -171,6 +174,10 @@ pub async fn register_client(
     cfg: web::Data<OAuthConfig>,
     body: web::Json<OAuthRegisterRequest>,
 ) -> HttpResponse {
+    if !cfg.allow_dynamic_client_registration {
+        return HttpResponse::NotFound().finish();
+    }
+
     if body.client_name.trim().is_empty() || body.redirect_uris.is_empty() {
         return HttpResponse::BadRequest().json(serde_json::json!({
             "error": "invalid_client_metadata"
@@ -276,10 +283,13 @@ pub async fn authorize_get(
 #[post("/oauth/authorize")]
 pub async fn authorize_post(
     db: web::Data<Database>,
+    req: HttpRequest,
     form: web::Form<OAuthAuthorizeForm>,
     cfg: web::Data<OAuthConfig>,
 ) -> HttpResponse {
     let form = form.into_inner();
+    let now = Utc::now();
+    let client_ip = request_ip(&req);
     if form.approve.as_deref() != Some("yes") {
         return HttpResponse::BadRequest().json(serde_json::json!({
             "error": "access_denied"
@@ -323,12 +333,25 @@ pub async fn authorize_post(
         }));
     }
 
+    if let Some(ip) = client_ip.as_deref() {
+        if is_ip_rate_limited(ip, now) {
+            return HttpResponse::TooManyRequests().json(serde_json::json!({
+                "error": "too_many_requests",
+                "error_description": "Too many login attempts from this IP. Try again later."
+            }));
+        }
+    }
+
     let user = match db.get_user_by_username(&form.username).await {
         Ok(Some(user)) => user,
         Ok(None) => {
+            if let Some(ip) = client_ip.as_deref() {
+                record_ip_failure(ip, now);
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
             return HttpResponse::Unauthorized().json(serde_json::json!({
                 "error": "access_denied"
-            }))
+            }));
         }
         Err(_) => {
             return HttpResponse::InternalServerError().json(serde_json::json!({
@@ -349,11 +372,18 @@ pub async fn authorize_post(
     };
     if !password_ok {
         let _ = db.record_failed_login(user.id).await;
+        if let Some(ip) = client_ip.as_deref() {
+            record_ip_failure(ip, now);
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
         return HttpResponse::Unauthorized().json(serde_json::json!({
             "error": "access_denied"
         }));
     }
     let _ = db.reset_login_failures(user.id).await;
+    if let Some(ip) = client_ip.as_deref() {
+        clear_ip_failures(ip);
+    }
 
     let code = generate_session_token();
     let code_hash = hash_session_token(&code);
@@ -445,7 +475,7 @@ async fn exchange_authorization_code(
     };
 
     let code_hash = hash_session_token(code);
-    let Some(stored) = (match db.consume_oauth_authorization_code(&code_hash).await {
+    let Some(stored) = (match db.get_oauth_authorization_code(&code_hash).await {
         Ok(value) => value,
         Err(_) => {
             return HttpResponse::InternalServerError()
@@ -470,6 +500,18 @@ async fn exchange_authorization_code(
         || code_challenge_for(code_verifier) != challenge
     {
         return HttpResponse::BadRequest().json(serde_json::json!({ "error": "invalid_grant" }));
+    }
+
+    match db.mark_oauth_authorization_code_used(stored.id).await {
+        Ok(true) => {}
+        Ok(false) => {
+            return HttpResponse::BadRequest()
+                .json(serde_json::json!({ "error": "invalid_grant" }));
+        }
+        Err(_) => {
+            return HttpResponse::InternalServerError()
+                .json(serde_json::json!({ "error": "server_error" }));
+        }
     }
 
     let access_token = generate_session_token();
@@ -585,16 +627,19 @@ async fn exchange_refresh_token(
 
 #[get("/.well-known/oauth-authorization-server")]
 pub async fn authorization_server_metadata(cfg: web::Data<OAuthConfig>) -> HttpResponse {
-    HttpResponse::Ok().json(serde_json::json!({
+    let mut metadata = serde_json::json!({
         "issuer": cfg.issuer,
         "authorization_endpoint": cfg.authorization_endpoint,
         "token_endpoint": cfg.token_endpoint,
-        "registration_endpoint": cfg.registration_endpoint,
         "response_types_supported": ["code"],
         "grant_types_supported": ["authorization_code", "refresh_token"],
         "code_challenge_methods_supported": ["S256"],
         "token_endpoint_auth_methods_supported": ["none"]
-    }))
+    });
+    if cfg.allow_dynamic_client_registration {
+        metadata["registration_endpoint"] = serde_json::json!(cfg.registration_endpoint);
+    }
+    HttpResponse::Ok().json(metadata)
 }
 
 #[get("/.well-known/oauth-protected-resource")]

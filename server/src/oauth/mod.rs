@@ -14,6 +14,7 @@ pub struct OAuthConfig {
     pub access_token_ttl: Duration,
     pub refresh_token_ttl: Duration,
     pub default_scopes: Vec<String>,
+    pub allow_dynamic_client_registration: bool,
 }
 
 impl OAuthConfig {
@@ -45,6 +46,11 @@ impl OAuthConfig {
             .ok()
             .and_then(|value| value.parse::<i64>().ok())
             .unwrap_or(30 * 24 * 60 * 60);
+        let allow_dynamic_client_registration =
+            std::env::var("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION")
+                .ok()
+                .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+                .unwrap_or(false);
 
         Self {
             issuer: base.clone(),
@@ -56,6 +62,7 @@ impl OAuthConfig {
             access_token_ttl: Duration::seconds(access_token_ttl.max(300)),
             refresh_token_ttl: Duration::seconds(refresh_token_ttl.max(3600)),
             default_scopes,
+            allow_dynamic_client_registration,
         }
     }
 }
