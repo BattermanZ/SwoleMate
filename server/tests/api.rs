@@ -525,6 +525,67 @@ async fn exchange_token(
     json_body(resp).await
 }
 
+async fn mcp_call(
+    app: &impl actix_web::dev::Service<
+        actix_http::Request,
+        Response = actix_web::dev::ServiceResponse,
+        Error = actix_web::Error,
+    >,
+    access_token: &str,
+    id: i64,
+    name: &str,
+    arguments: Value,
+) -> Value {
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {access_token}"),
+        ))
+        .set_json(json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": "tools/call",
+            "params": {
+                "name": name,
+                "arguments": arguments
+            }
+        }))
+        .to_request();
+    let resp = test::call_service(app, req).await;
+    assert_eq!(resp.status(), 200);
+    json_body(resp).await
+}
+
+async fn latest_mcp_audit_entries(
+    db: &Database,
+    limit: i64,
+) -> Vec<(String, bool, Option<String>)> {
+    let pool = db.pool().await;
+    let rows = sqlx::query(
+        r#"
+        SELECT tool_name, success, error_code
+        FROM mcp_audit_log
+        ORDER BY id DESC
+        LIMIT ?
+        "#,
+    )
+    .bind(limit)
+    .fetch_all(&pool)
+    .await
+    .expect("fetch mcp audit log");
+
+    rows.into_iter()
+        .map(|row| {
+            (
+                row.get::<String, _>("tool_name"),
+                row.get::<i64, _>("success") != 0,
+                row.get::<Option<String>, _>("error_code"),
+            )
+        })
+        .collect()
+}
+
 #[actix_web::test]
 async fn workout_stats_empty_workouts_returns_empty_arrays() {
     let _env = TestEnv::new();
@@ -2361,4 +2422,392 @@ async fn invalid_oauth_token_exchange_does_not_burn_authorization_code() {
 
     let tokens = exchange_token(&app, client_id, &code, verifier).await;
     assert!(tokens["access_token"].as_str().is_some());
+}
+
+#[actix_web::test]
+async fn oauth_token_flow_and_write_mcp_tools_work() {
+    let _env = TestEnv::new();
+    let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "mcp-write", "passwordpassword").await;
+    let _user_cookie = login_cookie_active(&app, "mcp-write", "passwordpassword").await;
+
+    let registered =
+        register_oauth_client(&app, "workouts.read progress.read workouts.write").await;
+    let client_id = registered["client_id"].as_str().unwrap();
+    let verifier = "batch3-write-verifier";
+    let code = authorize_oauth_code(
+        &app,
+        client_id,
+        "mcp-write",
+        "passwordpassword-changed",
+        "workouts.read progress.read workouts.write",
+        verifier,
+    )
+    .await;
+    let tokens = exchange_token(&app, client_id, &code, verifier).await;
+    let access_token = tokens["access_token"].as_str().unwrap();
+
+    let now = chrono::Utc::now();
+    let created = mcp_call(
+        &app,
+        access_token,
+        1,
+        "create_workout",
+        json!({
+            "date": now,
+            "start_time": now,
+            "notes": "mcp write batch"
+        }),
+    )
+    .await;
+    let workout_id = created["result"]["structuredContent"]["id"]
+        .as_i64()
+        .unwrap();
+
+    let add_exercise = mcp_call(
+        &app,
+        access_token,
+        2,
+        "add_exercise",
+        json!({
+            "workout_id": workout_id,
+            "exercise_type": "bench press",
+            "start_time": now,
+            "notes": "heavy day",
+            "settings": [{"key": "bench", "value": "flat"}]
+        }),
+    )
+    .await;
+    let exercise_id = add_exercise["result"]["structuredContent"]["id"]
+        .as_i64()
+        .unwrap();
+
+    let replaced = mcp_call(
+        &app,
+        access_token,
+        3,
+        "replace_sets",
+        json!({
+            "exercise_id": exercise_id,
+            "sets": [
+                { "reps": 5, "weight": 100.0 },
+                { "reps": 5, "weight": 102.5, "notes": "top set" }
+            ]
+        }),
+    )
+    .await;
+    assert_eq!(
+        replaced["result"]["structuredContent"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+
+    let ended_exercise = mcp_call(
+        &app,
+        access_token,
+        4,
+        "end_exercise",
+        json!({
+            "id": exercise_id,
+            "end_time": now + chrono::Duration::minutes(30),
+            "notes": "done"
+        }),
+    )
+    .await;
+    assert_eq!(
+        ended_exercise["result"]["structuredContent"]["message"],
+        "Exercise ended successfully"
+    );
+
+    let ended_workout = mcp_call(
+        &app,
+        access_token,
+        5,
+        "end_workout",
+        json!({
+            "id": workout_id,
+            "end_time": now + chrono::Duration::minutes(45),
+            "notes": "wrapped",
+            "feedback": "😊"
+        }),
+    )
+    .await;
+    assert_eq!(
+        ended_workout["result"]["structuredContent"]["message"],
+        "Workout ended successfully"
+    );
+
+    let fetched = mcp_call(
+        &app,
+        access_token,
+        6,
+        "get_workout",
+        json!({ "id": workout_id }),
+    )
+    .await;
+    assert_eq!(
+        fetched["result"]["structuredContent"]["exercises"][0]["sets"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+}
+
+#[actix_web::test]
+async fn read_only_mcp_token_cannot_write() {
+    let _env = TestEnv::new();
+    let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "mcp-readonly", "passwordpassword").await;
+    let _user_cookie = login_cookie_active(&app, "mcp-readonly", "passwordpassword").await;
+
+    let registered = register_oauth_client(&app, "workouts.read progress.read").await;
+    let client_id = registered["client_id"].as_str().unwrap();
+    let verifier = "batch3-readonly-verifier";
+    let code = authorize_oauth_code(
+        &app,
+        client_id,
+        "mcp-readonly",
+        "passwordpassword-changed",
+        "workouts.read progress.read",
+        verifier,
+    )
+    .await;
+    let tokens = exchange_token(&app, client_id, &code, verifier).await;
+    let access_token = tokens["access_token"].as_str().unwrap();
+
+    let body = mcp_call(
+        &app,
+        access_token,
+        1,
+        "create_workout",
+        json!({
+            "date": chrono::Utc::now(),
+            "start_time": chrono::Utc::now()
+        }),
+    )
+    .await;
+    assert_eq!(body["error"]["message"], "Forbidden");
+}
+
+#[actix_web::test]
+async fn write_mcp_token_cannot_mutate_another_users_workout() {
+    let _env = TestEnv::new();
+    let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "mcp-owner-a", "passwordpassword").await;
+    create_user_as_admin(&app, &admin_cookie, "mcp-owner-b", "passwordpassword").await;
+    let user_a_cookie = login_cookie_active(&app, "mcp-owner-a", "passwordpassword").await;
+    let user_b_cookie = login_cookie_active(&app, "mcp-owner-b", "passwordpassword").await;
+
+    let req = with_cookie(test::TestRequest::post(), &user_b_cookie)
+        .uri("/api/workouts")
+        .set_json(json!({
+            "date": chrono::Utc::now(),
+            "start_time": chrono::Utc::now(),
+            "notes": "belongs to b"
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 201);
+    let other_workout_id = json_body(resp).await["id"].as_i64().unwrap();
+
+    let registered = register_oauth_client(&app, "workouts.read workouts.write").await;
+    let client_id = registered["client_id"].as_str().unwrap();
+    let verifier = "batch3-owner-verifier";
+    let code = authorize_oauth_code(
+        &app,
+        client_id,
+        "mcp-owner-a",
+        "passwordpassword-changed",
+        "workouts.read workouts.write",
+        verifier,
+    )
+    .await;
+    let tokens = exchange_token(&app, client_id, &code, verifier).await;
+    let access_token = tokens["access_token"].as_str().unwrap();
+
+    let own_workout_resp = with_cookie(test::TestRequest::post(), &user_a_cookie)
+        .uri("/api/workouts")
+        .set_json(json!({
+            "date": chrono::Utc::now(),
+            "start_time": chrono::Utc::now(),
+            "notes": "belongs to a"
+        }))
+        .to_request();
+    let own_workout_resp = test::call_service(&app, own_workout_resp).await;
+    assert_eq!(own_workout_resp.status(), 201);
+
+    let body = mcp_call(
+        &app,
+        access_token,
+        1,
+        "add_exercise",
+        json!({
+            "workout_id": other_workout_id,
+            "exercise_type": "squat",
+            "start_time": chrono::Utc::now()
+        }),
+    )
+    .await;
+    assert_eq!(body["error"]["message"], "Not found");
+}
+
+#[actix_web::test]
+async fn write_mcp_tools_are_audited_for_success_and_failure() {
+    let _env = TestEnv::new();
+    let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
+    let (db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "mcp-audit", "passwordpassword").await;
+    let _user_cookie = login_cookie_active(&app, "mcp-audit", "passwordpassword").await;
+
+    let registered = register_oauth_client(&app, "workouts.read workouts.write").await;
+    let client_id = registered["client_id"].as_str().unwrap();
+    let verifier = "batch3-audit-verifier";
+    let code = authorize_oauth_code(
+        &app,
+        client_id,
+        "mcp-audit",
+        "passwordpassword-changed",
+        "workouts.read workouts.write",
+        verifier,
+    )
+    .await;
+    let tokens = exchange_token(&app, client_id, &code, verifier).await;
+    let access_token = tokens["access_token"].as_str().unwrap();
+
+    let _created = mcp_call(
+        &app,
+        access_token,
+        1,
+        "create_workout",
+        json!({
+            "date": chrono::Utc::now(),
+            "start_time": chrono::Utc::now()
+        }),
+    )
+    .await;
+    let failed = mcp_call(
+        &app,
+        access_token,
+        2,
+        "end_workout",
+        json!({
+            "id": 999999,
+            "end_time": chrono::Utc::now()
+        }),
+    )
+    .await;
+    assert_eq!(failed["error"]["message"], "Not found");
+
+    let entries = latest_mcp_audit_entries(&db, 2).await;
+    assert_eq!(entries[0].0, "end_workout");
+    assert!(!entries[0].1);
+    assert_eq!(entries[0].2.as_deref(), Some("not_found"));
+    assert_eq!(entries[1].0, "create_workout");
+    assert!(entries[1].1);
+}
+
+#[actix_web::test]
+async fn invalid_write_mcp_payload_returns_json_rpc_error() {
+    let _env = TestEnv::new();
+    let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "mcp-invalid", "passwordpassword").await;
+    let _user_cookie = login_cookie_active(&app, "mcp-invalid", "passwordpassword").await;
+
+    let registered = register_oauth_client(&app, "workouts.write").await;
+    let client_id = registered["client_id"].as_str().unwrap();
+    let verifier = "batch3-invalid-verifier";
+    let code = authorize_oauth_code(
+        &app,
+        client_id,
+        "mcp-invalid",
+        "passwordpassword-changed",
+        "workouts.write",
+        verifier,
+    )
+    .await;
+    let tokens = exchange_token(&app, client_id, &code, verifier).await;
+    let access_token = tokens["access_token"].as_str().unwrap();
+
+    let body = mcp_call(
+        &app,
+        access_token,
+        1,
+        "replace_sets",
+        json!({
+            "exercise_id": 123,
+            "sets": [
+                { "reps": 5, "weight": 20.0, "weight_left": 10.0 }
+            ]
+        }),
+    )
+    .await;
+    assert_eq!(body["error"]["code"], -32602);
+    assert_eq!(body["error"]["message"], "Invalid params");
+}
+
+#[actix_web::test]
+async fn mcp_write_rate_limit_returns_json_rpc_error() {
+    let _env = TestEnv::new();
+    let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
+    let _rate_guard = EnvVarGuard::set("MCP_RATE_LIMIT_PER_MINUTE", "2");
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "mcp-throttle", "passwordpassword").await;
+    let _user_cookie = login_cookie_active(&app, "mcp-throttle", "passwordpassword").await;
+
+    let registered = register_oauth_client(&app, "workouts.write").await;
+    let client_id = registered["client_id"].as_str().unwrap();
+    let verifier = "batch3-throttle-verifier";
+    let code = authorize_oauth_code(
+        &app,
+        client_id,
+        "mcp-throttle",
+        "passwordpassword-changed",
+        "workouts.write",
+        verifier,
+    )
+    .await;
+    let tokens = exchange_token(&app, client_id, &code, verifier).await;
+    let access_token = tokens["access_token"].as_str().unwrap();
+
+    for id in 1..=2 {
+        let body = mcp_call(
+            &app,
+            access_token,
+            id,
+            "create_workout",
+            json!({
+                "date": chrono::Utc::now(),
+                "start_time": chrono::Utc::now()
+            }),
+        )
+        .await;
+        assert!(body.get("result").is_some());
+    }
+
+    let body = mcp_call(
+        &app,
+        access_token,
+        3,
+        "create_workout",
+        json!({
+            "date": chrono::Utc::now(),
+            "start_time": chrono::Utc::now()
+        }),
+    )
+    .await;
+    assert_eq!(body["error"]["code"], -32029);
+    assert_eq!(body["error"]["message"], "Too Many Requests");
 }
