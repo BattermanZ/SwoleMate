@@ -586,6 +586,25 @@ async fn latest_mcp_audit_entries(
         .collect()
 }
 
+async fn latest_mcp_audit_payload(db: &Database) -> Value {
+    let pool = db.pool().await;
+    let row = sqlx::query(
+        r#"
+        SELECT input_summary_json
+        FROM mcp_audit_log
+        ORDER BY id DESC
+        LIMIT 1
+        "#,
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("fetch mcp audit payload");
+    let payload = row
+        .get::<Option<String>, _>("input_summary_json")
+        .unwrap_or_default();
+    serde_json::from_str(&payload).expect("parse mcp audit payload")
+}
+
 #[actix_web::test]
 async fn workout_stats_empty_workouts_returns_empty_arrays() {
     let _env = TestEnv::new();
@@ -2160,6 +2179,51 @@ async fn oauth_metadata_and_client_registration_work() {
 }
 
 #[actix_web::test]
+async fn oauth_registration_rejects_non_loopback_http_redirect_uris() {
+    let _env = TestEnv::new();
+    let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
+    let (_db, _admin_cookie, app) = setup_test_app().await;
+
+    let req = test::TestRequest::post()
+        .uri("/oauth/register")
+        .set_json(json!({
+            "client_name": "Bad Client",
+            "redirect_uris": ["http://evil.example/callback"],
+            "scope": "workouts.read"
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+    let body = json_body(resp).await;
+    assert_eq!(body["error"], "invalid_redirect_uri");
+}
+
+#[actix_web::test]
+async fn oauth_authorize_page_displays_redirect_host() {
+    let _env = TestEnv::new();
+    let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
+    let (_db, _admin_cookie, app) = setup_test_app().await;
+
+    let registered = register_oauth_client(&app, "workouts.read").await;
+    let client_id = registered["client_id"].as_str().unwrap();
+    let challenge = pkce_challenge("display-host-verifier");
+
+    let req = test::TestRequest::get()
+        .uri(&format!(
+            "/oauth/authorize?response_type=code&client_id={}&redirect_uri={}&scope={}&state=test-state&code_challenge={}&code_challenge_method=S256",
+            urlencoding::encode(client_id),
+            urlencoding::encode("https://client.example/callback"),
+            urlencoding::encode("workouts.read"),
+            urlencoding::encode(&challenge),
+        ))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 200);
+    let body = String::from_utf8(test::read_body(resp).await.to_vec()).expect("html body");
+    assert!(body.contains("Redirect host:</strong> client.example"));
+}
+
+#[actix_web::test]
 async fn oauth_token_flow_and_read_only_mcp_tools_work() {
     let _env = TestEnv::new();
     let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
@@ -2422,6 +2486,185 @@ async fn invalid_oauth_token_exchange_does_not_burn_authorization_code() {
 
     let tokens = exchange_token(&app, client_id, &code, verifier).await;
     assert!(tokens["access_token"].as_str().is_some());
+}
+
+#[actix_web::test]
+async fn refresh_tokens_rotate_and_old_refresh_token_is_rejected() {
+    let _env = TestEnv::new();
+    let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "oauth-refresh", "passwordpassword").await;
+    let _cookie = login_cookie_active(&app, "oauth-refresh", "passwordpassword").await;
+    let registered = register_oauth_client(&app, "workouts.read").await;
+    let client_id = registered["client_id"].as_str().unwrap();
+    let verifier = "refresh-rotate-verifier";
+    let code = authorize_oauth_code(
+        &app,
+        client_id,
+        "oauth-refresh",
+        "passwordpassword-changed",
+        "workouts.read",
+        verifier,
+    )
+    .await;
+    let tokens = exchange_token(&app, client_id, &code, verifier).await;
+    let refresh_token = tokens["refresh_token"].as_str().unwrap();
+
+    let req = test::TestRequest::post()
+        .uri("/oauth/token")
+        .insert_header((
+            actix_web::http::header::CONTENT_TYPE,
+            "application/x-www-form-urlencoded",
+        ))
+        .set_form(&[
+            ("grant_type", "refresh_token"),
+            ("client_id", client_id),
+            ("refresh_token", refresh_token),
+        ])
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 200);
+    let refreshed = json_body(resp).await;
+    let next_refresh = refreshed["refresh_token"].as_str().unwrap();
+    assert_ne!(next_refresh, refresh_token);
+
+    let req = test::TestRequest::post()
+        .uri("/oauth/token")
+        .insert_header((
+            actix_web::http::header::CONTENT_TYPE,
+            "application/x-www-form-urlencoded",
+        ))
+        .set_form(&[
+            ("grant_type", "refresh_token"),
+            ("client_id", client_id),
+            ("refresh_token", refresh_token),
+        ])
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+    let body = json_body(resp).await;
+    assert_eq!(body["error"], "invalid_grant");
+}
+
+#[actix_web::test]
+async fn oauth_revoke_revokes_access_token_for_mcp() {
+    let _env = TestEnv::new();
+    let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "oauth-revoke", "passwordpassword").await;
+    let _cookie = login_cookie_active(&app, "oauth-revoke", "passwordpassword").await;
+    let registered = register_oauth_client(&app, "workouts.read").await;
+    let client_id = registered["client_id"].as_str().unwrap();
+    let verifier = "revoke-verifier";
+    let code = authorize_oauth_code(
+        &app,
+        client_id,
+        "oauth-revoke",
+        "passwordpassword-changed",
+        "workouts.read",
+        verifier,
+    )
+    .await;
+    let tokens = exchange_token(&app, client_id, &code, verifier).await;
+    let access_token = tokens["access_token"].as_str().unwrap();
+
+    let req = test::TestRequest::post()
+        .uri("/oauth/revoke")
+        .insert_header((
+            actix_web::http::header::CONTENT_TYPE,
+            "application/x-www-form-urlencoded",
+        ))
+        .set_form(&[
+            ("token", access_token),
+            ("client_id", client_id),
+            ("token_type_hint", "access_token"),
+        ])
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 200);
+
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {access_token}"),
+        ))
+        .set_json(json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {}
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 401);
+}
+
+#[actix_web::test]
+async fn disabled_oauth_client_cannot_refresh_or_access_mcp() {
+    let _env = TestEnv::new();
+    let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
+    let (db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "oauth-disabled", "passwordpassword").await;
+    let _cookie = login_cookie_active(&app, "oauth-disabled", "passwordpassword").await;
+    let registered = register_oauth_client(&app, "workouts.read").await;
+    let client_id = registered["client_id"].as_str().unwrap().to_string();
+    let verifier = "disabled-client-verifier";
+    let code = authorize_oauth_code(
+        &app,
+        &client_id,
+        "oauth-disabled",
+        "passwordpassword-changed",
+        "workouts.read",
+        verifier,
+    )
+    .await;
+    let tokens = exchange_token(&app, &client_id, &code, verifier).await;
+    let access_token = tokens["access_token"].as_str().unwrap().to_string();
+    let refresh_token = tokens["refresh_token"].as_str().unwrap().to_string();
+
+    let pool = db.pool().await;
+    sqlx::query("UPDATE oauth_clients SET disabled_at = CURRENT_TIMESTAMP WHERE client_id = ?")
+        .bind(&client_id)
+        .execute(&pool)
+        .await
+        .expect("disable oauth client");
+
+    let req = test::TestRequest::post()
+        .uri("/oauth/token")
+        .insert_header((
+            actix_web::http::header::CONTENT_TYPE,
+            "application/x-www-form-urlencoded",
+        ))
+        .set_form(&[
+            ("grant_type", "refresh_token"),
+            ("client_id", client_id.as_str()),
+            ("refresh_token", refresh_token.as_str()),
+        ])
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+    let body = json_body(resp).await;
+    assert_eq!(body["error"], "invalid_grant");
+
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {access_token}"),
+        ))
+        .set_json(json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {}
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 401);
 }
 
 #[actix_web::test]
@@ -2714,6 +2957,49 @@ async fn write_mcp_tools_are_audited_for_success_and_failure() {
     assert_eq!(entries[0].2.as_deref(), Some("not_found"));
     assert_eq!(entries[1].0, "create_workout");
     assert!(entries[1].1);
+}
+
+#[actix_web::test]
+async fn mcp_audit_log_redacts_notes_and_feedback() {
+    let _env = TestEnv::new();
+    let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
+    let (db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "mcp-redact", "passwordpassword").await;
+    let _user_cookie = login_cookie_active(&app, "mcp-redact", "passwordpassword").await;
+
+    let registered = register_oauth_client(&app, "workouts.write").await;
+    let client_id = registered["client_id"].as_str().unwrap();
+    let verifier = "redact-verifier";
+    let code = authorize_oauth_code(
+        &app,
+        client_id,
+        "mcp-redact",
+        "passwordpassword-changed",
+        "workouts.write",
+        verifier,
+    )
+    .await;
+    let tokens = exchange_token(&app, client_id, &code, verifier).await;
+    let access_token = tokens["access_token"].as_str().unwrap();
+
+    let _ = mcp_call(
+        &app,
+        access_token,
+        1,
+        "create_workout",
+        json!({
+            "date": chrono::Utc::now(),
+            "start_time": chrono::Utc::now(),
+            "notes": "secret note",
+            "feedback": "should not appear"
+        }),
+    )
+    .await;
+
+    let payload = latest_mcp_audit_payload(&db).await;
+    assert_eq!(payload["notes"], "<redacted>");
+    assert_eq!(payload["feedback"], "<redacted>");
 }
 
 #[actix_web::test]

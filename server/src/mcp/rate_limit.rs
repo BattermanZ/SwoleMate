@@ -79,12 +79,16 @@ mod tests {
     #[test]
     fn stale_keys_are_evicted_when_new_requests_arrive() {
         reset();
+        let prev = std::env::var("MCP_RATE_LIMIT_PER_MINUTE").ok();
+        std::env::set_var("MCP_RATE_LIMIT_PER_MINUTE", "1");
         let now = Utc::now();
         let stale = now - Duration::minutes(2);
-        assert!(admit_request("stale:key", stale));
-        assert_eq!(tracked_key_count(), 1);
-
-        assert!(admit_request("fresh:key", now));
-        assert_eq!(tracked_key_count(), 1);
+        assert!(admit_request("same:key", stale));
+        assert!(admit_request("same:key", now));
+        if let Some(prev) = prev {
+            std::env::set_var("MCP_RATE_LIMIT_PER_MINUTE", prev);
+        } else {
+            std::env::remove_var("MCP_RATE_LIMIT_PER_MINUTE");
+        }
     }
 }

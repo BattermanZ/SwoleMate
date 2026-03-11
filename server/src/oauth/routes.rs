@@ -11,6 +11,7 @@ use base64::Engine;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use url::Url;
 
 #[derive(Debug, Deserialize)]
 pub struct OAuthRegisterRequest {
@@ -79,6 +80,40 @@ pub struct OAuthTokenForm {
     refresh_token: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct OAuthRevokeForm {
+    token: String,
+    client_id: String,
+    #[serde(default)]
+    token_type_hint: Option<String>,
+}
+
+fn is_loopback_host(host: &str) -> bool {
+    if host.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+    host.parse::<std::net::IpAddr>()
+        .map(|ip| ip.is_loopback())
+        .unwrap_or(false)
+}
+
+fn validate_redirect_uri(uri: &str) -> bool {
+    let Ok(parsed) = Url::parse(uri) else {
+        return false;
+    };
+    if parsed.fragment().is_some() || !parsed.username().is_empty() || parsed.password().is_some() {
+        return false;
+    }
+    let Some(host) = parsed.host_str() else {
+        return false;
+    };
+    match parsed.scheme() {
+        "https" => true,
+        "http" => is_loopback_host(host),
+        _ => false,
+    }
+}
+
 fn validate_client_redirect_and_scopes(
     client: &crate::db::oauth::OAuthClient,
     redirect_uri: &str,
@@ -107,6 +142,10 @@ fn validate_client_redirect_and_scopes(
 }
 
 fn build_authorize_html(query: &OAuthAuthorizeQuery, client_name: &str) -> String {
+    let redirect_host = Url::parse(&query.redirect_uri)
+        .ok()
+        .and_then(|url| url.host_str().map(ToString::to_string))
+        .unwrap_or_else(|| query.redirect_uri.clone());
     format!(
         r#"<!doctype html>
 <html lang="en">
@@ -128,6 +167,7 @@ fn build_authorize_html(query: &OAuthAuthorizeQuery, client_name: &str) -> Strin
     <h1>Authorize {client_name}</h1>
     <p>This client is requesting access to your SwoleMate MCP server.</p>
     <div class="scopes"><strong>Requested scopes:</strong> {scopes}</div>
+    <div class="scopes"><strong>Redirect host:</strong> {redirect_host}</div>
     <form method="post" action="/oauth/authorize">
       <input type="hidden" name="response_type" value="{response_type}">
       <input type="hidden" name="client_id" value="{client_id}">
@@ -146,6 +186,7 @@ fn build_authorize_html(query: &OAuthAuthorizeQuery, client_name: &str) -> Strin
 </html>"#,
         client_name = escape_html(client_name),
         scopes = escape_html(query.scope.as_deref().unwrap_or("default scopes")),
+        redirect_host = escape_html(&redirect_host),
         response_type = escape_html(&query.response_type),
         client_id = escape_html(&query.client_id),
         redirect_uri = escape_html(&query.redirect_uri),
@@ -181,6 +222,15 @@ pub async fn register_client(
     if body.client_name.trim().is_empty() || body.redirect_uris.is_empty() {
         return HttpResponse::BadRequest().json(serde_json::json!({
             "error": "invalid_client_metadata"
+        }));
+    }
+    if body
+        .redirect_uris
+        .iter()
+        .any(|uri| !validate_redirect_uri(uri))
+    {
+        return HttpResponse::BadRequest().json(serde_json::json!({
+            "error": "invalid_redirect_uri"
         }));
     }
 
@@ -473,6 +523,9 @@ async fn exchange_authorization_code(
                 .json(serde_json::json!({ "error": "invalid_client" }))
         }
     };
+    if client.disabled_at.is_some() {
+        return HttpResponse::BadRequest().json(serde_json::json!({ "error": "invalid_client" }));
+    }
 
     let code_hash = hash_session_token(code);
     let Some(stored) = (match db.get_oauth_authorization_code(&code_hash).await {
@@ -577,25 +630,31 @@ async fn exchange_refresh_token(
     };
 
     let token_hash = hash_session_token(refresh_token);
-    let Some((stored_client_id, user_id, scopes, expires_at, revoked_at)) =
-        (match db.get_oauth_refresh_token(&token_hash).await {
-            Ok(value) => value,
-            Err(_) => {
-                return HttpResponse::InternalServerError()
-                    .json(serde_json::json!({ "error": "server_error" }))
-            }
-        })
-    else {
+    let Some(stored) = (match db.get_oauth_refresh_token(&token_hash).await {
+        Ok(value) => value,
+        Err(_) => {
+            return HttpResponse::InternalServerError()
+                .json(serde_json::json!({ "error": "server_error" }))
+        }
+    }) else {
         return HttpResponse::BadRequest().json(serde_json::json!({ "error": "invalid_grant" }));
     };
 
-    if stored_client_id != client_id || revoked_at.is_some() || expires_at <= Utc::now() {
+    if stored.client_id != client_id
+        || stored.revoked_at.is_some()
+        || stored.expires_at <= Utc::now()
+        || stored.user_disabled_at.is_some()
+        || stored.user_must_change_password
+        || stored.client_disabled_at.is_some()
+    {
         return HttpResponse::BadRequest().json(serde_json::json!({ "error": "invalid_grant" }));
     }
 
     let access_token = generate_session_token();
+    let next_refresh_token = generate_session_token();
     let access_token_hash = hash_session_token(&access_token);
-    let scopes_json = match serde_json::to_string(&scopes) {
+    let next_refresh_token_hash = hash_session_token(&next_refresh_token);
+    let scopes_json = match serde_json::to_string(&stored.scopes) {
         Ok(value) => value,
         Err(_) => {
             return HttpResponse::InternalServerError()
@@ -606,7 +665,7 @@ async fn exchange_refresh_token(
         .create_oauth_access_token(
             &access_token_hash,
             client_id,
-            user_id,
+            stored.user_id,
             &scopes_json,
             Utc::now() + cfg.access_token_ttl,
         )
@@ -616,13 +675,80 @@ async fn exchange_refresh_token(
         return HttpResponse::InternalServerError()
             .json(serde_json::json!({ "error": "server_error" }));
     }
+    if db
+        .create_oauth_refresh_token(
+            &next_refresh_token_hash,
+            client_id,
+            stored.user_id,
+            &scopes_json,
+            Utc::now() + cfg.refresh_token_ttl,
+        )
+        .await
+        .is_err()
+    {
+        return HttpResponse::InternalServerError()
+            .json(serde_json::json!({ "error": "server_error" }));
+    }
+    match db.revoke_oauth_refresh_token(stored.id).await {
+        Ok(true) => {}
+        Ok(false) => {
+            return HttpResponse::BadRequest()
+                .json(serde_json::json!({ "error": "invalid_grant" }));
+        }
+        Err(_) => {
+            return HttpResponse::InternalServerError()
+                .json(serde_json::json!({ "error": "server_error" }));
+        }
+    }
 
     HttpResponse::Ok().json(serde_json::json!({
         "access_token": access_token,
         "token_type": "Bearer",
         "expires_in": cfg.access_token_ttl.num_seconds(),
-        "scope": scopes.join(" ")
+        "scope": stored.scopes.join(" "),
+        "refresh_token": next_refresh_token
     }))
+}
+
+#[post("/oauth/revoke")]
+pub async fn revoke_token(
+    db: web::Data<Database>,
+    form: web::Form<OAuthRevokeForm>,
+) -> HttpResponse {
+    let form = form.into_inner();
+    let token_hash = hash_session_token(&form.token);
+    let hint = form.token_type_hint.as_deref().unwrap_or_default();
+
+    let result = match hint {
+        "refresh_token" => {
+            db.revoke_oauth_refresh_token_by_hash(&token_hash, &form.client_id)
+                .await
+        }
+        "access_token" => {
+            db.revoke_oauth_access_token_by_hash(&token_hash, &form.client_id)
+                .await
+        }
+        _ => {
+            let access = db
+                .revoke_oauth_access_token_by_hash(&token_hash, &form.client_id)
+                .await;
+            let refresh = db
+                .revoke_oauth_refresh_token_by_hash(&token_hash, &form.client_id)
+                .await;
+            match (access, refresh) {
+                (Ok(true), _) | (_, Ok(true)) | (Ok(false), Ok(false)) => Ok(true),
+                (Err(err), _) => Err(err),
+                (_, Err(err)) => Err(err),
+            }
+        }
+    };
+
+    match result {
+        Ok(_) => HttpResponse::Ok().finish(),
+        Err(_) => HttpResponse::InternalServerError().json(serde_json::json!({
+            "error": "server_error"
+        })),
+    }
 }
 
 #[get("/.well-known/oauth-authorization-server")]
@@ -656,6 +782,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(authorize_get)
         .service(authorize_post)
         .service(token)
+        .service(revoke_token)
         .service(authorization_server_metadata)
         .service(protected_resource_metadata);
 }

@@ -25,6 +25,7 @@ rand = "0.8"
 sha2 = "0.10"
 base64 = "0.22"
 hex = "0.4"
+url = "2.5"
 
 [dev-dependencies]
 actix-http = "3.9"

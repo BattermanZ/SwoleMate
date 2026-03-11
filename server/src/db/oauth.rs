@@ -39,6 +39,19 @@ pub struct OAuthAccessToken {
     pub revoked_at: Option<DateTime<Utc>>,
 }
 
+#[derive(Debug, Clone)]
+pub struct OAuthRefreshToken {
+    pub id: i64,
+    pub client_id: String,
+    pub user_id: i64,
+    pub scopes: Vec<String>,
+    pub expires_at: DateTime<Utc>,
+    pub revoked_at: Option<DateTime<Utc>>,
+    pub user_disabled_at: Option<DateTime<Utc>>,
+    pub user_must_change_password: bool,
+    pub client_disabled_at: Option<DateTime<Utc>>,
+}
+
 fn parse_scopes(raw: &str) -> Result<Vec<String>, AppError> {
     serde_json::from_str::<Vec<String>>(raw)
         .map_err(|e| AppError::InternalError(format!("invalid stored scopes json: {e}")))
@@ -278,12 +291,14 @@ impl Database {
                 oat.scopes_json,
                 oat.expires_at,
                 oat.revoked_at,
+                oc.disabled_at as client_disabled_at,
                 u.id as user_id,
                 u.username,
                 u.role,
                 u.must_change_password,
                 u.disabled_at
             FROM oauth_access_tokens oat
+            JOIN oauth_clients oc ON oc.client_id = oat.client_id
             JOIN users u ON u.id = oat.user_id
             WHERE oat.token_hash = ?
             LIMIT 1
@@ -301,7 +316,10 @@ impl Database {
         let disabled_at: Option<DateTime<Utc>> = row
             .try_get("disabled_at")
             .map_err(AppError::DatabaseError)?;
-        if disabled_at.is_some() {
+        let client_disabled_at: Option<DateTime<Utc>> = row
+            .try_get("client_disabled_at")
+            .map_err(AppError::DatabaseError)?;
+        if disabled_at.is_some() || client_disabled_at.is_some() {
             return Ok(None);
         }
 
@@ -335,21 +353,23 @@ impl Database {
     pub async fn get_oauth_refresh_token(
         &self,
         token_hash: &str,
-    ) -> Result<
-        Option<(
-            String,
-            i64,
-            Vec<String>,
-            DateTime<Utc>,
-            Option<DateTime<Utc>>,
-        )>,
-        AppError,
-    > {
+    ) -> Result<Option<OAuthRefreshToken>, AppError> {
         let pool = self.pool().await;
         let row = sqlx::query(
             r#"
-            SELECT client_id, user_id, scopes_json, expires_at, revoked_at
-            FROM oauth_refresh_tokens
+            SELECT
+                ort.id,
+                ort.client_id,
+                ort.user_id,
+                ort.scopes_json,
+                ort.expires_at,
+                ort.revoked_at,
+                u.disabled_at as user_disabled_at,
+                u.must_change_password,
+                oc.disabled_at as client_disabled_at
+            FROM oauth_refresh_tokens ort
+            JOIN users u ON u.id = ort.user_id
+            JOIN oauth_clients oc ON oc.client_id = ort.client_id
             WHERE token_hash = ?
             LIMIT 1
             "#,
@@ -366,13 +386,82 @@ impl Database {
         let scopes: String = row
             .try_get("scopes_json")
             .map_err(AppError::DatabaseError)?;
-        Ok(Some((
-            row.try_get("client_id").map_err(AppError::DatabaseError)?,
-            row.try_get("user_id").map_err(AppError::DatabaseError)?,
-            parse_scopes(&scopes)?,
-            row.try_get("expires_at").map_err(AppError::DatabaseError)?,
-            row.try_get("revoked_at").map_err(AppError::DatabaseError)?,
-        )))
+        Ok(Some(OAuthRefreshToken {
+            id: row.try_get("id").map_err(AppError::DatabaseError)?,
+            client_id: row.try_get("client_id").map_err(AppError::DatabaseError)?,
+            user_id: row.try_get("user_id").map_err(AppError::DatabaseError)?,
+            scopes: parse_scopes(&scopes)?,
+            expires_at: row.try_get("expires_at").map_err(AppError::DatabaseError)?,
+            revoked_at: row.try_get("revoked_at").map_err(AppError::DatabaseError)?,
+            user_disabled_at: row
+                .try_get("user_disabled_at")
+                .map_err(AppError::DatabaseError)?,
+            user_must_change_password: row
+                .try_get::<i64, _>("must_change_password")
+                .map_err(AppError::DatabaseError)?
+                != 0,
+            client_disabled_at: row
+                .try_get("client_disabled_at")
+                .map_err(AppError::DatabaseError)?,
+        }))
+    }
+
+    pub async fn revoke_oauth_refresh_token(&self, id: i64) -> Result<bool, AppError> {
+        let pool = self.pool().await;
+        let result = sqlx::query(
+            r#"
+            UPDATE oauth_refresh_tokens
+            SET revoked_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND revoked_at IS NULL
+            "#,
+        )
+        .bind(id)
+        .execute(&pool)
+        .await
+        .map_err(AppError::DatabaseError)?;
+        Ok(result.rows_affected() == 1)
+    }
+
+    pub async fn revoke_oauth_access_token_by_hash(
+        &self,
+        token_hash: &str,
+        client_id: &str,
+    ) -> Result<bool, AppError> {
+        let pool = self.pool().await;
+        let result = sqlx::query(
+            r#"
+            UPDATE oauth_access_tokens
+            SET revoked_at = CURRENT_TIMESTAMP
+            WHERE token_hash = ? AND client_id = ? AND revoked_at IS NULL
+            "#,
+        )
+        .bind(token_hash)
+        .bind(client_id)
+        .execute(&pool)
+        .await
+        .map_err(AppError::DatabaseError)?;
+        Ok(result.rows_affected() == 1)
+    }
+
+    pub async fn revoke_oauth_refresh_token_by_hash(
+        &self,
+        token_hash: &str,
+        client_id: &str,
+    ) -> Result<bool, AppError> {
+        let pool = self.pool().await;
+        let result = sqlx::query(
+            r#"
+            UPDATE oauth_refresh_tokens
+            SET revoked_at = CURRENT_TIMESTAMP
+            WHERE token_hash = ? AND client_id = ? AND revoked_at IS NULL
+            "#,
+        )
+        .bind(token_hash)
+        .bind(client_id)
+        .execute(&pool)
+        .await
+        .map_err(AppError::DatabaseError)?;
+        Ok(result.rows_affected() == 1)
     }
 
     pub async fn store_oauth_consent(

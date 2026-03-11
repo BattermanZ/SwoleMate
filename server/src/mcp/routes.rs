@@ -270,14 +270,43 @@ fn tool_success(payload: Value) -> Value {
 
 fn summarize_args(args: &Value) -> Value {
     match args {
-        Value::Object(map) => {
-            let mut out = serde_json::Map::new();
-            for (key, value) in map {
-                out.insert(key.clone(), value.clone());
-            }
-            Value::Object(out)
-        }
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .map(|(key, value)| (key.clone(), sanitize_audit_value(key, value)))
+                .collect(),
+        ),
         _ => json!({}),
+    }
+}
+
+fn sanitize_audit_value(key: &str, value: &Value) -> Value {
+    match value {
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .map(|(nested_key, nested_value)| {
+                    (
+                        nested_key.clone(),
+                        sanitize_audit_value(nested_key, nested_value),
+                    )
+                })
+                .collect(),
+        ),
+        Value::Array(items) => {
+            if key == "sets" {
+                json!({ "count": items.len() })
+            } else {
+                Value::Array(
+                    items
+                        .iter()
+                        .map(|item| sanitize_audit_value(key, item))
+                        .collect(),
+                )
+            }
+        }
+        Value::String(_) if matches!(key, "notes" | "feedback") => {
+            Value::String("<redacted>".to_string())
+        }
+        _ => value.clone(),
     }
 }
 
