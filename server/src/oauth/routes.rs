@@ -88,6 +88,11 @@ pub struct OAuthRevokeForm {
     token_type_hint: Option<String>,
 }
 
+struct RevokePrincipal {
+    user_id: i64,
+    client_id: String,
+}
+
 fn is_loopback_host(host: &str) -> bool {
     if host.eq_ignore_ascii_case("localhost") {
         return true;
@@ -220,6 +225,50 @@ fn token_json(status: actix_web::http::StatusCode, body: serde_json::Value) -> H
         .insert_header((actix_web::http::header::CACHE_CONTROL, "no-store"))
         .insert_header((actix_web::http::header::PRAGMA, "no-cache"))
         .json(body)
+}
+
+async fn revoke_principal_from_bearer(
+    db: &Database,
+    bearer_token: &str,
+) -> Result<Option<RevokePrincipal>, ()> {
+    let token_hash = hash_session_token(bearer_token);
+
+    let access = db
+        .get_oauth_access_token_by_hash(&token_hash)
+        .await
+        .map_err(|_| ())?;
+    if let Some(access) = access {
+        if access.revoked_at.is_none()
+            && access.expires_at > Utc::now()
+            && !access.user.must_change_password
+        {
+            return Ok(Some(RevokePrincipal {
+                user_id: access.user.id,
+                client_id: access.client_id,
+            }));
+        }
+        return Ok(None);
+    }
+
+    let refresh = db
+        .get_oauth_refresh_token(&token_hash)
+        .await
+        .map_err(|_| ())?;
+    if let Some(refresh) = refresh {
+        if refresh.revoked_at.is_none()
+            && refresh.expires_at > Utc::now()
+            && refresh.user_disabled_at.is_none()
+            && !refresh.user_must_change_password
+            && refresh.client_disabled_at.is_none()
+        {
+            return Ok(Some(RevokePrincipal {
+                user_id: refresh.user_id,
+                client_id: refresh.client_id,
+            }));
+        }
+    }
+
+    Ok(None)
 }
 
 #[post("/oauth/register")]
@@ -798,8 +847,7 @@ pub async fn revoke_token(
             "error": "unauthorized"
         }));
     };
-    let caller_hash = hash_session_token(access_token);
-    let Some(caller) = (match db.get_oauth_access_token_by_hash(&caller_hash).await {
+    let Some(caller) = (match revoke_principal_from_bearer(db.get_ref(), access_token).await {
         Ok(value) => value,
         Err(_) => {
             return HttpResponse::InternalServerError().json(serde_json::json!({
@@ -811,11 +859,7 @@ pub async fn revoke_token(
             "error": "unauthorized"
         }));
     };
-    if caller.revoked_at.is_some()
-        || caller.expires_at <= Utc::now()
-        || caller.user.must_change_password
-        || form.client_id != caller.client_id
-    {
+    if form.client_id != caller.client_id {
         return HttpResponse::Forbidden().json(serde_json::json!({
             "error": "forbidden"
         }));
@@ -829,7 +873,7 @@ pub async fn revoke_token(
             db.revoke_oauth_refresh_token_by_hash_for_principal(
                 &token_hash,
                 &form.client_id,
-                caller.user.id,
+                caller.user_id,
             )
             .await
         }
@@ -837,7 +881,7 @@ pub async fn revoke_token(
             db.revoke_oauth_access_token_by_hash_for_principal(
                 &token_hash,
                 &form.client_id,
-                caller.user.id,
+                caller.user_id,
             )
             .await
         }
@@ -846,14 +890,14 @@ pub async fn revoke_token(
                 .revoke_oauth_access_token_by_hash_for_principal(
                     &token_hash,
                     &form.client_id,
-                    caller.user.id,
+                    caller.user_id,
                 )
                 .await;
             let refresh = db
                 .revoke_oauth_refresh_token_by_hash_for_principal(
                     &token_hash,
                     &form.client_id,
-                    caller.user.id,
+                    caller.user_id,
                 )
                 .await;
             match (access, refresh) {

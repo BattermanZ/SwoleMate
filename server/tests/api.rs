@@ -2771,6 +2771,93 @@ async fn oauth_revoke_requires_authorized_bearer_from_same_client() {
 }
 
 #[actix_web::test]
+async fn oauth_revoke_allows_refresh_token_self_revoke_after_access_token_is_gone() {
+    let _env = TestEnv::new();
+    let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(
+        &app,
+        &admin_cookie,
+        "oauth-revoke-refresh",
+        "passwordpassword",
+    )
+    .await;
+    let _cookie = login_cookie_active(&app, "oauth-revoke-refresh", "passwordpassword").await;
+
+    let registered = register_oauth_client(&app, "workouts.read").await;
+    let client_id = registered["client_id"].as_str().unwrap();
+    let verifier = "revoke-refresh-verifier";
+    let code = authorize_oauth_code(
+        &app,
+        client_id,
+        "oauth-revoke-refresh",
+        "passwordpassword-changed",
+        "workouts.read",
+        verifier,
+    )
+    .await;
+    let tokens = exchange_token(&app, client_id, &code, verifier).await;
+    let access_token = tokens["access_token"].as_str().unwrap();
+    let refresh_token = tokens["refresh_token"].as_str().unwrap();
+
+    let revoke_access = test::TestRequest::post()
+        .uri("/oauth/revoke")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {access_token}"),
+        ))
+        .insert_header((
+            actix_web::http::header::CONTENT_TYPE,
+            "application/x-www-form-urlencoded",
+        ))
+        .set_form(&[
+            ("token", access_token),
+            ("client_id", client_id),
+            ("token_type_hint", "access_token"),
+        ])
+        .to_request();
+    let resp = test::call_service(&app, revoke_access).await;
+    assert_eq!(resp.status(), 200);
+
+    let revoke_refresh = test::TestRequest::post()
+        .uri("/oauth/revoke")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {refresh_token}"),
+        ))
+        .insert_header((
+            actix_web::http::header::CONTENT_TYPE,
+            "application/x-www-form-urlencoded",
+        ))
+        .set_form(&[
+            ("token", refresh_token),
+            ("client_id", client_id),
+            ("token_type_hint", "refresh_token"),
+        ])
+        .to_request();
+    let resp = test::call_service(&app, revoke_refresh).await;
+    assert_eq!(resp.status(), 200);
+
+    let refresh_exchange = test::TestRequest::post()
+        .uri("/oauth/token")
+        .insert_header((
+            actix_web::http::header::CONTENT_TYPE,
+            "application/x-www-form-urlencoded",
+        ))
+        .set_form(&[
+            ("grant_type", "refresh_token"),
+            ("client_id", client_id),
+            ("refresh_token", refresh_token),
+        ])
+        .to_request();
+    let resp = test::call_service(&app, refresh_exchange).await;
+    assert_eq!(resp.status(), 400);
+    let body = json_body(resp).await;
+    assert_eq!(body["error"], "invalid_grant");
+}
+
+#[actix_web::test]
 async fn disabled_oauth_client_cannot_refresh_or_access_mcp() {
     let _env = TestEnv::new();
     let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
