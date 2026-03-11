@@ -111,6 +111,22 @@ pub const SCHEMA_UPDATES: &[(i64, &str)] = &[
         SELECT 1;
         "#,
     ),
+    (
+        9,
+        r#"
+        -- Add OAuth and MCP audit tables.
+        -- Applied via Rust migration logic in `setup_schema` (kept as a placeholder for versioning).
+        SELECT 1;
+        "#,
+    ),
+    (
+        10,
+        r#"
+        -- Enforce OAuth client foreign keys on dependent tables.
+        -- Applied via Rust migration logic in `setup_schema` (kept as a placeholder for versioning).
+        SELECT 1;
+        "#,
+    ),
 ];
 
 pub const SCHEMA_VERSION_TABLE: &str = r#"
@@ -235,6 +251,24 @@ pub async fn setup_schema(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<(), sqlx::E
                 continue;
             }
 
+            if *version == 9 {
+                migrate_oauth_and_mcp_foundation(pool).await?;
+                sqlx::query("INSERT INTO schema_version (version) VALUES (?)")
+                    .bind(*version)
+                    .execute(pool)
+                    .await?;
+                continue;
+            }
+
+            if *version == 10 {
+                migrate_oauth_client_foreign_keys(pool).await?;
+                sqlx::query("INSERT INTO schema_version (version) VALUES (?)")
+                    .bind(*version)
+                    .execute(pool)
+                    .await?;
+                continue;
+            }
+
             let has_workouts_table = sqlx::query_scalar!(
                 r#"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='workouts'"#
             )
@@ -346,6 +380,305 @@ async fn migrate_user_must_change_password(pool: &Pool<Sqlite>) -> Result<(), sq
             .execute(pool)
             .await?;
     }
+
+    Ok(())
+}
+
+async fn migrate_oauth_and_mcp_foundation(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS oauth_clients (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_id TEXT NOT NULL UNIQUE,
+            client_secret_hash TEXT,
+            client_name TEXT NOT NULL,
+            redirect_uris_json TEXT NOT NULL,
+            scopes_json TEXT NOT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            disabled_at DATETIME
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_oauth_clients_client_id
+            ON oauth_clients(client_id);
+
+        CREATE TABLE IF NOT EXISTS oauth_authorization_codes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code_hash TEXT NOT NULL UNIQUE,
+            client_id TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            redirect_uri TEXT NOT NULL,
+            scopes_json TEXT NOT NULL,
+            pkce_code_challenge TEXT,
+            pkce_method TEXT,
+            expires_at DATETIME NOT NULL,
+            used_at DATETIME,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (client_id) REFERENCES oauth_clients(client_id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_oauth_authorization_codes_code_hash
+            ON oauth_authorization_codes(code_hash);
+        CREATE INDEX IF NOT EXISTS idx_oauth_authorization_codes_client_id
+            ON oauth_authorization_codes(client_id);
+        CREATE INDEX IF NOT EXISTS idx_oauth_authorization_codes_user_id
+            ON oauth_authorization_codes(user_id);
+
+        CREATE TABLE IF NOT EXISTS oauth_access_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            token_hash TEXT NOT NULL UNIQUE,
+            client_id TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            scopes_json TEXT NOT NULL,
+            expires_at DATETIME NOT NULL,
+            revoked_at DATETIME,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (client_id) REFERENCES oauth_clients(client_id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_oauth_access_tokens_token_hash
+            ON oauth_access_tokens(token_hash);
+        CREATE INDEX IF NOT EXISTS idx_oauth_access_tokens_client_id
+            ON oauth_access_tokens(client_id);
+        CREATE INDEX IF NOT EXISTS idx_oauth_access_tokens_user_id
+            ON oauth_access_tokens(user_id);
+
+        CREATE TABLE IF NOT EXISTS oauth_refresh_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            token_hash TEXT NOT NULL UNIQUE,
+            client_id TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            scopes_json TEXT NOT NULL,
+            expires_at DATETIME NOT NULL,
+            revoked_at DATETIME,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (client_id) REFERENCES oauth_clients(client_id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_oauth_refresh_tokens_token_hash
+            ON oauth_refresh_tokens(token_hash);
+        CREATE INDEX IF NOT EXISTS idx_oauth_refresh_tokens_client_id
+            ON oauth_refresh_tokens(client_id);
+        CREATE INDEX IF NOT EXISTS idx_oauth_refresh_tokens_user_id
+            ON oauth_refresh_tokens(user_id);
+
+        CREATE TABLE IF NOT EXISTS oauth_consents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            client_id TEXT NOT NULL,
+            scopes_json TEXT NOT NULL,
+            granted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            revoked_at DATETIME,
+            FOREIGN KEY (client_id) REFERENCES oauth_clients(client_id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_oauth_consents_user_client
+            ON oauth_consents(user_id, client_id);
+
+        CREATE TABLE IF NOT EXISTS mcp_audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            user_id INTEGER,
+            client_id TEXT,
+            tool_name TEXT NOT NULL,
+            success INTEGER NOT NULL,
+            error_code TEXT,
+            input_summary_json TEXT,
+            ip_address TEXT,
+            user_agent TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_mcp_audit_log_timestamp
+            ON mcp_audit_log(timestamp);
+        CREATE INDEX IF NOT EXISTS idx_mcp_audit_log_user_id
+            ON mcp_audit_log(user_id);
+        CREATE INDEX IF NOT EXISTS idx_mcp_audit_log_client_id
+            ON mcp_audit_log(client_id);
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+async fn migrate_oauth_client_foreign_keys(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
+
+    sqlx::query("PRAGMA foreign_keys = OFF")
+        .execute(&mut *tx)
+        .await?;
+
+    rebuild_oauth_child_table_with_client_fk(
+        &mut tx,
+        "oauth_authorization_codes",
+        r#"
+        CREATE TABLE oauth_authorization_codes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code_hash TEXT NOT NULL UNIQUE,
+            client_id TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            redirect_uri TEXT NOT NULL,
+            scopes_json TEXT NOT NULL,
+            pkce_code_challenge TEXT,
+            pkce_method TEXT,
+            expires_at DATETIME NOT NULL,
+            used_at DATETIME,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (client_id) REFERENCES oauth_clients(client_id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_oauth_authorization_codes_code_hash
+            ON oauth_authorization_codes(code_hash);
+        CREATE INDEX IF NOT EXISTS idx_oauth_authorization_codes_client_id
+            ON oauth_authorization_codes(client_id);
+        CREATE INDEX IF NOT EXISTS idx_oauth_authorization_codes_user_id
+            ON oauth_authorization_codes(user_id);
+        "#,
+        r#"
+        INSERT INTO oauth_authorization_codes (
+            id, code_hash, client_id, user_id, redirect_uri, scopes_json,
+            pkce_code_challenge, pkce_method, expires_at, used_at, created_at
+        )
+        SELECT
+            id, code_hash, client_id, user_id, redirect_uri, scopes_json,
+            pkce_code_challenge, pkce_method, expires_at, used_at, created_at
+        FROM oauth_authorization_codes_old
+        WHERE client_id IN (SELECT client_id FROM oauth_clients)
+        "#,
+    )
+    .await?;
+
+    rebuild_oauth_child_table_with_client_fk(
+        &mut tx,
+        "oauth_access_tokens",
+        r#"
+        CREATE TABLE oauth_access_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            token_hash TEXT NOT NULL UNIQUE,
+            client_id TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            scopes_json TEXT NOT NULL,
+            expires_at DATETIME NOT NULL,
+            revoked_at DATETIME,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (client_id) REFERENCES oauth_clients(client_id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_oauth_access_tokens_token_hash
+            ON oauth_access_tokens(token_hash);
+        CREATE INDEX IF NOT EXISTS idx_oauth_access_tokens_client_id
+            ON oauth_access_tokens(client_id);
+        CREATE INDEX IF NOT EXISTS idx_oauth_access_tokens_user_id
+            ON oauth_access_tokens(user_id);
+        "#,
+        r#"
+        INSERT INTO oauth_access_tokens (
+            id, token_hash, client_id, user_id, scopes_json, expires_at, revoked_at, created_at
+        )
+        SELECT
+            id, token_hash, client_id, user_id, scopes_json, expires_at, revoked_at, created_at
+        FROM oauth_access_tokens_old
+        WHERE client_id IN (SELECT client_id FROM oauth_clients)
+        "#,
+    )
+    .await?;
+
+    rebuild_oauth_child_table_with_client_fk(
+        &mut tx,
+        "oauth_refresh_tokens",
+        r#"
+        CREATE TABLE oauth_refresh_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            token_hash TEXT NOT NULL UNIQUE,
+            client_id TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            scopes_json TEXT NOT NULL,
+            expires_at DATETIME NOT NULL,
+            revoked_at DATETIME,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (client_id) REFERENCES oauth_clients(client_id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_oauth_refresh_tokens_token_hash
+            ON oauth_refresh_tokens(token_hash);
+        CREATE INDEX IF NOT EXISTS idx_oauth_refresh_tokens_client_id
+            ON oauth_refresh_tokens(client_id);
+        CREATE INDEX IF NOT EXISTS idx_oauth_refresh_tokens_user_id
+            ON oauth_refresh_tokens(user_id);
+        "#,
+        r#"
+        INSERT INTO oauth_refresh_tokens (
+            id, token_hash, client_id, user_id, scopes_json, expires_at, revoked_at, created_at
+        )
+        SELECT
+            id, token_hash, client_id, user_id, scopes_json, expires_at, revoked_at, created_at
+        FROM oauth_refresh_tokens_old
+        WHERE client_id IN (SELECT client_id FROM oauth_clients)
+        "#,
+    )
+    .await?;
+
+    rebuild_oauth_child_table_with_client_fk(
+        &mut tx,
+        "oauth_consents",
+        r#"
+        CREATE TABLE oauth_consents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            client_id TEXT NOT NULL,
+            scopes_json TEXT NOT NULL,
+            granted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            revoked_at DATETIME,
+            FOREIGN KEY (client_id) REFERENCES oauth_clients(client_id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_oauth_consents_user_client
+            ON oauth_consents(user_id, client_id);
+        "#,
+        r#"
+        INSERT INTO oauth_consents (
+            id, user_id, client_id, scopes_json, granted_at, revoked_at
+        )
+        SELECT
+            id, user_id, client_id, scopes_json, granted_at, revoked_at
+        FROM oauth_consents_old
+        WHERE client_id IN (SELECT client_id FROM oauth_clients)
+        "#,
+    )
+    .await?;
+
+    sqlx::query("PRAGMA foreign_keys = ON")
+        .execute(&mut *tx)
+        .await?;
+
+    tx.commit().await?;
+    Ok(())
+}
+
+async fn rebuild_oauth_child_table_with_client_fk<'a>(
+    tx: &mut sqlx::Transaction<'a, Sqlite>,
+    table_name: &str,
+    create_sql: &str,
+    copy_sql: &str,
+) -> Result<(), sqlx::Error> {
+    let old_table_name = format!("{table_name}_old");
+
+    sqlx::query(&format!(
+        "ALTER TABLE {table_name} RENAME TO {old_table_name}"
+    ))
+    .execute(&mut **tx)
+    .await?;
+
+    sqlx::query(create_sql).execute(&mut **tx).await?;
+    sqlx::query(copy_sql).execute(&mut **tx).await?;
+    sqlx::query(&format!("DROP TABLE {old_table_name}"))
+        .execute(&mut **tx)
+        .await?;
 
     Ok(())
 }

@@ -1,5 +1,6 @@
 use crate::backup::{self, BackupType};
 use crate::middleware::{AdminUser, CurrentUser};
+use crate::services::{exercises, progress, workouts};
 use crate::{db::Database, errors::AppError, models::*};
 use actix_web::{delete, get, post, put, web, HttpResponse};
 use log::{debug, error, info, warn};
@@ -31,7 +32,7 @@ pub async fn create_workout(
     workout_req
         .validate()
         .map_err(|e| AppError::BadRequest(e))?;
-    let workout_id = db.create_workout(user.0.id, &workout_req.0).await?;
+    let workout_id = workouts::create_workout(db.get_ref(), user.0.id, &workout_req.0).await?;
     Ok(HttpResponse::Created().json(json!({
         "id": workout_id,
         "message": "Workout created successfully"
@@ -46,14 +47,7 @@ pub async fn end_workout(
     end_req: web::Json<UpdateWorkoutRequest>,
 ) -> Result<HttpResponse, AppError> {
     end_req.validate().map_err(|e| AppError::BadRequest(e))?;
-    db.update_workout_end_time(
-        user.0.id,
-        *id,
-        end_req.end_time,
-        end_req.notes.clone(),
-        end_req.feedback.clone(),
-    )
-    .await?;
+    workouts::end_workout(db.get_ref(), user.0.id, *id, &end_req.0).await?;
     Ok(HttpResponse::Ok().json(json!({
         "message": "Workout ended successfully"
     })))
@@ -68,15 +62,7 @@ pub async fn update_workout_times(
 ) -> Result<HttpResponse, AppError> {
     req.validate().map_err(|e| AppError::BadRequest(e))?;
 
-    db.update_workout_times(
-        user.0.id,
-        *id,
-        req.start_time,
-        req.end_time,
-        req.notes.clone(),
-        req.feedback.clone(),
-    )
-    .await?;
+    workouts::update_workout_times(db.get_ref(), user.0.id, *id, &req.0).await?;
 
     Ok(HttpResponse::Ok().json(json!({
         "message": "Workout times updated successfully"
@@ -89,25 +75,8 @@ pub async fn get_workout(
     db: web::Data<Database>,
     id: web::Path<i64>,
 ) -> Result<HttpResponse, AppError> {
-    let workout = db.get_workout(user.0.id, *id).await?;
-    let exercises = db.get_exercises_for_workout(user.0.id, *id).await?;
-
-    let mut exercises_with_sets = Vec::new();
-    for exercise in exercises {
-        let exercise_id = exercise
-            .id
-            .ok_or_else(|| AppError::InternalError("Exercise missing id".to_string()))?;
-        let sets = db.get_sets_for_exercise(user.0.id, exercise_id).await?;
-        exercises_with_sets.push(json!({
-            "exercise": exercise,
-            "sets": sets
-        }));
-    }
-
-    Ok(HttpResponse::Ok().json(json!({
-        "workout": workout,
-        "exercises": exercises_with_sets
-    })))
+    let detail = workouts::get_workout_detail(db.get_ref(), user.0.id, *id).await?;
+    Ok(HttpResponse::Ok().json(detail))
 }
 
 #[get("/api/workouts")]
@@ -115,7 +84,7 @@ pub async fn get_workouts(
     user: CurrentUser,
     db: web::Data<Database>,
 ) -> Result<HttpResponse, AppError> {
-    let workouts = db.get_workouts(user.0.id).await?;
+    let workouts = workouts::list_workouts(db.get_ref(), user.0.id).await?;
     Ok(HttpResponse::Ok().json(workouts))
 }
 
@@ -129,9 +98,8 @@ pub async fn create_exercise(
     exercise_req
         .validate()
         .map_err(|e| AppError::BadRequest(e))?;
-    let exercise_id = db
-        .create_exercise(user.0.id, *workout_id, &exercise_req.0)
-        .await?;
+    let exercise_id =
+        exercises::create_exercise(db.get_ref(), user.0.id, *workout_id, &exercise_req.0).await?;
     Ok(HttpResponse::Created().json(json!({
         "id": exercise_id,
         "message": "Exercise created successfully"
@@ -146,7 +114,7 @@ pub async fn end_exercise(
     end_req: web::Json<UpdateExerciseRequest>,
 ) -> Result<HttpResponse, AppError> {
     end_req.validate().map_err(|e| AppError::BadRequest(e))?;
-    db.update_exercise(user.0.id, *id, &end_req.0).await?;
+    exercises::end_exercise(db.get_ref(), user.0.id, *id, &end_req.0).await?;
     Ok(HttpResponse::Ok().json(json!({
         "message": "Exercise ended successfully"
     })))
@@ -160,7 +128,7 @@ pub async fn create_set(
     set_req: web::Json<CreateSetRequest>,
 ) -> Result<HttpResponse, AppError> {
     set_req.validate().map_err(|e| AppError::BadRequest(e))?;
-    let set_id = db.create_set(user.0.id, *exercise_id, &set_req.0).await?;
+    let set_id = exercises::create_set(db.get_ref(), user.0.id, *exercise_id, &set_req.0).await?;
     Ok(HttpResponse::Created().json(json!({
         "id": set_id,
         "message": "Set created successfully"
@@ -177,9 +145,7 @@ pub async fn replace_sets(
     for s in sets_req.iter() {
         s.validate().map_err(|e| AppError::BadRequest(e))?;
     }
-    let sets = db
-        .replace_sets_for_exercise(user.0.id, *exercise_id, &sets_req.0)
-        .await?;
+    let sets = exercises::replace_sets(db.get_ref(), user.0.id, *exercise_id, &sets_req.0).await?;
     Ok(HttpResponse::Ok().json(sets))
 }
 
@@ -287,7 +253,7 @@ pub async fn get_exercise_types(
     user: CurrentUser,
     db: web::Data<Database>,
 ) -> Result<HttpResponse, AppError> {
-    let types = db.get_unique_exercise_types(user.0.id).await?;
+    let types = exercises::list_exercise_types(db.get_ref(), user.0.id).await?;
     Ok(HttpResponse::Ok().json(types))
 }
 
@@ -300,12 +266,8 @@ pub async fn get_last_exercise_data(
     let decoded_type = urlencoding::decode(&exercise_type)
         .map_err(|e| AppError::BadRequest(format!("Invalid exercise type: {}", e)))?
         .into_owned();
-    let data = db.get_last_exercise_data(user.0.id, &decoded_type).await?;
-    if let Some((exercise, sets)) = data {
-        Ok(HttpResponse::Ok().json(json!({ "exercise": exercise, "sets": sets })))
-    } else {
-        Ok(HttpResponse::Ok().json(json!(null)))
-    }
+    let data = exercises::get_last_exercise_data(db.get_ref(), user.0.id, &decoded_type).await?;
+    Ok(HttpResponse::Ok().json(data))
 }
 
 #[delete("/api/exercises/{id}")]
@@ -314,7 +276,7 @@ pub async fn cancel_exercise(
     db: web::Data<Database>,
     id: web::Path<i64>,
 ) -> Result<HttpResponse, AppError> {
-    db.delete_exercise(user.0.id, *id).await?;
+    exercises::delete_exercise(db.get_ref(), user.0.id, *id).await?;
     Ok(HttpResponse::Ok().json(json!({
         "message": "Exercise canceled successfully"
     })))
@@ -326,7 +288,7 @@ pub async fn cancel_workout(
     db: web::Data<Database>,
     id: web::Path<i64>,
 ) -> Result<HttpResponse, AppError> {
-    db.delete_workout(user.0.id, *id).await?;
+    workouts::delete_workout(db.get_ref(), user.0.id, *id).await?;
     Ok(HttpResponse::Ok().json(json!({
         "message": "Workout canceled successfully"
     })))
@@ -483,16 +445,7 @@ pub async fn get_exercise_progress(
     let decoded_type = urlencoding::decode(&exercise_type)
         .map_err(|e| AppError::BadRequest(format!("Invalid exercise type: {}", e)))?
         .into_owned();
-    let progress = db.get_exercise_progress(user.0.id, &decoded_type).await?;
-    let progress = progress
-        .into_iter()
-        .map(|(exercise, sets)| {
-            json!({
-                "exercise": exercise,
-                "sets": sets,
-            })
-        })
-        .collect::<Vec<_>>();
+    let progress = progress::get_exercise_progress(db.get_ref(), user.0.id, &decoded_type).await?;
     Ok(HttpResponse::Ok().json(progress))
 }
 
@@ -501,7 +454,7 @@ pub async fn get_workout_stats(
     user: CurrentUser,
     db: web::Data<Database>,
 ) -> Result<HttpResponse, AppError> {
-    let stats = db.get_workout_stats(user.0.id).await?;
+    let stats = progress::get_workout_stats(db.get_ref(), user.0.id).await?;
     Ok(HttpResponse::Ok().json(stats))
 }
 
@@ -514,7 +467,7 @@ pub async fn get_volume_stats(
     let decoded_type = urlencoding::decode(&query.exercise_type)
         .map_err(|e| AppError::BadRequest(format!("Invalid exercise type: {}", e)))?
         .into_owned();
-    let stats = db.get_volume_stats(user.0.id, &decoded_type).await?;
+    let stats = progress::get_volume_stats(db.get_ref(), user.0.id, &decoded_type).await?;
     Ok(HttpResponse::Ok().json(stats))
 }
 

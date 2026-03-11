@@ -1064,6 +1064,73 @@ async fn schema_backfill_amsterdam_timezone_offsets_dst_aware() {
 }
 
 #[actix_web::test]
+async fn schema_creates_oauth_and_mcp_foundation_tables() {
+    let _env = TestEnv::new();
+
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite:database/swolemate.db")
+        .await
+        .expect("connect sqlite");
+    schema::setup_schema(&pool).await.expect("setup_schema");
+
+    let version_exists: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM schema_version WHERE version = 9")
+            .fetch_one(&pool)
+            .await
+            .expect("schema version 9 marker");
+    assert_eq!(version_exists, 1);
+
+    for table_name in [
+        "oauth_clients",
+        "oauth_authorization_codes",
+        "oauth_access_tokens",
+        "oauth_refresh_tokens",
+        "oauth_consents",
+        "mcp_audit_log",
+    ] {
+        let exists: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name = ?",
+        )
+        .bind(table_name)
+        .fetch_one(&pool)
+        .await
+        .expect("table existence");
+        assert_eq!(exists, 1, "missing table {table_name}");
+    }
+
+    let version_exists: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM schema_version WHERE version = 10")
+            .fetch_one(&pool)
+            .await
+            .expect("schema version 10 marker");
+    assert_eq!(version_exists, 1);
+
+    for table_name in [
+        "oauth_authorization_codes",
+        "oauth_access_tokens",
+        "oauth_refresh_tokens",
+        "oauth_consents",
+    ] {
+        let fks = sqlx::query(&format!("PRAGMA foreign_key_list('{table_name}')"))
+            .fetch_all(&pool)
+            .await
+            .expect("foreign key list");
+
+        let has_client_fk = fks.iter().any(|row| {
+            let foreign_table: String = row.try_get("table").expect("fk table");
+            let from_column: String = row.try_get("from").expect("fk from");
+            foreign_table == "oauth_clients" && from_column == "client_id"
+        });
+
+        assert!(
+            has_client_fk,
+            "missing oauth_clients(client_id) foreign key on {table_name}"
+        );
+    }
+}
+
+#[actix_web::test]
 async fn validation_rejects_invalid_set_payloads() {
     let _env = TestEnv::new();
     let (_db, admin_cookie, app) = setup_test_app().await;
