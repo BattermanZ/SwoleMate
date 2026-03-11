@@ -2512,9 +2512,72 @@ async fn invalid_oauth_token_exchange_does_not_burn_authorization_code() {
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 400);
+    assert_eq!(
+        resp.headers()
+            .get(actix_web::http::header::CACHE_CONTROL)
+            .and_then(|value| value.to_str().ok()),
+        Some("no-store")
+    );
+    assert_eq!(
+        resp.headers()
+            .get(actix_web::http::header::PRAGMA)
+            .and_then(|value| value.to_str().ok()),
+        Some("no-cache")
+    );
 
     let tokens = exchange_token(&app, client_id, &code, verifier).await;
     assert!(tokens["access_token"].as_str().is_some());
+}
+
+#[actix_web::test]
+async fn oauth_token_responses_set_no_store_headers() {
+    let _env = TestEnv::new();
+    let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "oauth-cache", "passwordpassword").await;
+    let _cookie = login_cookie_active(&app, "oauth-cache", "passwordpassword").await;
+    let registered = register_oauth_client(&app, "workouts.read").await;
+    let client_id = registered["client_id"].as_str().unwrap();
+    let verifier = "oauth-cache-verifier";
+    let code = authorize_oauth_code(
+        &app,
+        client_id,
+        "oauth-cache",
+        "passwordpassword-changed",
+        "workouts.read",
+        verifier,
+    )
+    .await;
+
+    let req = test::TestRequest::post()
+        .uri("/oauth/token")
+        .insert_header((
+            actix_web::http::header::CONTENT_TYPE,
+            "application/x-www-form-urlencoded",
+        ))
+        .set_form(&[
+            ("grant_type", "authorization_code"),
+            ("client_id", client_id),
+            ("code", code.as_str()),
+            ("redirect_uri", "https://client.example/callback"),
+            ("code_verifier", verifier),
+        ])
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 200);
+    assert_eq!(
+        resp.headers()
+            .get(actix_web::http::header::CACHE_CONTROL)
+            .and_then(|value| value.to_str().ok()),
+        Some("no-store")
+    );
+    assert_eq!(
+        resp.headers()
+            .get(actix_web::http::header::PRAGMA)
+            .and_then(|value| value.to_str().ok()),
+        Some("no-cache")
+    );
 }
 
 #[actix_web::test]
@@ -2602,6 +2665,10 @@ async fn oauth_revoke_revokes_access_token_for_mcp() {
     let req = test::TestRequest::post()
         .uri("/oauth/revoke")
         .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {access_token}"),
+        ))
+        .insert_header((
             actix_web::http::header::CONTENT_TYPE,
             "application/x-www-form-urlencoded",
         ))
@@ -2629,6 +2696,78 @@ async fn oauth_revoke_revokes_access_token_for_mcp() {
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 401);
+}
+
+#[actix_web::test]
+async fn oauth_revoke_requires_authorized_bearer_from_same_client() {
+    let _env = TestEnv::new();
+    let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "oauth-revoke-auth", "passwordpassword").await;
+    let _cookie = login_cookie_active(&app, "oauth-revoke-auth", "passwordpassword").await;
+
+    let registered_a = register_oauth_client(&app, "workouts.read").await;
+    let client_a = registered_a["client_id"].as_str().unwrap();
+    let code_a = authorize_oauth_code(
+        &app,
+        client_a,
+        "oauth-revoke-auth",
+        "passwordpassword-changed",
+        "workouts.read",
+        "revoke-auth-a",
+    )
+    .await;
+    let tokens_a = exchange_token(&app, client_a, &code_a, "revoke-auth-a").await;
+    let access_a = tokens_a["access_token"].as_str().unwrap();
+
+    let registered_b = register_oauth_client(&app, "workouts.read").await;
+    let client_b = registered_b["client_id"].as_str().unwrap();
+    let code_b = authorize_oauth_code(
+        &app,
+        client_b,
+        "oauth-revoke-auth",
+        "passwordpassword-changed",
+        "workouts.read",
+        "revoke-auth-b",
+    )
+    .await;
+    let tokens_b = exchange_token(&app, client_b, &code_b, "revoke-auth-b").await;
+    let access_b = tokens_b["access_token"].as_str().unwrap();
+
+    let unauthenticated = test::TestRequest::post()
+        .uri("/oauth/revoke")
+        .insert_header((
+            actix_web::http::header::CONTENT_TYPE,
+            "application/x-www-form-urlencoded",
+        ))
+        .set_form(&[
+            ("token", access_a),
+            ("client_id", client_a),
+            ("token_type_hint", "access_token"),
+        ])
+        .to_request();
+    let resp = test::call_service(&app, unauthenticated).await;
+    assert_eq!(resp.status(), 401);
+
+    let wrong_client = test::TestRequest::post()
+        .uri("/oauth/revoke")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {access_b}"),
+        ))
+        .insert_header((
+            actix_web::http::header::CONTENT_TYPE,
+            "application/x-www-form-urlencoded",
+        ))
+        .set_form(&[
+            ("token", access_a),
+            ("client_id", client_a),
+            ("token_type_hint", "access_token"),
+        ])
+        .to_request();
+    let resp = test::call_service(&app, wrong_client).await;
+    assert_eq!(resp.status(), 403);
 }
 
 #[actix_web::test]

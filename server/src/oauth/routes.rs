@@ -215,6 +215,13 @@ fn code_challenge_for(verifier: &str) -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(digest)
 }
 
+fn token_json(status: actix_web::http::StatusCode, body: serde_json::Value) -> HttpResponse {
+    HttpResponse::build(status)
+        .insert_header((actix_web::http::header::CACHE_CONTROL, "no-store"))
+        .insert_header((actix_web::http::header::PRAGMA, "no-cache"))
+        .json(body)
+}
+
 #[post("/oauth/register")]
 pub async fn register_client(
     db: web::Data<Database>,
@@ -498,9 +505,12 @@ pub async fn token(
     match form.grant_type.as_str() {
         "authorization_code" => exchange_authorization_code(db, cfg, form).await,
         "refresh_token" => exchange_refresh_token(db, cfg, form).await,
-        _ => HttpResponse::BadRequest().json(serde_json::json!({
-            "error": "unsupported_grant_type"
-        })),
+        _ => token_json(
+            actix_web::http::StatusCode::BAD_REQUEST,
+            serde_json::json!({
+                "error": "unsupported_grant_type"
+            }),
+        ),
     }
 }
 
@@ -510,38 +520,60 @@ async fn exchange_authorization_code(
     form: OAuthTokenForm,
 ) -> HttpResponse {
     let Some(code) = form.code.as_deref() else {
-        return HttpResponse::BadRequest().json(serde_json::json!({ "error": "invalid_request" }));
+        return token_json(
+            actix_web::http::StatusCode::BAD_REQUEST,
+            serde_json::json!({ "error": "invalid_request" }),
+        );
     };
     let Some(client_id) = form.client_id.as_deref() else {
-        return HttpResponse::BadRequest().json(serde_json::json!({ "error": "invalid_client" }));
+        return token_json(
+            actix_web::http::StatusCode::BAD_REQUEST,
+            serde_json::json!({ "error": "invalid_client" }),
+        );
     };
     let Some(redirect_uri) = form.redirect_uri.as_deref() else {
-        return HttpResponse::BadRequest().json(serde_json::json!({ "error": "invalid_request" }));
+        return token_json(
+            actix_web::http::StatusCode::BAD_REQUEST,
+            serde_json::json!({ "error": "invalid_request" }),
+        );
     };
     let Some(code_verifier) = form.code_verifier.as_deref() else {
-        return HttpResponse::BadRequest().json(serde_json::json!({ "error": "invalid_request" }));
+        return token_json(
+            actix_web::http::StatusCode::BAD_REQUEST,
+            serde_json::json!({ "error": "invalid_request" }),
+        );
     };
 
     let client = match db.get_oauth_client(client_id).await {
         Ok(Some(client)) => client,
         _ => {
-            return HttpResponse::BadRequest()
-                .json(serde_json::json!({ "error": "invalid_client" }))
+            return token_json(
+                actix_web::http::StatusCode::BAD_REQUEST,
+                serde_json::json!({ "error": "invalid_client" }),
+            )
         }
     };
     if client.disabled_at.is_some() {
-        return HttpResponse::BadRequest().json(serde_json::json!({ "error": "invalid_client" }));
+        return token_json(
+            actix_web::http::StatusCode::BAD_REQUEST,
+            serde_json::json!({ "error": "invalid_client" }),
+        );
     }
 
     let code_hash = hash_session_token(code);
     let Some(stored) = (match db.get_oauth_authorization_code(&code_hash).await {
         Ok(value) => value,
         Err(_) => {
-            return HttpResponse::InternalServerError()
-                .json(serde_json::json!({ "error": "server_error" }))
+            return token_json(
+                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+                serde_json::json!({ "error": "server_error" }),
+            )
         }
     }) else {
-        return HttpResponse::BadRequest().json(serde_json::json!({ "error": "invalid_grant" }));
+        return token_json(
+            actix_web::http::StatusCode::BAD_REQUEST,
+            serde_json::json!({ "error": "invalid_grant" }),
+        );
     };
 
     if stored.used_at.is_some()
@@ -549,27 +581,40 @@ async fn exchange_authorization_code(
         || stored.redirect_uri != redirect_uri
         || stored.expires_at <= Utc::now()
     {
-        return HttpResponse::BadRequest().json(serde_json::json!({ "error": "invalid_grant" }));
+        return token_json(
+            actix_web::http::StatusCode::BAD_REQUEST,
+            serde_json::json!({ "error": "invalid_grant" }),
+        );
     }
 
     let Some(challenge) = stored.pkce_code_challenge.as_deref() else {
-        return HttpResponse::BadRequest().json(serde_json::json!({ "error": "invalid_grant" }));
+        return token_json(
+            actix_web::http::StatusCode::BAD_REQUEST,
+            serde_json::json!({ "error": "invalid_grant" }),
+        );
     };
     if stored.pkce_method.as_deref() != Some("S256")
         || code_challenge_for(code_verifier) != challenge
     {
-        return HttpResponse::BadRequest().json(serde_json::json!({ "error": "invalid_grant" }));
+        return token_json(
+            actix_web::http::StatusCode::BAD_REQUEST,
+            serde_json::json!({ "error": "invalid_grant" }),
+        );
     }
 
     match db.mark_oauth_authorization_code_used(stored.id).await {
         Ok(true) => {}
         Ok(false) => {
-            return HttpResponse::BadRequest()
-                .json(serde_json::json!({ "error": "invalid_grant" }));
+            return token_json(
+                actix_web::http::StatusCode::BAD_REQUEST,
+                serde_json::json!({ "error": "invalid_grant" }),
+            );
         }
         Err(_) => {
-            return HttpResponse::InternalServerError()
-                .json(serde_json::json!({ "error": "server_error" }));
+            return token_json(
+                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+                serde_json::json!({ "error": "server_error" }),
+            );
         }
     }
 
@@ -580,8 +625,10 @@ async fn exchange_authorization_code(
     let scopes_json = match serde_json::to_string(&stored.scopes) {
         Ok(value) => value,
         Err(_) => {
-            return HttpResponse::InternalServerError()
-                .json(serde_json::json!({ "error": "server_error" }))
+            return token_json(
+                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+                serde_json::json!({ "error": "server_error" }),
+            )
         }
     };
 
@@ -596,8 +643,10 @@ async fn exchange_authorization_code(
         .await
         .is_err()
     {
-        return HttpResponse::InternalServerError()
-            .json(serde_json::json!({ "error": "server_error" }));
+        return token_json(
+            actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+            serde_json::json!({ "error": "server_error" }),
+        );
     }
     if db
         .create_oauth_refresh_token(
@@ -610,17 +659,22 @@ async fn exchange_authorization_code(
         .await
         .is_err()
     {
-        return HttpResponse::InternalServerError()
-            .json(serde_json::json!({ "error": "server_error" }));
+        return token_json(
+            actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+            serde_json::json!({ "error": "server_error" }),
+        );
     }
 
-    HttpResponse::Ok().json(serde_json::json!({
-        "access_token": access_token,
-        "token_type": "Bearer",
-        "expires_in": cfg.access_token_ttl.num_seconds(),
-        "scope": stored.scopes.join(" "),
-        "refresh_token": refresh_token
-    }))
+    token_json(
+        actix_web::http::StatusCode::OK,
+        serde_json::json!({
+            "access_token": access_token,
+            "token_type": "Bearer",
+            "expires_in": cfg.access_token_ttl.num_seconds(),
+            "scope": stored.scopes.join(" "),
+            "refresh_token": refresh_token
+        }),
+    )
 }
 
 async fn exchange_refresh_token(
@@ -629,21 +683,32 @@ async fn exchange_refresh_token(
     form: OAuthTokenForm,
 ) -> HttpResponse {
     let Some(refresh_token) = form.refresh_token.as_deref() else {
-        return HttpResponse::BadRequest().json(serde_json::json!({ "error": "invalid_request" }));
+        return token_json(
+            actix_web::http::StatusCode::BAD_REQUEST,
+            serde_json::json!({ "error": "invalid_request" }),
+        );
     };
     let Some(client_id) = form.client_id.as_deref() else {
-        return HttpResponse::BadRequest().json(serde_json::json!({ "error": "invalid_client" }));
+        return token_json(
+            actix_web::http::StatusCode::BAD_REQUEST,
+            serde_json::json!({ "error": "invalid_client" }),
+        );
     };
 
     let token_hash = hash_session_token(refresh_token);
     let Some(stored) = (match db.get_oauth_refresh_token(&token_hash).await {
         Ok(value) => value,
         Err(_) => {
-            return HttpResponse::InternalServerError()
-                .json(serde_json::json!({ "error": "server_error" }))
+            return token_json(
+                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+                serde_json::json!({ "error": "server_error" }),
+            )
         }
     }) else {
-        return HttpResponse::BadRequest().json(serde_json::json!({ "error": "invalid_grant" }));
+        return token_json(
+            actix_web::http::StatusCode::BAD_REQUEST,
+            serde_json::json!({ "error": "invalid_grant" }),
+        );
     };
 
     if stored.client_id != client_id
@@ -653,7 +718,10 @@ async fn exchange_refresh_token(
         || stored.user_must_change_password
         || stored.client_disabled_at.is_some()
     {
-        return HttpResponse::BadRequest().json(serde_json::json!({ "error": "invalid_grant" }));
+        return token_json(
+            actix_web::http::StatusCode::BAD_REQUEST,
+            serde_json::json!({ "error": "invalid_grant" }),
+        );
     }
 
     let access_token = generate_session_token();
@@ -663,8 +731,10 @@ async fn exchange_refresh_token(
     let scopes_json = match serde_json::to_string(&stored.scopes) {
         Ok(value) => value,
         Err(_) => {
-            return HttpResponse::InternalServerError()
-                .json(serde_json::json!({ "error": "server_error" }))
+            return token_json(
+                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+                serde_json::json!({ "error": "server_error" }),
+            )
         }
     };
     match db
@@ -682,48 +752,109 @@ async fn exchange_refresh_token(
     {
         Ok(true) => {}
         Ok(false) => {
-            return HttpResponse::BadRequest()
-                .json(serde_json::json!({ "error": "invalid_grant" }));
+            return token_json(
+                actix_web::http::StatusCode::BAD_REQUEST,
+                serde_json::json!({ "error": "invalid_grant" }),
+            );
         }
         Err(_) => {
-            return HttpResponse::InternalServerError()
-                .json(serde_json::json!({ "error": "server_error" }));
+            return token_json(
+                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+                serde_json::json!({ "error": "server_error" }),
+            );
         }
     }
 
-    HttpResponse::Ok().json(serde_json::json!({
-        "access_token": access_token,
-        "token_type": "Bearer",
-        "expires_in": cfg.access_token_ttl.num_seconds(),
-        "scope": stored.scopes.join(" "),
-        "refresh_token": next_refresh_token
-    }))
+    token_json(
+        actix_web::http::StatusCode::OK,
+        serde_json::json!({
+            "access_token": access_token,
+            "token_type": "Bearer",
+            "expires_in": cfg.access_token_ttl.num_seconds(),
+            "scope": stored.scopes.join(" "),
+            "refresh_token": next_refresh_token
+        }),
+    )
 }
 
 #[post("/oauth/revoke")]
 pub async fn revoke_token(
     db: web::Data<Database>,
+    req: HttpRequest,
     form: web::Form<OAuthRevokeForm>,
 ) -> HttpResponse {
     let form = form.into_inner();
+    let Some(auth_header) = req
+        .headers()
+        .get(actix_web::http::header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+    else {
+        return HttpResponse::Unauthorized().json(serde_json::json!({
+            "error": "unauthorized"
+        }));
+    };
+    let Some(access_token) = auth_header.strip_prefix("Bearer ").map(str::trim) else {
+        return HttpResponse::Unauthorized().json(serde_json::json!({
+            "error": "unauthorized"
+        }));
+    };
+    let caller_hash = hash_session_token(access_token);
+    let Some(caller) = (match db.get_oauth_access_token_by_hash(&caller_hash).await {
+        Ok(value) => value,
+        Err(_) => {
+            return HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "server_error"
+            }))
+        }
+    }) else {
+        return HttpResponse::Unauthorized().json(serde_json::json!({
+            "error": "unauthorized"
+        }));
+    };
+    if caller.revoked_at.is_some()
+        || caller.expires_at <= Utc::now()
+        || caller.user.must_change_password
+        || form.client_id != caller.client_id
+    {
+        return HttpResponse::Forbidden().json(serde_json::json!({
+            "error": "forbidden"
+        }));
+    }
+
     let token_hash = hash_session_token(&form.token);
     let hint = form.token_type_hint.as_deref().unwrap_or_default();
 
     let result = match hint {
         "refresh_token" => {
-            db.revoke_oauth_refresh_token_by_hash(&token_hash, &form.client_id)
-                .await
+            db.revoke_oauth_refresh_token_by_hash_for_principal(
+                &token_hash,
+                &form.client_id,
+                caller.user.id,
+            )
+            .await
         }
         "access_token" => {
-            db.revoke_oauth_access_token_by_hash(&token_hash, &form.client_id)
-                .await
+            db.revoke_oauth_access_token_by_hash_for_principal(
+                &token_hash,
+                &form.client_id,
+                caller.user.id,
+            )
+            .await
         }
         _ => {
             let access = db
-                .revoke_oauth_access_token_by_hash(&token_hash, &form.client_id)
+                .revoke_oauth_access_token_by_hash_for_principal(
+                    &token_hash,
+                    &form.client_id,
+                    caller.user.id,
+                )
                 .await;
             let refresh = db
-                .revoke_oauth_refresh_token_by_hash(&token_hash, &form.client_id)
+                .revoke_oauth_refresh_token_by_hash_for_principal(
+                    &token_hash,
+                    &form.client_id,
+                    caller.user.id,
+                )
                 .await;
             match (access, refresh) {
                 (Ok(true), _) | (_, Ok(true)) | (Ok(false), Ok(false)) => Ok(true),

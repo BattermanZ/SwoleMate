@@ -510,6 +510,29 @@ impl Database {
         Ok(result.rows_affected() == 1)
     }
 
+    pub async fn revoke_oauth_access_token_by_hash_for_principal(
+        &self,
+        token_hash: &str,
+        client_id: &str,
+        user_id: i64,
+    ) -> Result<bool, AppError> {
+        let pool = self.pool().await;
+        let result = sqlx::query(
+            r#"
+            UPDATE oauth_access_tokens
+            SET revoked_at = CURRENT_TIMESTAMP
+            WHERE token_hash = ? AND client_id = ? AND user_id = ? AND revoked_at IS NULL
+            "#,
+        )
+        .bind(token_hash)
+        .bind(client_id)
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .map_err(AppError::DatabaseError)?;
+        Ok(result.rows_affected() == 1)
+    }
+
     pub async fn revoke_oauth_refresh_token_by_hash(
         &self,
         token_hash: &str,
@@ -525,6 +548,29 @@ impl Database {
         )
         .bind(token_hash)
         .bind(client_id)
+        .execute(&pool)
+        .await
+        .map_err(AppError::DatabaseError)?;
+        Ok(result.rows_affected() == 1)
+    }
+
+    pub async fn revoke_oauth_refresh_token_by_hash_for_principal(
+        &self,
+        token_hash: &str,
+        client_id: &str,
+        user_id: i64,
+    ) -> Result<bool, AppError> {
+        let pool = self.pool().await;
+        let result = sqlx::query(
+            r#"
+            UPDATE oauth_refresh_tokens
+            SET revoked_at = CURRENT_TIMESTAMP
+            WHERE token_hash = ? AND client_id = ? AND user_id = ? AND revoked_at IS NULL
+            "#,
+        )
+        .bind(token_hash)
+        .bind(client_id)
+        .bind(user_id)
         .execute(&pool)
         .await
         .map_err(AppError::DatabaseError)?;
