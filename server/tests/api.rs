@@ -418,11 +418,24 @@ async fn register_oauth_client(
     >,
     scope: &str,
 ) -> Value {
+    register_oauth_client_with_redirects(app, scope, json!(["https://client.example/callback"]))
+        .await
+}
+
+async fn register_oauth_client_with_redirects(
+    app: &impl actix_web::dev::Service<
+        actix_http::Request,
+        Response = actix_web::dev::ServiceResponse,
+        Error = actix_web::Error,
+    >,
+    scope: &str,
+    redirect_uris: Value,
+) -> Value {
     let req = test::TestRequest::post()
         .uri("/oauth/register")
         .set_json(json!({
             "client_name": "Test MCP Client",
-            "redirect_uris": ["https://client.example/callback"],
+            "redirect_uris": redirect_uris,
             "scope": scope
         }))
         .to_request();
@@ -2199,6 +2212,22 @@ async fn oauth_registration_rejects_non_loopback_http_redirect_uris() {
 }
 
 #[actix_web::test]
+async fn oauth_registration_allows_registered_native_app_redirect_uris() {
+    let _env = TestEnv::new();
+    let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
+    let (_db, _admin_cookie, app) = setup_test_app().await;
+
+    let registered = register_oauth_client_with_redirects(
+        &app,
+        "workouts.read",
+        json!(["swolemate://oauth/callback"]),
+    )
+    .await;
+
+    assert_eq!(registered["redirect_uris"][0], "swolemate://oauth/callback");
+}
+
+#[actix_web::test]
 async fn oauth_authorize_page_displays_redirect_host() {
     let _env = TestEnv::new();
     let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
@@ -2960,7 +2989,7 @@ async fn write_mcp_tools_are_audited_for_success_and_failure() {
 }
 
 #[actix_web::test]
-async fn mcp_audit_log_redacts_notes_and_feedback() {
+async fn mcp_audit_log_stores_only_structural_argument_summaries() {
     let _env = TestEnv::new();
     let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
     let (db, admin_cookie, app) = setup_test_app().await;
@@ -2992,14 +3021,20 @@ async fn mcp_audit_log_redacts_notes_and_feedback() {
             "date": chrono::Utc::now(),
             "start_time": chrono::Utc::now(),
             "notes": "secret note",
-            "feedback": "should not appear"
+            "feedback": "should not appear",
+            "settings": [{ "key": "pin", "value": "12345" }]
         }),
     )
     .await;
 
     let payload = latest_mcp_audit_payload(&db).await;
-    assert_eq!(payload["notes"], "<redacted>");
-    assert_eq!(payload["feedback"], "<redacted>");
+    assert_eq!(payload["notes"]["type"], "string");
+    assert_eq!(payload["feedback"]["type"], "string");
+    assert_eq!(payload["notes"]["length"], 11);
+    assert_eq!(payload["feedback"]["length"], 17);
+    assert_eq!(payload["settings"]["count"], 1);
+    assert_eq!(payload["settings"]["items"][0]["key"]["length"], 3);
+    assert_eq!(payload["settings"]["items"][0]["value"]["length"], 5);
 }
 
 #[actix_web::test]

@@ -422,6 +422,73 @@ impl Database {
         Ok(result.rows_affected() == 1)
     }
 
+    pub async fn rotate_oauth_refresh_token(
+        &self,
+        current_refresh_token_id: i64,
+        next_access_token_hash: &str,
+        next_refresh_token_hash: &str,
+        client_id: &str,
+        user_id: i64,
+        scopes_json: &str,
+        access_expires_at: DateTime<Utc>,
+        refresh_expires_at: DateTime<Utc>,
+    ) -> Result<bool, AppError> {
+        let pool = self.pool().await;
+        let mut tx = pool.begin().await.map_err(AppError::DatabaseError)?;
+
+        let revoked = sqlx::query(
+            r#"
+            UPDATE oauth_refresh_tokens
+            SET revoked_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND revoked_at IS NULL
+            "#,
+        )
+        .bind(current_refresh_token_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(AppError::DatabaseError)?
+        .rows_affected()
+            == 1;
+
+        if !revoked {
+            tx.rollback().await.map_err(AppError::DatabaseError)?;
+            return Ok(false);
+        }
+
+        sqlx::query(
+            r#"
+            INSERT INTO oauth_access_tokens (token_hash, client_id, user_id, scopes_json, expires_at)
+            VALUES (?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(next_access_token_hash)
+        .bind(client_id)
+        .bind(user_id)
+        .bind(scopes_json)
+        .bind(access_expires_at)
+        .execute(&mut *tx)
+        .await
+        .map_err(AppError::DatabaseError)?;
+
+        sqlx::query(
+            r#"
+            INSERT INTO oauth_refresh_tokens (token_hash, client_id, user_id, scopes_json, expires_at)
+            VALUES (?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(next_refresh_token_hash)
+        .bind(client_id)
+        .bind(user_id)
+        .bind(scopes_json)
+        .bind(refresh_expires_at)
+        .execute(&mut *tx)
+        .await
+        .map_err(AppError::DatabaseError)?;
+
+        tx.commit().await.map_err(AppError::DatabaseError)?;
+        Ok(true)
+    }
+
     pub async fn revoke_oauth_access_token_by_hash(
         &self,
         token_hash: &str,

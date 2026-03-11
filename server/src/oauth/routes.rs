@@ -104,13 +104,16 @@ fn validate_redirect_uri(uri: &str) -> bool {
     if parsed.fragment().is_some() || !parsed.username().is_empty() || parsed.password().is_some() {
         return false;
     }
-    let Some(host) = parsed.host_str() else {
-        return false;
-    };
     match parsed.scheme() {
-        "https" => true,
-        "http" => is_loopback_host(host),
-        _ => false,
+        "https" => parsed.host_str().is_some(),
+        "http" => parsed.host_str().is_some_and(is_loopback_host),
+        "javascript" | "data" | "file" => false,
+        scheme => {
+            !scheme.is_empty()
+                && scheme
+                    .chars()
+                    .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '+' | '-' | '.'))
+        }
     }
 }
 
@@ -144,7 +147,10 @@ fn validate_client_redirect_and_scopes(
 fn build_authorize_html(query: &OAuthAuthorizeQuery, client_name: &str) -> String {
     let redirect_host = Url::parse(&query.redirect_uri)
         .ok()
-        .and_then(|url| url.host_str().map(ToString::to_string))
+        .map(|url| match url.host_str() {
+            Some(host) => host.to_string(),
+            None => format!("{} callback", url.scheme()),
+        })
         .unwrap_or_else(|| query.redirect_uri.clone());
     format!(
         r#"<!doctype html>
@@ -661,35 +667,19 @@ async fn exchange_refresh_token(
                 .json(serde_json::json!({ "error": "server_error" }))
         }
     };
-    if db
-        .create_oauth_access_token(
+    match db
+        .rotate_oauth_refresh_token(
+            stored.id,
             &access_token_hash,
-            client_id,
-            stored.user_id,
-            &scopes_json,
-            Utc::now() + cfg.access_token_ttl,
-        )
-        .await
-        .is_err()
-    {
-        return HttpResponse::InternalServerError()
-            .json(serde_json::json!({ "error": "server_error" }));
-    }
-    if db
-        .create_oauth_refresh_token(
             &next_refresh_token_hash,
             client_id,
             stored.user_id,
             &scopes_json,
+            Utc::now() + cfg.access_token_ttl,
             Utc::now() + cfg.refresh_token_ttl,
         )
         .await
-        .is_err()
     {
-        return HttpResponse::InternalServerError()
-            .json(serde_json::json!({ "error": "server_error" }));
-    }
-    match db.revoke_oauth_refresh_token(stored.id).await {
         Ok(true) => {}
         Ok(false) => {
             return HttpResponse::BadRequest()

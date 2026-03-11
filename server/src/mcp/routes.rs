@@ -272,41 +272,31 @@ fn summarize_args(args: &Value) -> Value {
     match args {
         Value::Object(map) => Value::Object(
             map.iter()
-                .map(|(key, value)| (key.clone(), sanitize_audit_value(key, value)))
+                .map(|(key, value)| (key.clone(), summarize_audit_value(value)))
                 .collect(),
         ),
         _ => json!({}),
     }
 }
 
-fn sanitize_audit_value(key: &str, value: &Value) -> Value {
+fn summarize_audit_value(value: &Value) -> Value {
     match value {
         Value::Object(map) => Value::Object(
             map.iter()
                 .map(|(nested_key, nested_value)| {
-                    (
-                        nested_key.clone(),
-                        sanitize_audit_value(nested_key, nested_value),
-                    )
+                    (nested_key.clone(), summarize_audit_value(nested_value))
                 })
                 .collect(),
         ),
-        Value::Array(items) => {
-            if key == "sets" {
-                json!({ "count": items.len() })
-            } else {
-                Value::Array(
-                    items
-                        .iter()
-                        .map(|item| sanitize_audit_value(key, item))
-                        .collect(),
-                )
-            }
-        }
-        Value::String(_) if matches!(key, "notes" | "feedback") => {
-            Value::String("<redacted>".to_string())
-        }
-        _ => value.clone(),
+        Value::Array(items) => json!({
+            "count": items.len(),
+            "items": items.iter().take(3).map(summarize_audit_value).collect::<Vec<_>>(),
+        }),
+        Value::String(text) => json!({
+            "type": "string",
+            "length": text.chars().count(),
+        }),
+        Value::Number(_) | Value::Bool(_) | Value::Null => value.clone(),
     }
 }
 

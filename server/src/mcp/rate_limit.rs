@@ -59,9 +59,16 @@ pub fn reset() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, OnceLock};
+
+    fn env_lock() -> &'static Mutex<()> {
+        static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        ENV_LOCK.get_or_init(|| Mutex::new(()))
+    }
 
     #[test]
     fn admit_request_is_atomic_for_the_limit_boundary() {
+        let _guard = env_lock().lock().unwrap();
         reset();
         let prev = std::env::var("MCP_RATE_LIMIT_PER_MINUTE").ok();
         std::env::set_var("MCP_RATE_LIMIT_PER_MINUTE", "2");
@@ -78,6 +85,7 @@ mod tests {
 
     #[test]
     fn stale_keys_are_evicted_when_new_requests_arrive() {
+        let _guard = env_lock().lock().unwrap();
         reset();
         let prev = std::env::var("MCP_RATE_LIMIT_PER_MINUTE").ok();
         std::env::set_var("MCP_RATE_LIMIT_PER_MINUTE", "1");
