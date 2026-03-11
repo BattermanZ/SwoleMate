@@ -87,11 +87,14 @@ fn should_skip_auth(req: &ServiceRequest) -> bool {
     if req.method() == actix_web::http::Method::OPTIONS {
         return true;
     }
-    match req.path() {
+    (match req.path() {
         "/api/health" => true,
         "/api/auth/login" => true,
+        "/mcp" => true,
+        "/sse" => true,
         _ => false,
-    }
+    }) || req.path().starts_with("/oauth/")
+        || req.path().starts_with("/.well-known/")
 }
 
 fn allowed_when_password_change_required(path: &str) -> bool {

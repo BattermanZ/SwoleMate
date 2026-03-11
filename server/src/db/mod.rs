@@ -5,6 +5,7 @@ use tokio::sync::RwLock;
 
 mod auth;
 mod exercises;
+pub mod oauth;
 mod progress;
 mod workouts;
 

@@ -14,8 +14,10 @@ use std::{
 use tokio::sync::Semaphore;
 use uuid::Uuid;
 
+mod mcp_auth;
 mod session_auth;
 
+pub use mcp_auth::{McpBearerAuth, McpPrincipal};
 pub use session_auth::logout_response;
 pub use session_auth::{AdminUser, CurrentUser, SessionAuth};
 

@@ -1,0 +1,315 @@
+use crate::db::Database;
+use crate::middleware::McpPrincipal;
+use crate::services::{authz, exercises, progress, workouts};
+use actix_web::{post, web, HttpRequest, HttpResponse};
+use serde::Deserialize;
+use serde_json::{json, Value};
+
+const PROTOCOL_VERSION: &str = "2025-11-05";
+
+#[derive(Debug, Deserialize)]
+struct RpcRequest {
+    jsonrpc: String,
+    #[serde(default)]
+    id: Option<Value>,
+    method: String,
+    #[serde(default)]
+    params: Value,
+}
+
+fn rpc_result(id: Option<Value>, result: Value) -> HttpResponse {
+    HttpResponse::Ok().json(json!({
+        "jsonrpc": "2.0",
+        "id": id.unwrap_or(Value::Null),
+        "result": result
+    }))
+}
+
+fn rpc_error(id: Option<Value>, code: i64, message: &str) -> HttpResponse {
+    HttpResponse::Ok().json(json!({
+        "jsonrpc": "2.0",
+        "id": id.unwrap_or(Value::Null),
+        "error": {
+            "code": code,
+            "message": message
+        }
+    }))
+}
+
+fn tool_definitions() -> Value {
+    json!([
+        {
+            "name": "list_workouts",
+            "description": "List workouts for the authenticated user.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }
+        },
+        {
+            "name": "get_workout",
+            "description": "Fetch one workout with its exercises and sets.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "integer" }
+                },
+                "required": ["id"],
+                "additionalProperties": false
+            }
+        },
+        {
+            "name": "get_last_exercise_data",
+            "description": "Fetch the last logged exercise instance and sets for an exercise type.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "exercise_type": { "type": "string" }
+                },
+                "required": ["exercise_type"],
+                "additionalProperties": false
+            }
+        },
+        {
+            "name": "get_exercise_progress",
+            "description": "Fetch progress history for an exercise type.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "exercise_type": { "type": "string" }
+                },
+                "required": ["exercise_type"],
+                "additionalProperties": false
+            }
+        },
+        {
+            "name": "get_workout_stats",
+            "description": "Fetch aggregate workout statistics for the authenticated user.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }
+        },
+        {
+            "name": "get_volume_stats",
+            "description": "Fetch volume statistics for an exercise type.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "exercise_type": { "type": "string" }
+                },
+                "required": ["exercise_type"],
+                "additionalProperties": false
+            }
+        }
+    ])
+}
+
+fn tool_success(payload: Value) -> Value {
+    let text = serde_json::to_string_pretty(&payload).unwrap_or_else(|_| payload.to_string());
+    json!({
+        "content": [
+            {
+                "type": "text",
+                "text": text
+            }
+        ],
+        "structuredContent": payload
+    })
+}
+
+fn summarize_args(args: &Value) -> Value {
+    match args {
+        Value::Object(map) => {
+            let mut out = serde_json::Map::new();
+            for (key, value) in map {
+                out.insert(key.clone(), value.clone());
+            }
+            Value::Object(out)
+        }
+        _ => json!({}),
+    }
+}
+
+#[post("/mcp")]
+pub async fn handle_mcp(
+    req: HttpRequest,
+    principal: McpPrincipal,
+    db: web::Data<Database>,
+    body: web::Json<RpcRequest>,
+) -> HttpResponse {
+    let rpc = body.into_inner();
+    if rpc.jsonrpc != "2.0" {
+        return rpc_error(rpc.id, -32600, "Invalid Request");
+    }
+
+    match rpc.method.as_str() {
+        "initialize" => rpc_result(
+            rpc.id,
+            json!({
+                "protocolVersion": PROTOCOL_VERSION,
+                "capabilities": {
+                    "tools": {
+                        "listChanged": false
+                    }
+                },
+                "serverInfo": {
+                    "name": "swolemate",
+                    "version": env!("CARGO_PKG_VERSION")
+                }
+            }),
+        ),
+        "notifications/initialized" => HttpResponse::Accepted().finish(),
+        "ping" => rpc_result(rpc.id, json!({})),
+        "tools/list" => rpc_result(rpc.id, json!({ "tools": tool_definitions() })),
+        "resources/list" => rpc_result(rpc.id, json!({ "resources": [] })),
+        "tools/call" => {
+            let name = rpc
+                .params
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let args = rpc
+                .params
+                .get("arguments")
+                .cloned()
+                .unwrap_or_else(|| json!({}));
+            let audit_args = summarize_args(&args);
+            let ip = req
+                .connection_info()
+                .realip_remote_addr()
+                .map(str::to_string);
+            let user_agent = req
+                .headers()
+                .get(actix_web::http::header::USER_AGENT)
+                .and_then(|value| value.to_str().ok())
+                .map(str::to_string);
+
+            let response = match call_tool(name, &args, &principal, db.get_ref()).await {
+                Ok(result) => {
+                    let _ = db
+                        .write_mcp_audit_log(
+                            Some(principal.user_id),
+                            Some(&principal.client_id),
+                            name,
+                            true,
+                            None,
+                            Some(&audit_args),
+                            ip.as_deref(),
+                            user_agent.as_deref(),
+                        )
+                        .await;
+                    rpc_result(rpc.id, result)
+                }
+                Err((code, message, error_code)) => {
+                    let _ = db
+                        .write_mcp_audit_log(
+                            Some(principal.user_id),
+                            Some(&principal.client_id),
+                            name,
+                            false,
+                            Some(error_code),
+                            Some(&audit_args),
+                            ip.as_deref(),
+                            user_agent.as_deref(),
+                        )
+                        .await;
+                    rpc_error(rpc.id, code, message)
+                }
+            };
+            response
+        }
+        _ => rpc_error(rpc.id, -32601, "Method not found"),
+    }
+}
+
+async fn call_tool(
+    name: &str,
+    args: &Value,
+    principal: &McpPrincipal,
+    db: &Database,
+) -> Result<Value, (i64, &'static str, &'static str)> {
+    match name {
+        "list_workouts" => {
+            if !authz::has_scope(&principal.scopes, authz::McpScope::WorkoutsRead) {
+                return Err((-32001, "Forbidden", "missing_scope"));
+            }
+            let workouts = workouts::list_workouts(db, principal.user_id)
+                .await
+                .map_err(|_| (-32000, "Internal error", "internal_error"))?;
+            Ok(tool_success(json!(workouts)))
+        }
+        "get_workout" => {
+            if !authz::has_scope(&principal.scopes, authz::McpScope::WorkoutsRead) {
+                return Err((-32001, "Forbidden", "missing_scope"));
+            }
+            let id = args.get("id").and_then(Value::as_i64).ok_or((
+                -32602,
+                "Invalid params",
+                "invalid_params",
+            ))?;
+            let workout = workouts::get_workout_detail(db, principal.user_id, id)
+                .await
+                .map_err(|_| (-32004, "Workout not found", "not_found"))?;
+            Ok(tool_success(json!(workout)))
+        }
+        "get_last_exercise_data" => {
+            if !authz::has_scope(&principal.scopes, authz::McpScope::WorkoutsRead) {
+                return Err((-32001, "Forbidden", "missing_scope"));
+            }
+            let exercise_type = args.get("exercise_type").and_then(Value::as_str).ok_or((
+                -32602,
+                "Invalid params",
+                "invalid_params",
+            ))?;
+            let data = exercises::get_last_exercise_data(db, principal.user_id, exercise_type)
+                .await
+                .map_err(|_| (-32000, "Internal error", "internal_error"))?;
+            Ok(tool_success(json!(data)))
+        }
+        "get_exercise_progress" => {
+            if !authz::has_scope(&principal.scopes, authz::McpScope::ProgressRead) {
+                return Err((-32001, "Forbidden", "missing_scope"));
+            }
+            let exercise_type = args.get("exercise_type").and_then(Value::as_str).ok_or((
+                -32602,
+                "Invalid params",
+                "invalid_params",
+            ))?;
+            let data = progress::get_exercise_progress(db, principal.user_id, exercise_type)
+                .await
+                .map_err(|_| (-32000, "Internal error", "internal_error"))?;
+            Ok(tool_success(json!(data)))
+        }
+        "get_workout_stats" => {
+            if !authz::has_scope(&principal.scopes, authz::McpScope::ProgressRead) {
+                return Err((-32001, "Forbidden", "missing_scope"));
+            }
+            let data = progress::get_workout_stats(db, principal.user_id)
+                .await
+                .map_err(|_| (-32000, "Internal error", "internal_error"))?;
+            Ok(tool_success(data))
+        }
+        "get_volume_stats" => {
+            if !authz::has_scope(&principal.scopes, authz::McpScope::ProgressRead) {
+                return Err((-32001, "Forbidden", "missing_scope"));
+            }
+            let exercise_type = args.get("exercise_type").and_then(Value::as_str).ok_or((
+                -32602,
+                "Invalid params",
+                "invalid_params",
+            ))?;
+            let data = progress::get_volume_stats(db, principal.user_id, exercise_type)
+                .await
+                .map_err(|_| (-32000, "Internal error", "internal_error"))?;
+            Ok(tool_success(data))
+        }
+        _ => Err((-32601, "Tool not found", "tool_not_found")),
+    }
+}
+
+pub fn config(cfg: &mut web::ServiceConfig) {
+    cfg.service(handle_mcp);
+}

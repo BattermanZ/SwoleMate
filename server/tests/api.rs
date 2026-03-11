@@ -1,13 +1,15 @@
 use actix_web::{test, web, App, HttpResponse};
+use base64::Engine;
 use once_cell::sync::Lazy;
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::Row;
 use std::io::Write;
 use std::sync::Mutex;
 use tempfile::TempDir;
 
-use swolemate_server::{auth, db::Database, routes, schema};
+use swolemate_server::{auth, db::Database, mcp, oauth, routes, schema};
 
 static TEST_ENV_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
@@ -126,6 +128,7 @@ async fn setup_test_app_raw() -> (
 ) {
     let database = setup_test_database().await;
     let session_cfg = auth::SessionConfig::for_env("development");
+    let oauth_cfg = oauth::OAuthConfig::from_env();
     let app = test::init_service(
         App::new()
             .wrap(swolemate_server::middleware::SessionAuth::new(
@@ -134,7 +137,17 @@ async fn setup_test_app_raw() -> (
             ))
             .app_data(web::Data::new(database.clone()))
             .app_data(web::Data::new(session_cfg))
-            .configure(routes::config),
+            .app_data(web::Data::new(oauth_cfg.clone()))
+            .configure(routes::config)
+            .configure(oauth::routes::config)
+            .service(
+                web::scope("")
+                    .wrap(swolemate_server::middleware::McpBearerAuth::new(
+                        database.clone(),
+                        oauth_cfg.protected_resource_endpoint.clone(),
+                    ))
+                    .configure(mcp::routes::config),
+            ),
     )
     .await;
 
@@ -173,6 +186,7 @@ async fn setup_test_app_raw_with_cfg(
     >,
 ) {
     let database = setup_test_database().await;
+    let oauth_cfg = oauth::OAuthConfig::from_env();
     let app = test::init_service(
         App::new()
             .wrap(swolemate_server::middleware::SessionAuth::new(
@@ -181,7 +195,17 @@ async fn setup_test_app_raw_with_cfg(
             ))
             .app_data(web::Data::new(database.clone()))
             .app_data(web::Data::new(session_cfg))
-            .configure(routes::config),
+            .app_data(web::Data::new(oauth_cfg.clone()))
+            .configure(routes::config)
+            .configure(oauth::routes::config)
+            .service(
+                web::scope("")
+                    .wrap(swolemate_server::middleware::McpBearerAuth::new(
+                        database.clone(),
+                        oauth_cfg.protected_resource_endpoint.clone(),
+                    ))
+                    .configure(mcp::routes::config),
+            ),
     )
     .await;
 
@@ -379,6 +403,126 @@ async fn create_user_as_admin(
     let resp = test::call_service(app, req).await;
     assert_eq!(resp.status(), 201);
     json_body(resp).await["id"].as_i64().expect("user id")
+}
+
+fn pkce_challenge(verifier: &str) -> String {
+    let digest = Sha256::digest(verifier.as_bytes());
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(digest)
+}
+
+async fn register_oauth_client(
+    app: &impl actix_web::dev::Service<
+        actix_http::Request,
+        Response = actix_web::dev::ServiceResponse,
+        Error = actix_web::Error,
+    >,
+    scope: &str,
+) -> Value {
+    let req = test::TestRequest::post()
+        .uri("/oauth/register")
+        .set_json(json!({
+            "client_name": "Test MCP Client",
+            "redirect_uris": ["https://client.example/callback"],
+            "scope": scope
+        }))
+        .to_request();
+    let resp = test::call_service(app, req).await;
+    assert_eq!(resp.status(), 201);
+    json_body(resp).await
+}
+
+async fn authorize_oauth_code(
+    app: &impl actix_web::dev::Service<
+        actix_http::Request,
+        Response = actix_web::dev::ServiceResponse,
+        Error = actix_web::Error,
+    >,
+    client_id: &str,
+    username: &str,
+    password: &str,
+    scope: &str,
+    verifier: &str,
+) -> String {
+    let redirect_uri = "https://client.example/callback";
+    let challenge = pkce_challenge(verifier);
+
+    let req = test::TestRequest::get()
+        .uri(&format!(
+            "/oauth/authorize?response_type=code&client_id={}&redirect_uri={}&scope={}&state=test-state&code_challenge={}&code_challenge_method=S256",
+            urlencoding::encode(client_id),
+            urlencoding::encode(redirect_uri),
+            urlencoding::encode(scope),
+            urlencoding::encode(&challenge),
+        ))
+        .to_request();
+    let resp = test::call_service(app, req).await;
+    assert_eq!(resp.status(), 200);
+
+    let req = test::TestRequest::post()
+        .uri("/oauth/authorize")
+        .set_form(&[
+            ("response_type", "code"),
+            ("client_id", client_id),
+            ("redirect_uri", redirect_uri),
+            ("scope", scope),
+            ("state", "test-state"),
+            ("code_challenge", challenge.as_str()),
+            ("code_challenge_method", "S256"),
+            ("username", username),
+            ("password", password),
+            ("approve", "yes"),
+        ])
+        .to_request();
+    let resp = test::call_service(app, req).await;
+    assert_eq!(resp.status(), 302);
+    let location = resp
+        .headers()
+        .get(actix_web::http::header::LOCATION)
+        .expect("location header")
+        .to_str()
+        .expect("location str");
+    location
+        .split('?')
+        .nth(1)
+        .expect("query string")
+        .split('&')
+        .find_map(|pair| pair.split_once('='))
+        .filter(|(key, _)| *key == "code")
+        .map(|(_, value)| {
+            urlencoding::decode(value)
+                .expect("decode code")
+                .into_owned()
+        })
+        .expect("authorization code")
+}
+
+async fn exchange_token(
+    app: &impl actix_web::dev::Service<
+        actix_http::Request,
+        Response = actix_web::dev::ServiceResponse,
+        Error = actix_web::Error,
+    >,
+    client_id: &str,
+    code: &str,
+    verifier: &str,
+) -> Value {
+    let req = test::TestRequest::post()
+        .uri("/oauth/token")
+        .insert_header((
+            actix_web::http::header::CONTENT_TYPE,
+            "application/x-www-form-urlencoded",
+        ))
+        .set_form(&[
+            ("grant_type", "authorization_code"),
+            ("client_id", client_id),
+            ("code", code),
+            ("redirect_uri", "https://client.example/callback"),
+            ("code_verifier", verifier),
+        ])
+        .to_request();
+    let resp = test::call_service(app, req).await;
+    assert_eq!(resp.status(), 200);
+    json_body(resp).await
 }
 
 #[actix_web::test]
@@ -1918,4 +2062,186 @@ async fn api_concurrency_enforces_logs_backups_and_restore_class_limits() {
         assert_eq!(contended_resp.status(), 503, "uri={same_class_uri}");
         assert!(global_resp.status().is_success(), "uri={same_class_uri}");
     }
+}
+
+#[actix_web::test]
+async fn oauth_metadata_and_client_registration_work() {
+    let _env = TestEnv::new();
+    let (_db, _admin_cookie, app) = setup_test_app().await;
+
+    let req = test::TestRequest::get()
+        .uri("/.well-known/oauth-authorization-server")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 200);
+    let metadata = json_body(resp).await;
+    assert!(metadata["authorization_endpoint"]
+        .as_str()
+        .unwrap()
+        .ends_with("/oauth/authorize"));
+    assert!(metadata["token_endpoint"]
+        .as_str()
+        .unwrap()
+        .ends_with("/oauth/token"));
+
+    let req = test::TestRequest::get()
+        .uri("/.well-known/oauth-protected-resource")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 200);
+    let resource = json_body(resp).await;
+    assert!(resource["resource"].as_str().unwrap().ends_with("/mcp"));
+
+    let registered = register_oauth_client(&app, "workouts.read progress.read").await;
+    assert_eq!(registered["token_endpoint_auth_method"], "none");
+    assert_eq!(registered["response_types"][0], "code");
+}
+
+#[actix_web::test]
+async fn oauth_token_flow_and_read_only_mcp_tools_work() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "mcp-user", "passwordpassword").await;
+    let user_cookie = login_cookie_active(&app, "mcp-user", "passwordpassword").await;
+    let user_password = "passwordpassword-changed";
+
+    let req = with_cookie(test::TestRequest::post(), &user_cookie)
+        .uri("/api/workouts")
+        .set_json(json!({
+            "date": chrono::Utc::now(),
+            "start_time": chrono::Utc::now(),
+            "notes": "mcp session"
+        }))
+        .to_request();
+    let workout_resp = test::call_service(&app, req).await;
+    assert_eq!(workout_resp.status(), 201);
+    let workout_id = json_body(workout_resp).await["id"].as_i64().unwrap();
+
+    let registered = register_oauth_client(&app, "workouts.read progress.read").await;
+    let client_id = registered["client_id"].as_str().unwrap();
+    let verifier = "batch2-test-verifier";
+    let code = authorize_oauth_code(
+        &app,
+        client_id,
+        "mcp-user",
+        user_password,
+        "workouts.read progress.read",
+        verifier,
+    )
+    .await;
+    let tokens = exchange_token(&app, client_id, &code, verifier).await;
+    let access_token = tokens["access_token"].as_str().unwrap();
+
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .set_json(json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {}
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 401);
+    assert!(resp
+        .headers()
+        .contains_key(actix_web::http::header::WWW_AUTHENTICATE));
+
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {access_token}"),
+        ))
+        .set_json(json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {}
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 200);
+    let initialize = json_body(resp).await;
+    assert_eq!(initialize["result"]["serverInfo"]["name"], "swolemate");
+
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {access_token}"),
+        ))
+        .set_json(json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/list",
+            "params": {}
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    let listed = json_body(resp).await;
+    assert!(listed["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|tool| tool["name"] == "list_workouts"));
+
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {access_token}"),
+        ))
+        .set_json(json!({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+                "name": "get_workout",
+                "arguments": { "id": workout_id }
+            }
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    let called = json_body(resp).await;
+    assert_eq!(
+        called["result"]["structuredContent"]["workout"]["id"],
+        workout_id
+    );
+
+    let registered = register_oauth_client(&app, "workouts.read").await;
+    let limited_client_id = registered["client_id"].as_str().unwrap();
+    let limited_code = authorize_oauth_code(
+        &app,
+        limited_client_id,
+        "mcp-user",
+        user_password,
+        "workouts.read",
+        "limited-verifier",
+    )
+    .await;
+    let limited_tokens =
+        exchange_token(&app, limited_client_id, &limited_code, "limited-verifier").await;
+    let limited_access_token = limited_tokens["access_token"].as_str().unwrap();
+
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {limited_access_token}"),
+        ))
+        .set_json(json!({
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "tools/call",
+            "params": {
+                "name": "get_workout_stats",
+                "arguments": {}
+            }
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    let body = json_body(resp).await;
+    assert_eq!(body["error"]["message"], "Forbidden");
 }
