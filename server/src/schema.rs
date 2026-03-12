@@ -127,6 +127,14 @@ pub const SCHEMA_UPDATES: &[(i64, &str)] = &[
         SELECT 1;
         "#,
     ),
+    (
+        11,
+        r#"
+        -- Add personal MCP token storage.
+        -- Applied via Rust migration logic in `setup_schema` (kept as a placeholder for versioning).
+        SELECT 1;
+        "#,
+    ),
 ];
 
 pub const SCHEMA_VERSION_TABLE: &str = r#"
@@ -262,6 +270,15 @@ pub async fn setup_schema(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<(), sqlx::E
 
             if *version == 10 {
                 migrate_oauth_client_foreign_keys(pool).await?;
+                sqlx::query("INSERT INTO schema_version (version) VALUES (?)")
+                    .bind(*version)
+                    .execute(pool)
+                    .await?;
+                continue;
+            }
+
+            if *version == 11 {
+                migrate_mcp_tokens(pool).await?;
                 sqlx::query("INSERT INTO schema_version (version) VALUES (?)")
                     .bind(*version)
                     .execute(pool)
@@ -657,6 +674,34 @@ async fn migrate_oauth_client_foreign_keys(pool: &Pool<Sqlite>) -> Result<(), sq
         .await?;
 
     tx.commit().await?;
+    Ok(())
+}
+
+async fn migrate_mcp_tokens(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS mcp_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            token_hash TEXT NOT NULL UNIQUE,
+            scopes_json TEXT NOT NULL,
+            expires_at DATETIME,
+            revoked_at DATETIME,
+            last_used_at DATETIME,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_mcp_tokens_user_id
+            ON mcp_tokens(user_id);
+        CREATE INDEX IF NOT EXISTS idx_mcp_tokens_token_hash
+            ON mcp_tokens(token_hash);
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
     Ok(())
 }
 

@@ -9,6 +9,7 @@ use serde_json::json;
 
 pub mod admin;
 pub mod auth;
+pub mod mcp_tokens;
 
 #[derive(Debug, Deserialize)]
 pub struct ExerciseTypeQuery {
@@ -502,7 +503,10 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(delete_backup)
         .service(get_exercise_progress)
         .service(get_workout_stats)
-        .service(get_volume_stats);
+        .service(get_volume_stats)
+        .service(mcp_tokens::list_mcp_tokens)
+        .service(mcp_tokens::create_mcp_token)
+        .service(mcp_tokens::revoke_mcp_token);
 }
 
 fn is_safe_backup_filename(filename: &str) -> bool {

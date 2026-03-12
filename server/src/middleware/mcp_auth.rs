@@ -104,30 +104,57 @@ where
             };
 
             let token_hash = hash_session_token(token);
-            let Some(token_row) = db
+            let principal = if let Some(token_row) = db
                 .get_oauth_access_token_by_hash(&token_hash)
                 .await
                 .map_err(Error::from)?
-            else {
+            {
+                if token_row.revoked_at.is_some()
+                    || token_row.expires_at <= Utc::now()
+                    || token_row.user.must_change_password
+                {
+                    None
+                } else {
+                    Some(McpPrincipal {
+                        user_id: token_row.user.id,
+                        client_id: token_row.client_id,
+                        scopes: token_row.scopes,
+                    })
+                }
+            } else if let Some(token_row) = db
+                .get_mcp_token_by_hash(&token_hash)
+                .await
+                .map_err(Error::from)?
+            {
+                if token_row.revoked_at.is_some()
+                    || token_row
+                        .expires_at
+                        .is_some_and(|value| value <= Utc::now())
+                    || token_row.user_disabled_at.is_some()
+                    || token_row.user_must_change_password
+                {
+                    None
+                } else {
+                    db.touch_mcp_token_last_used(token_row.id)
+                        .await
+                        .map_err(Error::from)?;
+                    Some(McpPrincipal {
+                        user_id: token_row.user_id,
+                        client_id: format!("mcp_token:{}", token_row.id),
+                        scopes: token_row.scopes,
+                    })
+                }
+            } else {
+                None
+            };
+
+            let Some(principal) = principal else {
                 let (req, _) = req.into_parts();
                 let resp = unauthorized_response(&resource_metadata_url);
                 return Ok(ServiceResponse::new(req, resp));
             };
 
-            if token_row.revoked_at.is_some()
-                || token_row.expires_at <= Utc::now()
-                || token_row.user.must_change_password
-            {
-                let (req, _) = req.into_parts();
-                let resp = unauthorized_response(&resource_metadata_url);
-                return Ok(ServiceResponse::new(req, resp));
-            }
-
-            req.extensions_mut().insert(McpPrincipal {
-                user_id: token_row.user.id,
-                client_id: token_row.client_id,
-                scopes: token_row.scopes,
-            });
+            req.extensions_mut().insert(principal);
 
             let res = service.call(req).await?;
             Ok(res.map_into_boxed_body())

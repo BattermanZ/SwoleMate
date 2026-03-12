@@ -618,6 +618,29 @@ async fn latest_mcp_audit_payload(db: &Database) -> Value {
     serde_json::from_str(&payload).expect("parse mcp audit payload")
 }
 
+async fn create_mcp_personal_token(
+    app: &impl actix_web::dev::Service<
+        actix_http::Request,
+        Response = actix_web::dev::ServiceResponse,
+        Error = actix_web::Error,
+    >,
+    cookie: &actix_web::cookie::Cookie<'static>,
+    name: &str,
+    scopes: &[&str],
+    expires_in_days: Option<i64>,
+) -> Value {
+    let req = with_cookie(test::TestRequest::post(), cookie)
+        .uri("/api/mcp/tokens")
+        .set_json(json!({
+            "name": name,
+            "scopes": scopes,
+            "expires_in_days": expires_in_days
+        }));
+    let resp = test::call_service(app, req.to_request()).await;
+    assert_eq!(resp.status(), 201);
+    json_body(resp).await
+}
+
 #[actix_web::test]
 async fn workout_stats_empty_workouts_returns_empty_arrays() {
     let _env = TestEnv::new();
@@ -1343,6 +1366,13 @@ async fn schema_creates_oauth_and_mcp_foundation_tables() {
             .expect("schema version 10 marker");
     assert_eq!(version_exists, 1);
 
+    let version_exists: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM schema_version WHERE version = 11")
+            .fetch_one(&pool)
+            .await
+            .expect("schema version 11 marker");
+    assert_eq!(version_exists, 1);
+
     for table_name in [
         "oauth_authorization_codes",
         "oauth_access_tokens",
@@ -1365,6 +1395,17 @@ async fn schema_creates_oauth_and_mcp_foundation_tables() {
             "missing oauth_clients(client_id) foreign key on {table_name}"
         );
     }
+
+    let fks = sqlx::query("PRAGMA foreign_key_list('mcp_tokens')")
+        .fetch_all(&pool)
+        .await
+        .expect("mcp_tokens foreign key list");
+    let has_user_fk = fks.iter().any(|row| {
+        let foreign_table: String = row.try_get("table").expect("fk table");
+        let from_column: String = row.try_get("from").expect("fk from");
+        foreign_table == "users" && from_column == "user_id"
+    });
+    assert!(has_user_fk, "missing users(id) foreign key on mcp_tokens");
 }
 
 #[actix_web::test]
@@ -3054,6 +3095,237 @@ async fn oauth_token_flow_and_write_mcp_tools_work() {
             .len(),
         2
     );
+}
+
+#[actix_web::test]
+async fn mcp_personal_token_create_list_and_hash_storage_work() {
+    let _env = TestEnv::new();
+    let (db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "mcp-token-user", "passwordpassword").await;
+    let user_cookie = login_cookie_active(&app, "mcp-token-user", "passwordpassword").await;
+
+    let created = create_mcp_personal_token(
+        &app,
+        &user_cookie,
+        "Local AI",
+        &["workouts.read", "progress.read"],
+        Some(30),
+    )
+    .await;
+    let token = created["token"].as_str().unwrap();
+    assert!(token.starts_with("smcp_"));
+
+    let req = with_cookie(test::TestRequest::get(), &user_cookie)
+        .uri("/api/mcp/tokens")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 200);
+    let body = json_body(resp).await;
+    assert_eq!(body.as_array().unwrap().len(), 1);
+    assert!(body[0].get("token").is_none());
+    assert_eq!(body[0]["name"], "Local AI");
+
+    let pool = db.pool().await;
+    let row = sqlx::query("SELECT token_hash FROM mcp_tokens LIMIT 1")
+        .fetch_one(&pool)
+        .await
+        .expect("fetch mcp token hash");
+    let token_hash: String = row.get("token_hash");
+    assert_eq!(token_hash, auth::hash_session_token(token));
+    assert_ne!(token_hash, token);
+}
+
+#[actix_web::test]
+async fn mcp_personal_read_only_token_can_read_but_not_write() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "mcp-personal-read", "passwordpassword").await;
+    let user_cookie = login_cookie_active(&app, "mcp-personal-read", "passwordpassword").await;
+
+    let req = with_cookie(test::TestRequest::post(), &user_cookie)
+        .uri("/api/workouts")
+        .set_json(json!({
+            "date": chrono::Utc::now(),
+            "start_time": chrono::Utc::now(),
+            "notes": "personal token workout"
+        }))
+        .to_request();
+    let workout_resp = test::call_service(&app, req).await;
+    assert_eq!(workout_resp.status(), 201);
+    let workout_id = json_body(workout_resp).await["id"].as_i64().unwrap();
+
+    let created = create_mcp_personal_token(
+        &app,
+        &user_cookie,
+        "Read only",
+        &["workouts.read", "progress.read"],
+        Some(30),
+    )
+    .await;
+    let token = created["token"].as_str().unwrap();
+
+    let read = mcp_call(&app, token, 1, "get_workout", json!({ "id": workout_id })).await;
+    assert_eq!(
+        read["result"]["structuredContent"]["workout"]["id"],
+        workout_id
+    );
+
+    let write = mcp_call(
+        &app,
+        token,
+        2,
+        "create_workout",
+        json!({
+            "date": chrono::Utc::now(),
+            "start_time": chrono::Utc::now()
+        }),
+    )
+    .await;
+    assert_eq!(write["error"]["message"], "Forbidden");
+}
+
+#[actix_web::test]
+async fn mcp_personal_write_token_can_write_and_updates_last_used() {
+    let _env = TestEnv::new();
+    let (db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(
+        &app,
+        &admin_cookie,
+        "mcp-personal-write",
+        "passwordpassword",
+    )
+    .await;
+    let user_cookie = login_cookie_active(&app, "mcp-personal-write", "passwordpassword").await;
+
+    let created = create_mcp_personal_token(
+        &app,
+        &user_cookie,
+        "Writer",
+        &["workouts.read", "progress.read", "workouts.write"],
+        Some(30),
+    )
+    .await;
+    let token = created["token"].as_str().unwrap();
+    let token_id = created["id"].as_i64().unwrap();
+
+    let write = mcp_call(
+        &app,
+        token,
+        1,
+        "create_workout",
+        json!({
+            "date": chrono::Utc::now(),
+            "start_time": chrono::Utc::now()
+        }),
+    )
+    .await;
+    assert!(write["result"]["structuredContent"]["id"]
+        .as_i64()
+        .is_some());
+
+    let pool = db.pool().await;
+    let row = sqlx::query("SELECT last_used_at FROM mcp_tokens WHERE id = ?")
+        .bind(token_id)
+        .fetch_one(&pool)
+        .await
+        .expect("fetch mcp token last_used_at");
+    let last_used_at: Option<String> = row.get("last_used_at");
+    assert!(last_used_at.is_some());
+}
+
+#[actix_web::test]
+async fn revoked_or_expired_mcp_personal_tokens_cannot_access_mcp() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(
+        &app,
+        &admin_cookie,
+        "mcp-personal-revoke",
+        "passwordpassword",
+    )
+    .await;
+    let user_cookie = login_cookie_active(&app, "mcp-personal-revoke", "passwordpassword").await;
+
+    let created =
+        create_mcp_personal_token(&app, &user_cookie, "Revoked", &["workouts.read"], Some(30))
+            .await;
+    let token_id = created["id"].as_i64().unwrap();
+    let token = created["token"].as_str().unwrap();
+
+    let revoke_req = with_cookie(test::TestRequest::post(), &user_cookie)
+        .uri(&format!("/api/mcp/tokens/{token_id}/revoke"))
+        .to_request();
+    let revoke_resp = test::call_service(&app, revoke_req).await;
+    assert_eq!(revoke_resp.status(), 200);
+
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {token}"),
+        ))
+        .set_json(json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {}
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 401);
+
+    let expired =
+        create_mcp_personal_token(&app, &user_cookie, "Expired", &["workouts.read"], Some(1)).await;
+    let expired_token = expired["token"].as_str().unwrap().to_string();
+    let expired_id = expired["id"].as_i64().unwrap();
+
+    let pool = _db.pool().await;
+    sqlx::query("UPDATE mcp_tokens SET expires_at = CURRENT_TIMESTAMP WHERE id = ?")
+        .bind(expired_id)
+        .execute(&pool)
+        .await
+        .expect("expire mcp token");
+
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {expired_token}"),
+        ))
+        .set_json(json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "initialize",
+            "params": {}
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 401);
+}
+
+#[actix_web::test]
+async fn user_cannot_revoke_another_users_mcp_token() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "mcp-token-a", "passwordpassword").await;
+    create_user_as_admin(&app, &admin_cookie, "mcp-token-b", "passwordpassword").await;
+    let cookie_a = login_cookie_active(&app, "mcp-token-a", "passwordpassword").await;
+    let cookie_b = login_cookie_active(&app, "mcp-token-b", "passwordpassword").await;
+
+    let created =
+        create_mcp_personal_token(&app, &cookie_a, "A token", &["workouts.read"], Some(30)).await;
+    let token_id = created["id"].as_i64().unwrap();
+
+    let revoke_req = with_cookie(test::TestRequest::post(), &cookie_b)
+        .uri(&format!("/api/mcp/tokens/{token_id}/revoke"))
+        .to_request();
+    let revoke_resp = test::call_service(&app, revoke_req).await;
+    assert_eq!(revoke_resp.status(), 404);
 }
 
 #[actix_web::test]
