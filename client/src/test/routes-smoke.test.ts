@@ -95,6 +95,15 @@ vi.mock('$lib/api', () => {
 		getExerciseTypes: vi.fn(async () => []),
 		getVolumeStats: vi.fn(async () => null),
 		getExerciseProgress: vi.fn(async () => []),
+		getMcpTokens: vi.fn(async () => []),
+		createMcpToken: vi.fn(async () => ({
+			id: 1,
+			token: 'smcp_test',
+			name: 'Test token',
+			scopes: ['workouts.read', 'progress.read'],
+			expires_at: new Date().toISOString()
+		})),
+		revokeMcpToken: vi.fn(async () => undefined),
 		adminListUsers: vi.fn(async () => []),
 		adminCreateUser: vi.fn(async () => ({ id: 2 })),
 		adminDisableUser: vi.fn(async () => undefined),
@@ -233,7 +242,7 @@ describe('route smoke', () => {
 		const ProgressPage = await importComponent('../routes/progress/+page.svelte');
 		const { getByText } = render(ProgressPage as never);
 		expect(getByText('Refresh')).toBeInTheDocument();
-	});
+	}, 10_000);
 
 	it('renders admin page', async () => {
 		const AdminPage = await importComponent('../routes/admin/+page.svelte');

@@ -32,6 +32,7 @@ export default defineConfig({
 	},
 	server: {
 		host: true,
+		allowedHosts: true,
 		port: 2470,
 		proxy: {
 			'/api': backendProxy,

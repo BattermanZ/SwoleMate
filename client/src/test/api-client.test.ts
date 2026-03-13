@@ -116,4 +116,57 @@ describe('api client behavior', () => {
 		await getExerciseProgress(exerciseType, progressFetcher as unknown as typeof fetch);
 		expect(seenUrls[2]).toContain(`/api/progress/exercise/${encoded}`);
 	});
+
+	it('creates, lists, and revokes MCP personal tokens through the API client', async () => {
+		const { createMcpToken, getMcpTokens, revokeMcpToken } = await import('$lib/api');
+		const seen: Array<{ url: string; init?: RequestInit }> = [];
+		const fetcher = vi.fn(async (input: URL | RequestInfo, init?: RequestInit) => {
+			seen.push({ url: String(input), init });
+			if (seen.length === 1) {
+				return jsonResponse({
+					id: 4,
+					token: 'smcp_test',
+					name: 'Claude Desktop',
+					scopes: ['workouts.read', 'progress.read'],
+					expires_at: '2026-02-01T00:00:00.000Z'
+				}, 201);
+			}
+			if (seen.length === 2) {
+				return jsonResponse([
+					{
+						id: 4,
+						name: 'Claude Desktop',
+						scopes: ['workouts.read', 'progress.read'],
+						expires_at: '2026-02-01T00:00:00.000Z',
+						revoked_at: null,
+						last_used_at: null,
+						created_at: '2026-01-01T00:00:00.000Z'
+					}
+				]);
+			}
+			return new Response(null, { status: 204 });
+		});
+
+		await expect(
+			createMcpToken(
+				{
+					name: 'Claude Desktop',
+					scopes: ['workouts.read', 'progress.read'],
+					expires_in_days: 30
+				},
+				fetcher as unknown as typeof fetch
+			)
+		).resolves.toMatchObject({
+			token: 'smcp_test',
+			name: 'Claude Desktop'
+		});
+		await expect(getMcpTokens(fetcher as unknown as typeof fetch)).resolves.toHaveLength(1);
+		await expect(revokeMcpToken(4, fetcher as unknown as typeof fetch)).resolves.toBeUndefined();
+
+		expect(seen[0].url).toContain('/api/mcp/tokens');
+		expect(seen[0].init?.method).toBe('POST');
+		expect(seen[1].url).toContain('/api/mcp/tokens');
+		expect(seen[2].url).toContain('/api/mcp/tokens/4/revoke');
+		expect(seen[2].init?.method).toBe('POST');
+	});
 });
