@@ -3137,6 +3137,60 @@ async fn mcp_personal_token_create_list_and_hash_storage_work() {
 }
 
 #[actix_web::test]
+async fn mcp_personal_token_creation_is_not_cacheable_and_defaults_to_expiry() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(
+        &app,
+        &admin_cookie,
+        "mcp-token-default-expiry",
+        "passwordpassword",
+    )
+    .await;
+    let user_cookie =
+        login_cookie_active(&app, "mcp-token-default-expiry", "passwordpassword").await;
+
+    let before = chrono::Utc::now();
+    let req = with_cookie(test::TestRequest::post(), &user_cookie)
+        .uri("/api/mcp/tokens")
+        .set_json(json!({
+            "name": "Default expiry",
+            "scopes": ["workouts.read"]
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 201);
+    assert_eq!(
+        resp.headers()
+            .get(actix_web::http::header::CACHE_CONTROL)
+            .and_then(|value| value.to_str().ok()),
+        Some("no-store")
+    );
+    assert_eq!(
+        resp.headers()
+            .get(actix_web::http::header::PRAGMA)
+            .and_then(|value| value.to_str().ok()),
+        Some("no-cache")
+    );
+
+    let body = json_body(resp).await;
+    let expires_at = chrono::DateTime::parse_from_rfc3339(body["expires_at"].as_str().unwrap())
+        .expect("parse expires_at")
+        .with_timezone(&chrono::Utc);
+    let min_expected = before + chrono::Duration::days(29);
+    let max_expected = before + chrono::Duration::days(31);
+    assert!(
+        expires_at >= min_expected,
+        "expires_at too early: {expires_at}"
+    );
+    assert!(
+        expires_at <= max_expected,
+        "expires_at too late: {expires_at}"
+    );
+}
+
+#[actix_web::test]
 async fn mcp_personal_read_only_token_can_read_but_not_write() {
     let _env = TestEnv::new();
     let (_db, admin_cookie, app) = setup_test_app().await;

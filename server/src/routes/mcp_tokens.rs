@@ -40,6 +40,7 @@ const ALLOWED_SCOPES: &[&str] = &[
     McpScope::ProgressRead.as_str(),
     McpScope::WorkoutsWrite.as_str(),
 ];
+const DEFAULT_TOKEN_EXPIRY_DAYS: i64 = 30;
 
 fn validate_name(name: &str) -> Result<String, AppError> {
     let trimmed = name.trim();
@@ -80,7 +81,7 @@ fn validate_scopes(scopes: &[String]) -> Result<Vec<String>, AppError> {
 
 fn validate_expiry(days: Option<i64>) -> Result<Option<chrono::DateTime<Utc>>, AppError> {
     match days {
-        None => Ok(None),
+        None => Ok(Some(Utc::now() + Duration::days(DEFAULT_TOKEN_EXPIRY_DAYS))),
         Some(days) if (1..=365).contains(&days) => Ok(Some(Utc::now() + Duration::days(days))),
         Some(_) => Err(AppError::BadRequest(
             "expires_in_days must be between 1 and 365".to_string(),
@@ -98,6 +99,13 @@ fn map_token_row(row: crate::db::mcp_tokens::McpTokenRow) -> McpTokenResponse {
         last_used_at: row.last_used_at,
         created_at: row.created_at,
     }
+}
+
+fn token_creation_json(body: CreatedMcpTokenResponse) -> HttpResponse {
+    HttpResponse::Created()
+        .insert_header((actix_web::http::header::CACHE_CONTROL, "no-store"))
+        .insert_header((actix_web::http::header::PRAGMA, "no-cache"))
+        .json(body)
 }
 
 #[get("/api/mcp/tokens")]
@@ -129,7 +137,7 @@ pub async fn create_mcp_token(
         .create_mcp_token(user.0.id, &name, &token_hash, &scopes_json, expires_at)
         .await?;
 
-    Ok(HttpResponse::Created().json(CreatedMcpTokenResponse {
+    Ok(token_creation_json(CreatedMcpTokenResponse {
         id,
         token: raw_token,
         name,
