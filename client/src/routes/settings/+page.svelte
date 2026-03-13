@@ -17,6 +17,7 @@
 	let accountError: string | null = null;
 	let accountNotice: string | null = null;
 	let mcpTokens: McpTokenSummary[] = [];
+	let activeMcpTokens: McpTokenSummary[] = [];
 	let mcpLoading = false;
 	let mcpError: string | null = null;
 	let mcpNotice: string | null = null;
@@ -203,6 +204,8 @@
 	onMount(() => {
 		void loadMcpTokens();
 	});
+
+	$: activeMcpTokens = mcpTokens.filter((token) => !token.revoked_at);
 </script>
 
 <div class="space-y-6">
@@ -487,20 +490,20 @@
 							These are the tokens your AI tools can currently use to access the MCP endpoint.
 						</p>
 					</div>
-					<span class="badge variant-soft">{mcpTokens.length}</span>
+					<span class="badge variant-soft">{activeMcpTokens.length}</span>
 				</div>
 
 				{#if $authState.status !== 'authenticated'}
 					<div class="text-sm opacity-75">Sign in to manage AI access.</div>
 				{:else if $authState.offline}
 					<div class="text-sm text-warning-500">Offline: token management is unavailable.</div>
-				{:else if mcpLoading && mcpTokens.length === 0}
+				{:else if mcpLoading && activeMcpTokens.length === 0}
 					<div class="text-sm opacity-75">Loading tokens…</div>
-				{:else if mcpTokens.length === 0}
+				{:else if activeMcpTokens.length === 0}
 					<div class="text-sm opacity-75">No MCP tokens yet.</div>
 				{:else}
 					<div class="space-y-3">
-						{#each mcpTokens as token (token.id)}
+						{#each activeMcpTokens as token (token.id)}
 							<div
 								class="rounded-xl border border-surface-200/50 bg-surface-50/60 p-3 dark:border-surface-700/50 dark:bg-surface-950/30 space-y-2"
 							>

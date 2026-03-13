@@ -218,17 +218,40 @@ describe('route behaviors', () => {
 	});
 
 	it('settings validates password mismatch, manages MCP tokens, and login shows auth errors', async () => {
-		apiMocks.getMcpTokens.mockResolvedValue([
-			{
-				id: 7,
-				name: 'Existing token',
-				scopes: ['workouts.read', 'progress.read'],
-				expires_at: '2026-02-01T00:00:00.000Z',
-				revoked_at: null,
-				last_used_at: null,
-				created_at: '2026-01-01T00:00:00.000Z'
-			}
-		] as never);
+		apiMocks.getMcpTokens
+			.mockResolvedValueOnce([
+				{
+					id: 7,
+					name: 'Existing token',
+					scopes: ['workouts.read', 'progress.read'],
+					expires_at: '2026-02-01T00:00:00.000Z',
+					revoked_at: null,
+					last_used_at: null,
+					created_at: '2026-01-01T00:00:00.000Z'
+				}
+			] as never)
+			.mockResolvedValueOnce([
+				{
+					id: 7,
+					name: 'Existing token',
+					scopes: ['workouts.read', 'progress.read'],
+					expires_at: '2026-02-01T00:00:00.000Z',
+					revoked_at: null,
+					last_used_at: null,
+					created_at: '2026-01-01T00:00:00.000Z'
+				}
+			] as never)
+			.mockResolvedValueOnce([
+				{
+					id: 7,
+					name: 'Existing token',
+					scopes: ['workouts.read', 'progress.read'],
+					expires_at: '2026-02-01T00:00:00.000Z',
+					revoked_at: '2026-01-02T00:00:00.000Z',
+					last_used_at: null,
+					created_at: '2026-01-01T00:00:00.000Z'
+				}
+			] as never);
 		const { default: SettingsPage } = await import('../routes/settings/+page.svelte');
 		const view = render(SettingsPage as never);
 		await waitFor(() => expect(apiMocks.getMcpTokens).toHaveBeenCalledTimes(1));
@@ -255,6 +278,8 @@ describe('route behaviors', () => {
 
 		await fireEvent.click(await view.findByText('Revoke'));
 		await waitFor(() => expect(apiMocks.revokeMcpToken).toHaveBeenCalledWith(7));
+		await waitFor(() => expect(view.queryByText('Existing token')).not.toBeInTheDocument());
+		expect(view.getByText('No MCP tokens yet.')).toBeInTheDocument();
 
 		const current = view.getByLabelText('Current password');
 		const next = view.getByLabelText('New password');
