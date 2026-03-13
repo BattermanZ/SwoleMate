@@ -324,7 +324,7 @@
 					<li>Export JSON is a portable snapshot you can store anywhere.</li>
 				</ul>
 			</div>
-			<a href="/settings" class="btn variant-soft w-full justify-center">Help →</a>
+			<a href="/help" class="btn variant-soft w-full justify-center">Help →</a>
 		</aside>
 	</div>
 </div>

@@ -160,3 +160,30 @@ pub async fn revoke_mcp_token(
         "message": "MCP token revoked successfully"
     })))
 }
+
+#[post("/api/mcp/tokens/{id}/rotate")]
+pub async fn rotate_mcp_token(
+    user: CurrentUser,
+    db: web::Data<Database>,
+    id: web::Path<i64>,
+) -> Result<HttpResponse, AppError> {
+    let raw_secret = generate_session_token();
+    let raw_token = format!("smcp_{raw_secret}");
+    let token_hash = hash_session_token(&raw_token);
+    let expires_at = validate_expiry(None)?;
+
+    let Some((new_id, name, scopes)) = db
+        .rotate_mcp_token_for_user(*id, user.0.id, &token_hash, expires_at)
+        .await?
+    else {
+        return Err(AppError::NotFound("MCP token not found".to_string()));
+    };
+
+    Ok(token_creation_json(CreatedMcpTokenResponse {
+        id: new_id,
+        token: raw_token,
+        name,
+        scopes,
+        expires_at,
+    }))
+}

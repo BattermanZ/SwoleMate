@@ -3383,6 +3383,99 @@ async fn user_cannot_revoke_another_users_mcp_token() {
 }
 
 #[actix_web::test]
+async fn mcp_personal_token_rotate_revokes_old_token_and_mints_new_one() {
+    let _env = TestEnv::new();
+    let (db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "mcp-token-rotate", "passwordpassword").await;
+    let user_cookie = login_cookie_active(&app, "mcp-token-rotate", "passwordpassword").await;
+
+    let created = create_mcp_personal_token(
+        &app,
+        &user_cookie,
+        "Rotating token",
+        &["workouts.read", "progress.read"],
+        Some(30),
+    )
+    .await;
+    let old_id = created["id"].as_i64().unwrap();
+    let old_token = created["token"].as_str().unwrap().to_string();
+
+    let rotate_req = with_cookie(test::TestRequest::post(), &user_cookie)
+        .uri(&format!("/api/mcp/tokens/{old_id}/rotate"))
+        .to_request();
+    let rotate_resp = test::call_service(&app, rotate_req).await;
+    assert_eq!(rotate_resp.status(), 201);
+    assert_eq!(
+        rotate_resp
+            .headers()
+            .get(actix_web::http::header::CACHE_CONTROL)
+            .and_then(|value| value.to_str().ok()),
+        Some("no-store")
+    );
+
+    let body = json_body(rotate_resp).await;
+    let new_id = body["id"].as_i64().unwrap();
+    let new_token = body["token"].as_str().unwrap().to_string();
+    assert_ne!(new_id, old_id);
+    assert_ne!(new_token, old_token);
+    assert_eq!(body["name"], "Rotating token");
+
+    let old_req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {old_token}"),
+        ))
+        .set_json(json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {}
+        }))
+        .to_request();
+    let old_resp = test::call_service(&app, old_req).await;
+    assert_eq!(old_resp.status(), 401);
+
+    let new_req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {new_token}"),
+        ))
+        .set_json(json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "initialize",
+            "params": {}
+        }))
+        .to_request();
+    let new_resp = test::call_service(&app, new_req).await;
+    assert_eq!(new_resp.status(), 200);
+    let new_init = json_body(new_resp).await;
+    assert_eq!(new_init["result"]["serverInfo"]["name"], "swolemate");
+
+    let pool = db.pool().await;
+    let old_row = sqlx::query("SELECT revoked_at FROM mcp_tokens WHERE id = ?")
+        .bind(old_id)
+        .fetch_one(&pool)
+        .await
+        .expect("fetch rotated old token");
+    let revoked_at: Option<String> = old_row.get("revoked_at");
+    assert!(revoked_at.is_some());
+
+    let new_row = sqlx::query("SELECT token_hash, revoked_at FROM mcp_tokens WHERE id = ?")
+        .bind(new_id)
+        .fetch_one(&pool)
+        .await
+        .expect("fetch rotated new token");
+    let token_hash: String = new_row.get("token_hash");
+    let new_revoked_at: Option<String> = new_row.get("revoked_at");
+    assert_eq!(token_hash, auth::hash_session_token(&new_token));
+    assert!(new_revoked_at.is_none());
+}
+
+#[actix_web::test]
 async fn read_only_mcp_token_cannot_write() {
     let _env = TestEnv::new();
     let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");

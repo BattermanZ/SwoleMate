@@ -78,6 +78,13 @@ const apiMocks = vi.hoisted(() => ({
 		expires_at: '2026-02-01T00:00:00.000Z'
 	})),
 	revokeMcpToken: vi.fn(async () => undefined),
+	rotateMcpToken: vi.fn(async () => ({
+		id: 8,
+		token: 'smcp_rotated',
+		name: 'Existing token',
+		scopes: ['workouts.read', 'progress.read'],
+		expires_at: '2026-02-10T00:00:00.000Z'
+	})),
 	restoreBackup: vi.fn(async () => undefined),
 	deleteBackup: vi.fn(async () => undefined),
 	adminListUsers: vi.fn(async () => []),
@@ -217,7 +224,7 @@ describe('route behaviors', () => {
 		expect(view.getByText('Admin access required.')).toBeInTheDocument();
 	});
 
-	it('settings validates password mismatch, manages MCP tokens, and login shows auth errors', async () => {
+	it('settings validates password mismatch, rotates MCP tokens, and login shows auth errors', async () => {
 		apiMocks.getMcpTokens
 			.mockResolvedValueOnce([
 				{
@@ -232,23 +239,34 @@ describe('route behaviors', () => {
 			] as never)
 			.mockResolvedValueOnce([
 				{
-					id: 7,
+					id: 8,
 					name: 'Existing token',
 					scopes: ['workouts.read', 'progress.read'],
-					expires_at: '2026-02-01T00:00:00.000Z',
+					expires_at: '2026-02-10T00:00:00.000Z',
 					revoked_at: null,
-					last_used_at: null,
+					last_used_at: '2026-01-05T10:15:00.000Z',
 					created_at: '2026-01-01T00:00:00.000Z'
 				}
 			] as never)
 			.mockResolvedValueOnce([
 				{
-					id: 7,
+					id: 8,
 					name: 'Existing token',
 					scopes: ['workouts.read', 'progress.read'],
-					expires_at: '2026-02-01T00:00:00.000Z',
+					expires_at: '2026-02-10T00:00:00.000Z',
+					revoked_at: null,
+					last_used_at: '2026-01-05T10:15:00.000Z',
+					created_at: '2026-01-01T00:00:00.000Z'
+				}
+			] as never)
+			.mockResolvedValueOnce([
+				{
+					id: 8,
+					name: 'Existing token',
+					scopes: ['workouts.read', 'progress.read'],
+					expires_at: '2026-02-10T00:00:00.000Z',
 					revoked_at: '2026-01-02T00:00:00.000Z',
-					last_used_at: null,
+					last_used_at: '2026-01-05T10:15:00.000Z',
 					created_at: '2026-01-01T00:00:00.000Z'
 				}
 			] as never);
@@ -262,22 +280,25 @@ describe('route behaviors', () => {
 		await fireEvent.input(view.getByLabelText('Token name'), {
 			target: { value: 'Claude Desktop' }
 		});
-		await fireEvent.input(view.getByLabelText('Expiry (days)'), {
-			target: { value: '45' }
-		});
+		await fireEvent.change(view.getByLabelText('Access level'), { target: { value: 'write' } });
 		await fireEvent.click(view.getByText('Create MCP token'));
 		await waitFor(() =>
 			expect(apiMocks.createMcpToken).toHaveBeenCalledWith({
 				name: 'Claude Desktop',
-				scopes: ['workouts.read', 'progress.read'],
-				expires_in_days: 45
+				scopes: ['workouts.read', 'progress.read', 'workouts.write'],
+				expires_in_days: 7
 			})
 		);
 		expect(await view.findByText('Copy this token now')).toBeInTheDocument();
 		expect(view.getByText('smcp_created')).toBeInTheDocument();
 
+		await fireEvent.click(await view.findByText('Rotate'));
+		await waitFor(() => expect(apiMocks.rotateMcpToken).toHaveBeenCalledWith(8));
+		expect(await view.findByText('smcp_rotated')).toBeInTheDocument();
+		expect(view.getByText('Last used')).toBeInTheDocument();
+
 		await fireEvent.click(await view.findByText('Revoke'));
-		await waitFor(() => expect(apiMocks.revokeMcpToken).toHaveBeenCalledWith(7));
+		await waitFor(() => expect(apiMocks.revokeMcpToken).toHaveBeenCalledWith(8));
 		await waitFor(() => expect(view.queryByText('Existing token')).not.toBeInTheDocument());
 		expect(view.getByText('No MCP tokens yet.')).toBeInTheDocument();
 

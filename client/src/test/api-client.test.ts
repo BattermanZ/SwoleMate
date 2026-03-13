@@ -117,8 +117,9 @@ describe('api client behavior', () => {
 		expect(seenUrls[2]).toContain(`/api/progress/exercise/${encoded}`);
 	});
 
-	it('creates, lists, and revokes MCP personal tokens through the API client', async () => {
-		const { createMcpToken, getMcpTokens, revokeMcpToken } = await import('$lib/api');
+	it('creates, lists, rotates, and revokes MCP personal tokens through the API client', async () => {
+		const { createMcpToken, getMcpTokens, rotateMcpToken, revokeMcpToken } =
+			await import('$lib/api');
 		const seen: Array<{ url: string; init?: RequestInit }> = [];
 		const fetcher = vi.fn(async (input: URL | RequestInfo, init?: RequestInit) => {
 			seen.push({ url: String(input), init });
@@ -144,6 +145,18 @@ describe('api client behavior', () => {
 					}
 				]);
 			}
+			if (seen.length === 3) {
+				return jsonResponse(
+					{
+						id: 5,
+						token: 'smcp_rotated',
+						name: 'Claude Desktop',
+						scopes: ['workouts.read', 'progress.read'],
+						expires_at: '2026-03-01T00:00:00.000Z'
+					},
+					201
+				);
+			}
 			return new Response(null, { status: 204 });
 		});
 
@@ -161,12 +174,18 @@ describe('api client behavior', () => {
 			name: 'Claude Desktop'
 		});
 		await expect(getMcpTokens(fetcher as unknown as typeof fetch)).resolves.toHaveLength(1);
+		await expect(rotateMcpToken(4, fetcher as unknown as typeof fetch)).resolves.toMatchObject({
+			token: 'smcp_rotated',
+			id: 5
+		});
 		await expect(revokeMcpToken(4, fetcher as unknown as typeof fetch)).resolves.toBeUndefined();
 
 		expect(seen[0].url).toContain('/api/mcp/tokens');
 		expect(seen[0].init?.method).toBe('POST');
 		expect(seen[1].url).toContain('/api/mcp/tokens');
-		expect(seen[2].url).toContain('/api/mcp/tokens/4/revoke');
+		expect(seen[2].url).toContain('/api/mcp/tokens/4/rotate');
 		expect(seen[2].init?.method).toBe('POST');
+		expect(seen[3].url).toContain('/api/mcp/tokens/4/revoke');
+		expect(seen[3].init?.method).toBe('POST');
 	});
 });

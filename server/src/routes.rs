@@ -506,7 +506,8 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(get_volume_stats)
         .service(mcp_tokens::list_mcp_tokens)
         .service(mcp_tokens::create_mcp_token)
-        .service(mcp_tokens::revoke_mcp_token);
+        .service(mcp_tokens::revoke_mcp_token)
+        .service(mcp_tokens::rotate_mcp_token);
 }
 
 fn is_safe_backup_filename(filename: &str) -> bool {

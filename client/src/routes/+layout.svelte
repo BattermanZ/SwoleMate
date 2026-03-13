@@ -17,7 +17,8 @@
 		{ href: '/', label: 'Today', icon: '💪' },
 		{ href: '/workouts', label: 'History', icon: '📅' },
 		{ href: '/progress', label: 'Progress', icon: '📈' },
-		{ href: '/settings', label: 'Help', icon: '❓' },
+		{ href: '/settings', label: 'Settings', icon: '⚙️' },
+		{ href: '/help', label: 'Help', icon: '❓' },
 		{ href: '/admin', label: 'Admin', icon: '🛡️' },
 		{ href: '/backups', label: 'Backups', icon: '💾' }
 	];

@@ -136,6 +136,74 @@ impl Database {
         Ok(result.rows_affected() == 1)
     }
 
+    pub async fn rotate_mcp_token_for_user(
+        &self,
+        token_id: i64,
+        user_id: i64,
+        token_hash: &str,
+        expires_at: Option<DateTime<Utc>>,
+    ) -> Result<Option<(i64, String, Vec<String>)>, AppError> {
+        let pool = self.pool().await;
+        let mut tx = pool.begin().await.map_err(AppError::DatabaseError)?;
+
+        let existing = sqlx::query(
+            r#"
+            SELECT name, scopes_json
+            FROM mcp_tokens
+            WHERE id = ? AND user_id = ? AND revoked_at IS NULL
+            LIMIT 1
+            "#,
+        )
+        .bind(token_id)
+        .bind(user_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(AppError::DatabaseError)?;
+
+        let Some(existing) = existing else {
+            tx.rollback().await.map_err(AppError::DatabaseError)?;
+            return Ok(None);
+        };
+
+        let name: String = existing.try_get("name").map_err(AppError::DatabaseError)?;
+        let scopes_json: String = existing
+            .try_get("scopes_json")
+            .map_err(AppError::DatabaseError)?;
+        let scopes = parse_scopes(&scopes_json)?;
+
+        let result = sqlx::query(
+            r#"
+            INSERT INTO mcp_tokens (user_id, name, token_hash, scopes_json, expires_at)
+            VALUES (?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(user_id)
+        .bind(&name)
+        .bind(token_hash)
+        .bind(&scopes_json)
+        .bind(expires_at)
+        .execute(&mut *tx)
+        .await
+        .map_err(AppError::DatabaseError)?;
+
+        sqlx::query(
+            r#"
+            UPDATE mcp_tokens
+            SET revoked_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND user_id = ? AND revoked_at IS NULL
+            "#,
+        )
+        .bind(token_id)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(AppError::DatabaseError)?;
+
+        tx.commit().await.map_err(AppError::DatabaseError)?;
+
+        Ok(Some((result.last_insert_rowid(), name, scopes)))
+    }
+
     pub async fn touch_mcp_token_last_used(&self, token_id: i64) -> Result<(), AppError> {
         let pool = self.pool().await;
         sqlx::query(

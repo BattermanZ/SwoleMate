@@ -321,6 +321,19 @@ export async function revokeMcpToken(id: number, fetcher: Fetcher = fetch): Prom
 	return handleResponse(response);
 }
 
+export async function rotateMcpToken(
+	id: number,
+	fetcher: Fetcher = fetch
+): Promise<CreatedMcpToken> {
+	const response = await fetcher(
+		`${API_BASE}/api/mcp/tokens/${id}/rotate`,
+		withCredentials({
+			method: 'POST'
+		})
+	);
+	return handleResponse(response);
+}
+
 export async function getBackups(fetcher: Fetcher = fetch): Promise<BackupInfo[]> {
 	const response = await fetcher(`${API_BASE}/api/backups`, withCredentials(undefined));
 	return handleResponse(response);
