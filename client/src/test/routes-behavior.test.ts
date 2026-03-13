@@ -286,7 +286,7 @@ describe('route behaviors', () => {
 			expect(apiMocks.createMcpToken).toHaveBeenCalledWith({
 				name: 'Claude Desktop',
 				scopes: ['workouts.read', 'progress.read', 'workouts.write'],
-				expires_in_days: 7
+				expires_in_days: 30
 			})
 		);
 		expect(await view.findByText('Copy this token now')).toBeInTheDocument();

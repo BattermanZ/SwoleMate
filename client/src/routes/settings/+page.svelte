@@ -217,9 +217,6 @@
 	});
 
 	$: activeMcpTokens = mcpTokens.filter((token) => !token.revoked_at);
-	$: if (newTokenAccess === 'write' && newTokenExpiryDays === 30) {
-		newTokenExpiryDays = 7;
-	}
 </script>
 
 <div class="space-y-6">
@@ -302,8 +299,8 @@
 						<div
 							class="rounded-xl border border-warning-200/60 bg-warning-50/70 p-3 text-xs dark:border-warning-900/60 dark:bg-warning-950/20"
 						>
-							Write tokens can change workout data. The recommended expiry is 7 days unless you have a
-							good reason to keep it longer.
+							Write tokens can change workout data. A shorter expiry such as 7 days is recommended,
+							but the default remains 30 days unless you change it.
 						</div>
 					{/if}
 

@@ -3476,6 +3476,45 @@ async fn mcp_personal_token_rotate_revokes_old_token_and_mints_new_one() {
 }
 
 #[actix_web::test]
+async fn mcp_personal_token_rotate_preserves_existing_expiry() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(
+        &app,
+        &admin_cookie,
+        "mcp-token-rotate-expiry",
+        "passwordpassword",
+    )
+    .await;
+    let user_cookie =
+        login_cookie_active(&app, "mcp-token-rotate-expiry", "passwordpassword").await;
+
+    let created = create_mcp_personal_token(
+        &app,
+        &user_cookie,
+        "Short lived",
+        &["workouts.read", "progress.read"],
+        Some(7),
+    )
+    .await;
+    let old_id = created["id"].as_i64().unwrap();
+    let original_expires_at = created["expires_at"].as_str().unwrap().to_string();
+
+    let rotate_req = with_cookie(test::TestRequest::post(), &user_cookie)
+        .uri(&format!("/api/mcp/tokens/{old_id}/rotate"))
+        .to_request();
+    let rotate_resp = test::call_service(&app, rotate_req).await;
+    assert_eq!(rotate_resp.status(), 201);
+
+    let body = json_body(rotate_resp).await;
+    assert_eq!(
+        body["expires_at"].as_str(),
+        Some(original_expires_at.as_str())
+    );
+}
+
+#[actix_web::test]
 async fn read_only_mcp_token_cannot_write() {
     let _env = TestEnv::new();
     let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
