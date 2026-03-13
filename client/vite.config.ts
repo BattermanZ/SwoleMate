@@ -8,6 +8,23 @@ const backendProxy = {
 	target: proxyTarget,
 	changeOrigin: true
 };
+const contentSecurityPolicy = [
+	"default-src 'self'",
+	"base-uri 'self'",
+	"frame-ancestors 'none'",
+	"object-src 'none'",
+	"form-action 'self'",
+	"script-src 'self' 'unsafe-eval' 'sha256-/5eKnbp5xWDcwK5HQYYHlXfAOSFfG1Nm6VeAhpXPbJ0='",
+	"style-src 'self' 'unsafe-inline'",
+	"img-src 'self' data: blob: https:",
+	"font-src 'self' data:",
+	"connect-src 'self' ws: wss: https:",
+	"worker-src 'self' blob:",
+	"manifest-src 'self'"
+].join('; ');
+const securityHeaders = {
+	'Content-Security-Policy': contentSecurityPolicy
+};
 
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
@@ -34,6 +51,7 @@ export default defineConfig({
 		host: true,
 		allowedHosts: true,
 		port: 2470,
+		headers: securityHeaders,
 		proxy: {
 			'/api': backendProxy,
 			'/mcp': backendProxy,
@@ -44,6 +62,7 @@ export default defineConfig({
 	preview: {
 		host: true,
 		port: 2470,
+		headers: securityHeaders,
 		proxy: {
 			'/api': backendProxy,
 			'/mcp': backendProxy,
