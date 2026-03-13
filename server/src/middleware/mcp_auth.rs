@@ -29,15 +29,11 @@ impl FromRequest for McpPrincipal {
 #[derive(Clone)]
 pub struct McpBearerAuth {
     db: Database,
-    resource_metadata_url: String,
 }
 
 impl McpBearerAuth {
-    pub fn new(db: Database, resource_metadata_url: String) -> Self {
-        Self {
-            db,
-            resource_metadata_url,
-        }
+    pub fn new(db: Database, _resource_metadata_url: String) -> Self {
+        Self { db }
     }
 }
 
@@ -57,7 +53,6 @@ where
         ready(Ok(McpBearerAuthMiddleware {
             service: Rc::new(service),
             db: self.db.clone(),
-            resource_metadata_url: self.resource_metadata_url.clone(),
         }))
     }
 }
@@ -65,7 +60,6 @@ where
 pub struct McpBearerAuthMiddleware<S> {
     service: Rc<S>,
     db: Database,
-    resource_metadata_url: String,
 }
 
 impl<S, B> Service<ServiceRequest> for McpBearerAuthMiddleware<S>
@@ -88,18 +82,17 @@ where
             .map(ToString::to_string);
         let db = self.db.clone();
         let service = self.service.clone();
-        let resource_metadata_url = self.resource_metadata_url.clone();
 
         Box::pin(async move {
             let Some(auth_header) = auth_header else {
                 let (req, _) = req.into_parts();
-                let resp = unauthorized_response(&resource_metadata_url);
+                let resp = unauthorized_response();
                 return Ok(ServiceResponse::new(req, resp));
             };
 
             let Some(token) = auth_header.strip_prefix("Bearer ").map(str::trim) else {
                 let (req, _) = req.into_parts();
-                let resp = unauthorized_response(&resource_metadata_url);
+                let resp = unauthorized_response();
                 return Ok(ServiceResponse::new(req, resp));
             };
 
@@ -150,7 +143,7 @@ where
 
             let Some(principal) = principal else {
                 let (req, _) = req.into_parts();
-                let resp = unauthorized_response(&resource_metadata_url);
+                let resp = unauthorized_response();
                 return Ok(ServiceResponse::new(req, resp));
             };
 
@@ -162,16 +155,16 @@ where
     }
 }
 
-fn unauthorized_response(resource_metadata_url: &str) -> HttpResponse {
+fn unauthorized_response() -> HttpResponse {
     HttpResponse::Unauthorized()
         .insert_header((
             header::WWW_AUTHENTICATE,
-            format!(
-                r#"Bearer resource_metadata="{}", error="invalid_token""#,
-                resource_metadata_url
-            ),
+            r#"Bearer realm="SwoleMate MCP", error="invalid_token", error_description="Use a personal MCP token from /settings as Authorization: Bearer smcp_...""#,
         ))
         .json(serde_json::json!({
-            "error": "Unauthorized"
+            "error": "Unauthorized",
+            "auth_type": "bearer_token",
+            "token_prefix": "smcp_",
+            "settings_path": "/settings"
         }))
 }

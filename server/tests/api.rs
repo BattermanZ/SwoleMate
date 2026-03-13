@@ -2341,9 +2341,20 @@ async fn oauth_token_flow_and_read_only_mcp_tools_work() {
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 401);
-    assert!(resp
+    let challenge = resp
         .headers()
-        .contains_key(actix_web::http::header::WWW_AUTHENTICATE));
+        .get(actix_web::http::header::WWW_AUTHENTICATE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default()
+        .to_string();
+    assert!(challenge.contains("Bearer"));
+    assert!(challenge.contains(r#"realm="SwoleMate MCP""#));
+    assert!(challenge.contains("Authorization: Bearer smcp_..."));
+    assert!(!challenge.contains("resource_metadata="));
+    let body = json_body(resp).await;
+    assert_eq!(body["auth_type"], "bearer_token");
+    assert_eq!(body["token_prefix"], "smcp_");
+    assert_eq!(body["settings_path"], "/settings");
 
     let req = test::TestRequest::post()
         .uri("/mcp")
