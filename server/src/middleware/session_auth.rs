@@ -7,6 +7,7 @@ use crate::errors::AppError;
 use actix_web::body::BoxBody;
 use actix_web::cookie::Cookie;
 use actix_web::dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform};
+use actix_web::http::{header, Method};
 use actix_web::{Error, FromRequest, HttpMessage, HttpRequest, HttpResponse};
 use chrono::{Duration as ChronoDuration, Utc};
 use futures_util::future::{ready, LocalBoxFuture, Ready};
@@ -86,11 +87,14 @@ fn should_skip_auth(req: &ServiceRequest) -> bool {
     if req.method() == actix_web::http::Method::OPTIONS {
         return true;
     }
-    match req.path() {
+    (match req.path() {
         "/api/health" => true,
         "/api/auth/login" => true,
+        "/mcp" => true,
+        "/sse" => true,
         _ => false,
-    }
+    }) || req.path().starts_with("/oauth/")
+        || req.path().starts_with("/.well-known/")
 }
 
 fn allowed_when_password_change_required(path: &str) -> bool {
@@ -98,6 +102,52 @@ fn allowed_when_password_change_required(path: &str) -> bool {
         path,
         "/api/health" | "/api/auth/me" | "/api/auth/change-password" | "/api/auth/logout"
     )
+}
+
+fn is_mutating_method(method: &Method) -> bool {
+    matches!(
+        *method,
+        Method::POST | Method::PUT | Method::PATCH | Method::DELETE
+    )
+}
+
+fn extract_origin(raw: &str) -> Option<String> {
+    let raw = raw.trim();
+    if raw.is_empty() || raw.eq_ignore_ascii_case("null") {
+        return None;
+    }
+    let scheme_end = raw.find("://")?;
+    let scheme = &raw[..scheme_end];
+    let rest = &raw[scheme_end + 3..];
+    let host_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let host = &rest[..host_end];
+    if scheme.is_empty() || host.is_empty() {
+        return None;
+    }
+    Some(format!("{scheme}://{host}"))
+}
+
+fn csrf_origin_ok(req: &ServiceRequest) -> bool {
+    let expected_origin = format!(
+        "{}://{}",
+        req.connection_info().scheme(),
+        req.connection_info().host()
+    );
+
+    if let Some(origin) = req
+        .headers()
+        .get(header::ORIGIN)
+        .and_then(|v| v.to_str().ok())
+        .and_then(extract_origin)
+    {
+        return origin == expected_origin;
+    }
+
+    req.headers()
+        .get(header::REFERER)
+        .and_then(|v| v.to_str().ok())
+        .and_then(extract_origin)
+        .is_some_and(|origin| origin == expected_origin)
 }
 
 impl<S, B> Service<ServiceRequest> for SessionAuthMiddleware<S>
@@ -166,6 +216,15 @@ where
                 return Ok(ServiceResponse::new(req, resp));
             }
 
+            if cfg.enforce_csrf && is_mutating_method(req.method()) && !csrf_origin_ok(&req) {
+                let (req, _) = req.into_parts();
+                let resp = HttpResponse::Forbidden().json(serde_json::json!({
+                    "error": "Forbidden",
+                    "code": "CSRF_VALIDATION_FAILED"
+                }));
+                return Ok(ServiceResponse::new(req, resp));
+            }
+
             db.touch_session(session.id).await.map_err(Error::from)?;
 
             let auth_user = AuthUser {
@@ -176,7 +235,8 @@ where
             };
             req.extensions_mut().insert(auth_user.clone());
 
-            if auth_user.must_change_password && !allowed_when_password_change_required(req.path()) {
+            if auth_user.must_change_password && !allowed_when_password_change_required(req.path())
+            {
                 let (req, _) = req.into_parts();
                 let resp = HttpResponse::Forbidden().json(serde_json::json!({
                     "error": "Password change required",

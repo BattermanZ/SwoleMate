@@ -1,4 +1,7 @@
 use crate::auth::password;
+use crate::auth::rate_limit::{
+    clear_ip_failures, is_ip_rate_limited, record_ip_failure, request_ip,
+};
 use crate::auth::{build_session_cookie, normalize_username, PublicUser, SessionConfig};
 use crate::db::Database;
 use crate::errors::AppError;
@@ -28,9 +31,21 @@ pub async fn login(
 ) -> Result<HttpResponse, AppError> {
     let username = normalize_username(&body.username);
     let now = Utc::now();
+    let client_ip = request_ip(&req);
+
+    if let Some(ip) = client_ip.as_deref() {
+        if is_ip_rate_limited(ip, now) {
+            return Err(AppError::TooManyRequests(
+                "Too many login attempts from this IP. Try again later.".to_string(),
+            ));
+        }
+    }
 
     // Generic response for unknown users.
     let Some(user) = db.get_user_by_username(&username).await? else {
+        if let Some(ip) = client_ip.as_deref() {
+            record_ip_failure(ip, now);
+        }
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
         return Err(AppError::Unauthorized);
     };
@@ -51,11 +66,17 @@ pub async fn login(
         .map_err(|_| AppError::Unauthorized)?;
     if !ok {
         db.record_failed_login(user.id).await?;
+        if let Some(ip) = client_ip.as_deref() {
+            record_ip_failure(ip, now);
+        }
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
         return Err(AppError::Unauthorized);
     }
 
     db.reset_login_failures(user.id).await?;
+    if let Some(ip) = client_ip.as_deref() {
+        clear_ip_failures(ip);
+    }
 
     let token = crate::auth::generate_session_token();
     let session_hash = crate::auth::hash_session_token(&token);

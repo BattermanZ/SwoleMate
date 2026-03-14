@@ -1,6 +1,6 @@
 [package]
 name = "swolemate-server"
-version = "2.1.0"
+version = "2.2.0"
 edition = "2021"
 
 [dependencies]
@@ -25,6 +25,7 @@ rand = "0.8"
 sha2 = "0.10"
 base64 = "0.22"
 hex = "0.4"
+url = "2.5"
 
 [dev-dependencies]
 actix-http = "3.9"

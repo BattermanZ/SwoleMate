@@ -271,6 +271,69 @@ export interface BackupInfo {
 	backup_type: 'Auto' | 'Manual';
 }
 
+export interface McpTokenSummary {
+	id: number;
+	name: string;
+	scopes: string[];
+	expires_at: string | null;
+	revoked_at: string | null;
+	last_used_at: string | null;
+	created_at: string;
+}
+
+export interface CreatedMcpToken {
+	id: number;
+	token: string;
+	name: string;
+	scopes: string[];
+	expires_at: string | null;
+}
+
+export async function getMcpTokens(fetcher: Fetcher = fetch): Promise<McpTokenSummary[]> {
+	const response = await fetcher(`${API_BASE}/api/mcp/tokens`, withCredentials(undefined));
+	return handleResponse(response);
+}
+
+export async function createMcpToken(
+	args: { name: string; scopes: string[]; expires_in_days?: number },
+	fetcher: Fetcher = fetch
+): Promise<CreatedMcpToken> {
+	const response = await fetcher(
+		`${API_BASE}/api/mcp/tokens`,
+		withCredentials({
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify(args)
+		})
+	);
+	return handleResponse(response);
+}
+
+export async function revokeMcpToken(id: number, fetcher: Fetcher = fetch): Promise<void> {
+	const response = await fetcher(
+		`${API_BASE}/api/mcp/tokens/${id}/revoke`,
+		withCredentials({
+			method: 'POST'
+		})
+	);
+	return handleResponse(response);
+}
+
+export async function rotateMcpToken(
+	id: number,
+	fetcher: Fetcher = fetch
+): Promise<CreatedMcpToken> {
+	const response = await fetcher(
+		`${API_BASE}/api/mcp/tokens/${id}/rotate`,
+		withCredentials({
+			method: 'POST'
+		})
+	);
+	return handleResponse(response);
+}
+
 export async function getBackups(fetcher: Fetcher = fetch): Promise<BackupInfo[]> {
 	const response = await fetcher(`${API_BASE}/api/backups`, withCredentials(undefined));
 	return handleResponse(response);

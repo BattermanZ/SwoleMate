@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 pub mod password;
+pub mod rate_limit;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -53,6 +54,7 @@ pub const SESSION_COOKIE_NAME: &str = "swolemate_session";
 #[derive(Debug, Clone)]
 pub struct SessionConfig {
     pub secure_cookie: bool,
+    pub enforce_csrf: bool,
     pub session_ttl_days: i64,
     pub rotate_if_expires_within_days: i64,
 }
@@ -62,6 +64,7 @@ impl SessionConfig {
         let secure_cookie = !matches!(app_env, "development" | "test" | "local");
         Self {
             secure_cookie,
+            enforce_csrf: secure_cookie,
             session_ttl_days: 90,
             rotate_if_expires_within_days: 30,
         }

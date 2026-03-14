@@ -11,7 +11,7 @@ use std::path::Path;
 use tokio::sync::watch;
 use tokio::time::{sleep, Duration};
 
-use swolemate_server::{auth, backup, db, middleware, routes, schema};
+use swolemate_server::{auth, backup, db, mcp, middleware, oauth, routes, schema};
 
 fn find_env_file() -> Option<String> {
     let current_dir = std::env::current_dir().ok()?;
@@ -249,6 +249,7 @@ async fn main() -> std::io::Result<()> {
         .unwrap_or_else(|_| "development".to_string())
         .to_lowercase();
     let session_cfg = auth::SessionConfig::for_env(&app_env);
+    let oauth_cfg = oauth::OAuthConfig::from_env();
     let enable_hsts = app_env == "production"
         && env::var("ENABLE_HSTS")
             .ok()
@@ -415,7 +416,17 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::JsonConfig::default().limit(json_body_limit))
             .app_data(actix_web::web::Data::new(database.clone()))
             .app_data(web::Data::new(session_cfg.clone()))
+            .app_data(web::Data::new(oauth_cfg.clone()))
             .configure(routes::config)
+            .configure(oauth::routes::config)
+            .service(
+                web::scope("")
+                    .wrap(middleware::McpBearerAuth::new(
+                        database.clone(),
+                        oauth_cfg.protected_resource_endpoint.clone(),
+                    ))
+                    .configure(mcp::routes::config),
+            )
     })
     .bind(("0.0.0.0", port))?
     .client_request_timeout(Duration::from_secs(15))
