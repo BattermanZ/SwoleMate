@@ -1,4 +1,4 @@
-# SwoleMate (v2.1.0)
+# SwoleMate (v2.2.0)
 
 SwoleMate is a self-hosted workout logging web app designed for fast, phone-first session tracking:
 
@@ -6,6 +6,7 @@ SwoleMate is a self-hosted workout logging web app designed for fast, phone-firs
 - Review recent sessions in History (including details) to quickly remember what you did.
 - Use Progress charts to see trends (strength, volume, time-of-day patterns).
 - Keep your data local in a SQLite database and export/restore backups.
+- Create personal MCP tokens in Settings to connect compatible AI tools.
 
 It runs as:
 - A frontend (SvelteKit SPA/PWA) served as static files.
@@ -85,7 +86,15 @@ Password rules:
 First-login password change:
 - On a brand-new database, the bootstrap admin account is created with a forced password change on first login.
 - When an admin resets another user’s password, that user is also forced to change their password on the next login.
-- For existing (legacy) databases upgraded to v2.1.0, users are not forced to change passwords by default.
+- For existing (legacy) databases upgraded to v2.1.0+, users are not forced to change passwords by default.
+
+## MCP access
+
+SwoleMate includes an MCP endpoint for connecting compatible AI tools.
+
+- Users create personal MCP tokens from `Settings > AI access`.
+- Tokens are shown once on creation and can later be revoked or rotated.
+- The MCP endpoint uses bearer-token auth with those personal tokens.
 
 ## Data and backups
 
@@ -110,6 +119,7 @@ Common variables:
 - `APP_ENV` (`development` or `production`)
 - `BOOTSTRAP_ADMIN_USERNAME` (default `admin`)
 - `BOOTSTRAP_ADMIN_PASSWORD` (required in production)
+- `MCP_PUBLIC_BASE_URL` (set this to your public app URL when exposing MCP)
 - `CORS_ALLOWED_ORIGINS` (recommended for production behind HTTPS)
 - `ENABLE_HSTS` / `HSTS_MAX_AGE` (only if you always serve HTTPS)
 - `AUTO_CLOSE_INACTIVITY_MINUTES` and `AUTO_CLOSE_POLL_SECONDS` (session auto-close)
@@ -120,6 +130,7 @@ Recommended production routing is same-origin:
 
 - Serve the frontend at `https://your-domain/`
 - Proxy `https://your-domain/api/...` to the backend container on port `2469`
+- Proxy `https://your-domain/mcp`, `https://your-domain/oauth/...`, and `https://your-domain/.well-known/...` to the backend container on port `2469`
 
 This avoids hardcoding a backend URL in the frontend build and keeps cookies and CORS simple.
 
