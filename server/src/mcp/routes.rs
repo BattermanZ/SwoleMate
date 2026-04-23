@@ -3,10 +3,12 @@ use crate::errors::AppError;
 use crate::mcp::rate_limit;
 use crate::middleware::McpPrincipal;
 use crate::models::{
-    CreateExerciseRequest, CreateSetRequest, CreateWorkoutRequest, UpdateExerciseRequest,
-    UpdateWorkoutRequest,
+    CreateExerciseRequest, CreateSetRequest, CreateWorkoutRequest,
+    CreateWorkoutTemplateFromWorkoutRequest, CreateWorkoutTemplateRequest,
+    DuplicateWorkoutTemplateRequest, StartWorkoutFromTemplateRequest, UpdateExerciseRequest,
+    UpdateWorkoutRequest, UpdateWorkoutTemplateRequest,
 };
-use crate::services::{authz, exercises, progress, workouts};
+use crate::services::{authz, exercises, progress, templates, workouts};
 use actix_web::{post, web, HttpRequest, HttpResponse};
 use chrono::Utc;
 use serde::Deserialize;
@@ -49,6 +51,44 @@ struct EndWorkoutToolArgs {
     id: i64,
     #[serde(flatten)]
     request: UpdateWorkoutRequest,
+}
+
+#[derive(Debug, Deserialize)]
+struct GetTemplateToolArgs {
+    id: i64,
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateTemplateToolArgs {
+    id: i64,
+    #[serde(flatten)]
+    request: UpdateWorkoutTemplateRequest,
+}
+
+#[derive(Debug, Deserialize)]
+struct DeleteTemplateToolArgs {
+    id: i64,
+}
+
+#[derive(Debug, Deserialize)]
+struct DuplicateTemplateToolArgs {
+    id: i64,
+    #[serde(flatten)]
+    request: DuplicateWorkoutTemplateRequest,
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateTemplateFromWorkoutToolArgs {
+    workout_id: i64,
+    #[serde(flatten)]
+    request: CreateWorkoutTemplateFromWorkoutRequest,
+}
+
+#[derive(Debug, Deserialize)]
+struct StartWorkoutFromTemplateToolArgs {
+    template_id: i64,
+    #[serde(flatten)]
+    request: StartWorkoutFromTemplateRequest,
 }
 
 fn rpc_result(id: Option<Value>, result: Value) -> HttpResponse {
@@ -139,6 +179,27 @@ fn tool_definitions() -> Value {
             }
         },
         {
+            "name": "list_templates",
+            "description": "List workout templates for the authenticated user.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }
+        },
+        {
+            "name": "get_template",
+            "description": "Fetch one workout template with its ordered exercises.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "integer" }
+                },
+                "required": ["id"],
+                "additionalProperties": false
+            }
+        },
+        {
             "name": "create_workout",
             "description": "Create a workout for the authenticated user.",
             "inputSchema": {
@@ -150,6 +211,136 @@ fn tool_definitions() -> Value {
                     "timezone_offset_minutes": { "type": "integer" }
                 },
                 "required": ["date", "start_time"],
+                "additionalProperties": false
+            }
+        },
+        {
+            "name": "create_template",
+            "description": "Create a workout template.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string" },
+                    "exercises": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "exercise_type": { "type": "string" },
+                                "notes": { "type": "string" },
+                                "per_side_weight": { "type": "boolean" },
+                                "split_weight": { "type": "boolean" },
+                                "settings": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "key": { "type": "string" },
+                                            "value": { "type": "string" }
+                                        },
+                                        "required": ["key", "value"],
+                                        "additionalProperties": false
+                                    }
+                                }
+                            },
+                            "required": ["exercise_type"],
+                            "additionalProperties": false
+                        }
+                    }
+                },
+                "required": ["name", "exercises"],
+                "additionalProperties": false
+            }
+        },
+        {
+            "name": "update_template",
+            "description": "Update a workout template.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "integer" },
+                    "name": { "type": "string" },
+                    "exercises": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "exercise_type": { "type": "string" },
+                                "notes": { "type": "string" },
+                                "per_side_weight": { "type": "boolean" },
+                                "split_weight": { "type": "boolean" },
+                                "settings": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "key": { "type": "string" },
+                                            "value": { "type": "string" }
+                                        },
+                                        "required": ["key", "value"],
+                                        "additionalProperties": false
+                                    }
+                                }
+                            },
+                            "required": ["exercise_type"],
+                            "additionalProperties": false
+                        }
+                    }
+                },
+                "required": ["id", "name", "exercises"],
+                "additionalProperties": false
+            }
+        },
+        {
+            "name": "delete_template",
+            "description": "Delete a workout template.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "integer" }
+                },
+                "required": ["id"],
+                "additionalProperties": false
+            }
+        },
+        {
+            "name": "duplicate_template",
+            "description": "Duplicate a workout template.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "integer" },
+                    "name": { "type": "string" }
+                },
+                "required": ["id"],
+                "additionalProperties": false
+            }
+        },
+        {
+            "name": "create_template_from_workout",
+            "description": "Create a template from an existing workout.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "workout_id": { "type": "integer" },
+                    "name": { "type": "string" }
+                },
+                "required": ["workout_id", "name"],
+                "additionalProperties": false
+            }
+        },
+        {
+            "name": "start_workout_from_template",
+            "description": "Start a workout by instantiating a template.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "template_id": { "type": "integer" },
+                    "date": { "type": "string", "format": "date-time" },
+                    "start_time": { "type": "string", "format": "date-time" },
+                    "timezone_offset_minutes": { "type": "integer" }
+                },
+                "required": ["template_id", "date", "start_time"],
                 "additionalProperties": false
             }
         },
@@ -493,6 +684,21 @@ async fn call_tool(
                 .map_err(rpc_error_from_app_error)?;
             Ok(tool_success(json!(workout)))
         }
+        "list_templates" => {
+            require_scope(principal, authz::McpScope::WorkoutsRead)?;
+            let templates = templates::list_templates(db, principal.user_id)
+                .await
+                .map_err(rpc_error_from_app_error)?;
+            Ok(tool_success(json!(templates)))
+        }
+        "get_template" => {
+            require_scope(principal, authz::McpScope::WorkoutsRead)?;
+            let request: GetTemplateToolArgs = parse_args(args)?;
+            let template = templates::get_template(db, principal.user_id, request.id)
+                .await
+                .map_err(rpc_error_from_app_error)?;
+            Ok(tool_success(json!(template)))
+        }
         "get_last_exercise_data" => {
             require_scope(principal, authz::McpScope::WorkoutsRead)?;
             let exercise_type = args.get("exercise_type").and_then(Value::as_str).ok_or((
@@ -548,6 +754,90 @@ async fn call_tool(
             Ok(tool_success(json!({
                 "id": workout_id,
                 "message": "Workout created successfully"
+            })))
+        }
+        "create_template" => {
+            require_scope(principal, authz::McpScope::WorkoutsWrite)?;
+            let request: CreateWorkoutTemplateRequest = parse_args(args)?;
+            request
+                .validate()
+                .map_err(|_| (-32602, "Invalid params", "invalid_params"))?;
+            let template = templates::create_template(db, principal.user_id, &request)
+                .await
+                .map_err(rpc_error_from_app_error)?;
+            Ok(tool_success(json!(template)))
+        }
+        "update_template" => {
+            require_scope(principal, authz::McpScope::WorkoutsWrite)?;
+            let request: UpdateTemplateToolArgs = parse_args(args)?;
+            request
+                .request
+                .validate()
+                .map_err(|_| (-32602, "Invalid params", "invalid_params"))?;
+            let template =
+                templates::update_template(db, principal.user_id, request.id, &request.request)
+                    .await
+                    .map_err(rpc_error_from_app_error)?;
+            Ok(tool_success(json!(template)))
+        }
+        "delete_template" => {
+            require_scope(principal, authz::McpScope::WorkoutsWrite)?;
+            let request: DeleteTemplateToolArgs = parse_args(args)?;
+            templates::delete_template(db, principal.user_id, request.id)
+                .await
+                .map_err(rpc_error_from_app_error)?;
+            Ok(tool_success(json!({
+                "message": "Template deleted successfully"
+            })))
+        }
+        "duplicate_template" => {
+            require_scope(principal, authz::McpScope::WorkoutsWrite)?;
+            let request: DuplicateTemplateToolArgs = parse_args(args)?;
+            request
+                .request
+                .validate()
+                .map_err(|_| (-32602, "Invalid params", "invalid_params"))?;
+            let template =
+                templates::duplicate_template(db, principal.user_id, request.id, &request.request)
+                    .await
+                    .map_err(rpc_error_from_app_error)?;
+            Ok(tool_success(json!(template)))
+        }
+        "create_template_from_workout" => {
+            require_scope(principal, authz::McpScope::WorkoutsWrite)?;
+            let request: CreateTemplateFromWorkoutToolArgs = parse_args(args)?;
+            request
+                .request
+                .validate()
+                .map_err(|_| (-32602, "Invalid params", "invalid_params"))?;
+            let template = templates::create_template_from_workout(
+                db,
+                principal.user_id,
+                request.workout_id,
+                &request.request,
+            )
+            .await
+            .map_err(rpc_error_from_app_error)?;
+            Ok(tool_success(json!(template)))
+        }
+        "start_workout_from_template" => {
+            require_scope(principal, authz::McpScope::WorkoutsWrite)?;
+            let request: StartWorkoutFromTemplateToolArgs = parse_args(args)?;
+            request
+                .request
+                .validate()
+                .map_err(|_| (-32602, "Invalid params", "invalid_params"))?;
+            let workout_id = templates::start_workout_from_template(
+                db,
+                principal.user_id,
+                request.template_id,
+                &request.request,
+            )
+            .await
+            .map_err(rpc_error_from_app_error)?;
+            Ok(tool_success(json!({
+                "id": workout_id,
+                "message": "Workout started from template"
             })))
         }
         "add_exercise" => {

@@ -2612,6 +2612,11 @@ async fn oauth_token_flow_and_read_only_mcp_tools_work() {
         .unwrap()
         .iter()
         .any(|tool| tool["name"] == "list_workouts"));
+    assert!(listed["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|tool| tool["name"] == "list_templates"));
 
     let req = test::TestRequest::post()
         .uri("/mcp")
@@ -3323,6 +3328,81 @@ async fn oauth_token_flow_and_write_mcp_tools_work() {
             .unwrap()
             .len(),
         2
+    );
+
+    let created_template = mcp_call(
+        &app,
+        access_token,
+        7,
+        "create_template_from_workout",
+        json!({
+            "workout_id": workout_id,
+            "name": "MCP Push A"
+        }),
+    )
+    .await;
+    let template_id = created_template["result"]["structuredContent"]["template"]["id"]
+        .as_i64()
+        .unwrap();
+    assert_eq!(
+        created_template["result"]["structuredContent"]["exercises"][0]["exercise_type"],
+        "bench press"
+    );
+
+    let list_templates = mcp_call(&app, access_token, 8, "list_templates", json!({})).await;
+    assert!(list_templates["result"]["structuredContent"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|template| template["id"] == template_id));
+
+    let duplicated = mcp_call(
+        &app,
+        access_token,
+        9,
+        "duplicate_template",
+        json!({
+            "id": template_id,
+            "name": "MCP Push A Copy"
+        }),
+    )
+    .await;
+    let duplicate_id = duplicated["result"]["structuredContent"]["template"]["id"]
+        .as_i64()
+        .unwrap();
+    assert_ne!(duplicate_id, template_id);
+
+    let started = mcp_call(
+        &app,
+        access_token,
+        10,
+        "start_workout_from_template",
+        json!({
+            "template_id": duplicate_id,
+            "date": now + chrono::Duration::minutes(60),
+            "start_time": now + chrono::Duration::minutes(60),
+            "timezone_offset_minutes": -60
+        }),
+    )
+    .await;
+    let started_workout_id = started["result"]["structuredContent"]["id"]
+        .as_i64()
+        .unwrap();
+
+    let started_workout = mcp_call(
+        &app,
+        access_token,
+        11,
+        "get_workout",
+        json!({ "id": started_workout_id }),
+    )
+    .await;
+    assert_eq!(
+        started_workout["result"]["structuredContent"]["exercises"][0]["sets"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0
     );
 }
 
