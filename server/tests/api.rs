@@ -1062,6 +1062,70 @@ async fn can_duplicate_template_with_same_exercise_metadata() {
 }
 
 #[actix_web::test]
+async fn start_template_rolls_back_when_template_data_is_invalid() {
+    let _env = TestEnv::new();
+    let (db, admin_cookie, app) = setup_test_app().await;
+
+    let user_id =
+        create_user_as_admin(&app, &admin_cookie, "template-bad", "passwordpassword").await;
+    let cookie = login_cookie_active(&app, "template-bad", "passwordpassword").await;
+
+    let now = chrono::Utc::now();
+    let pool = db.pool().await;
+    let template_id: i64 = sqlx::query_scalar(
+        r#"
+        INSERT INTO workout_templates (user_id, name, created_at, updated_at)
+        VALUES (?, ?, ?, ?)
+        RETURNING id
+        "#,
+    )
+    .bind(user_id)
+    .bind("Broken Template")
+    .bind(now)
+    .bind(now)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    sqlx::query(
+        r#"
+        INSERT INTO workout_template_exercises (
+            user_id, template_id, position, exercise_type, notes, per_side_weight, split_weight
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        "#,
+    )
+    .bind(user_id)
+    .bind(template_id)
+    .bind(0_i64)
+    .bind("")
+    .bind("corrupt row")
+    .bind(false)
+    .bind(false)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/templates/{template_id}/start"))
+        .set_json(json!({
+            "date": now,
+            "start_time": now,
+            "timezone_offset_minutes": -60
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+
+    let workout_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM workouts WHERE user_id = ?")
+        .bind(user_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(workout_count, 0);
+}
+
+#[actix_web::test]
 async fn workout_and_exercise_flow_works_for_normal_user() {
     let _env = TestEnv::new();
     let (_db, admin_cookie, app) = setup_test_app().await;

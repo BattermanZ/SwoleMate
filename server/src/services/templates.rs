@@ -2,10 +2,10 @@ use crate::{
     db::Database,
     errors::AppError,
     models::{
-        CreateExerciseRequest, CreateWorkoutRequest, CreateWorkoutTemplateFromWorkoutRequest,
-        CreateWorkoutTemplateRequest, DuplicateWorkoutTemplateRequest,
-        StartWorkoutFromTemplateRequest, UpdateWorkoutTemplateRequest, WorkoutTemplate,
-        WorkoutTemplateDetail, WorkoutTemplateExerciseRequest,
+        CreateWorkoutTemplateFromWorkoutRequest, CreateWorkoutTemplateRequest,
+        DuplicateWorkoutTemplateRequest, StartWorkoutFromTemplateRequest,
+        UpdateWorkoutTemplateRequest, WorkoutTemplate, WorkoutTemplateDetail,
+        WorkoutTemplateExerciseRequest,
     },
 };
 
@@ -126,43 +126,6 @@ pub async fn start_workout_from_template(
     template_id: i64,
     req: &StartWorkoutFromTemplateRequest,
 ) -> Result<i64, AppError> {
-    let template = db.get_workout_template(user_id, template_id).await?;
-    let workout_id = db
-        .create_workout(
-            user_id,
-            &CreateWorkoutRequest {
-                date: req.date,
-                start_time: req.start_time,
-                notes: None,
-                timezone_offset_minutes: req.timezone_offset_minutes,
-            },
-        )
-        .await?;
-
-    for exercise in template.exercises {
-        db.create_exercise(
-            user_id,
-            workout_id,
-            &CreateExerciseRequest {
-                exercise_type: exercise.exercise_type,
-                start_time: req.start_time,
-                notes: exercise.notes,
-                per_side_weight: Some(exercise.per_side_weight),
-                split_weight: Some(exercise.split_weight),
-                settings: Some(
-                    exercise
-                        .settings
-                        .into_iter()
-                        .map(|setting| crate::models::ExerciseSettingRequest {
-                            key: setting.setting_key,
-                            value: setting.setting_value,
-                        })
-                        .collect(),
-                ),
-            },
-        )
-        .await?;
-    }
-
-    Ok(workout_id)
+    db.start_workout_from_template(user_id, template_id, req)
+        .await
 }

@@ -148,10 +148,11 @@
 			const detail = await getWorkoutTemplate(templateId);
 			draft = toDraft(detail);
 			selectedId = templateId;
+			loadedTemplateId = templateId;
 		} catch (error) {
+			loadedTemplateId = null;
 			detailError = error instanceof Error ? error.message : 'Failed to load template';
 		} finally {
-			loadedTemplateId = templateId;
 			loadingDetail = false;
 		}
 	}

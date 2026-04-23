@@ -378,4 +378,161 @@ impl Database {
         info!(target: "database", "Deleted template #{}", template_id);
         Ok(())
     }
+
+    pub async fn start_workout_from_template(
+        &self,
+        user_id: i64,
+        template_id: i64,
+        req: &StartWorkoutFromTemplateRequest,
+    ) -> Result<i64, AppError> {
+        debug!(
+            target: "database",
+            "Starting workout from template #{}",
+            template_id
+        );
+
+        let template = self.get_workout_template(user_id, template_id).await?;
+        let pool = self.pool().await;
+        let mut tx = pool.begin().await.map_err(AppError::DatabaseError)?;
+
+        let workout = CreateWorkoutRequest {
+            date: req.date,
+            start_time: req.start_time,
+            notes: None,
+            timezone_offset_minutes: req.timezone_offset_minutes,
+        };
+        workout.validate().map_err(AppError::BadRequest)?;
+
+        let result = sqlx::query(
+            r#"
+            INSERT INTO workouts (
+                user_id,
+                date,
+                start_time,
+                end_time,
+                notes,
+                timezone_offset_minutes,
+                last_activity_time
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            RETURNING id
+            "#,
+        )
+        .bind(user_id)
+        .bind(workout.date)
+        .bind(workout.start_time)
+        .bind(workout.start_time)
+        .bind(workout.notes)
+        .bind(workout.timezone_offset_minutes)
+        .bind(workout.start_time)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| {
+            error!(
+                target: "database",
+                "Failed to create workout from template #{}: {}",
+                template_id,
+                e
+            );
+            AppError::DatabaseError(e)
+        })?;
+
+        let workout_id: i64 = result.get("id");
+
+        for exercise in template.exercises {
+            let exercise_req = CreateExerciseRequest {
+                exercise_type: exercise.exercise_type,
+                start_time: req.start_time,
+                notes: exercise.notes,
+                per_side_weight: Some(exercise.per_side_weight),
+                split_weight: Some(exercise.split_weight),
+                settings: Some(
+                    exercise
+                        .settings
+                        .into_iter()
+                        .map(|setting| ExerciseSettingRequest {
+                            key: setting.setting_key,
+                            value: setting.setting_value,
+                        })
+                        .collect(),
+                ),
+            };
+            exercise_req.validate().map_err(AppError::BadRequest)?;
+
+            let split_weight = exercise_req.split_weight.unwrap_or(false);
+            let per_side_weight = exercise_req.per_side_weight.unwrap_or(false) || split_weight;
+
+            let result = sqlx::query(
+                r#"
+                INSERT INTO exercises (
+                    user_id,
+                    workout_id,
+                    exercise_type,
+                    start_time,
+                    end_time,
+                    notes,
+                    per_side_weight,
+                    split_weight
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                RETURNING id
+                "#,
+            )
+            .bind(user_id)
+            .bind(workout_id)
+            .bind(&exercise_req.exercise_type)
+            .bind(exercise_req.start_time)
+            .bind(exercise_req.start_time)
+            .bind(&exercise_req.notes)
+            .bind(per_side_weight)
+            .bind(split_weight)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|e| {
+                error!(
+                    target: "database",
+                    "Failed to create template exercise for workout #{}: {}",
+                    workout_id,
+                    e
+                );
+                AppError::DatabaseError(e)
+            })?;
+
+            let exercise_id: i64 = result.get("id");
+            if let Some(settings) = exercise_req.settings.as_ref() {
+                for setting in settings {
+                    sqlx::query(
+                        r#"
+                        INSERT INTO exercise_settings (user_id, exercise_id, setting_key, setting_value)
+                        VALUES (?, ?, ?, ?)
+                        "#,
+                    )
+                    .bind(user_id)
+                    .bind(exercise_id)
+                    .bind(&setting.key)
+                    .bind(&setting.value)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(|e| {
+                        error!(
+                            target: "database",
+                            "Failed to create settings for template exercise #{}: {}",
+                            exercise_id,
+                            e
+                        );
+                        AppError::DatabaseError(e)
+                    })?;
+                }
+            }
+        }
+
+        tx.commit().await.map_err(AppError::DatabaseError)?;
+        info!(
+            target: "database",
+            "Started workout #{} from template #{}",
+            workout_id,
+            template_id
+        );
+        Ok(workout_id)
+    }
 }

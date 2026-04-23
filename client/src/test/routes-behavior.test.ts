@@ -259,6 +259,49 @@ describe('route behaviors', () => {
 		});
 	});
 
+	it('templates page can retry loading the same template after an error', async () => {
+		apiMocks.getWorkoutTemplate
+			.mockRejectedValueOnce(new Error('load failed'))
+			.mockResolvedValueOnce({
+				template: {
+					id: 12,
+					name: 'Recovered Template',
+					exercise_count: 1,
+					created_at: '2026-01-01T00:00:00.000Z',
+					updated_at: '2026-01-01T00:00:00.000Z'
+				},
+				exercises: []
+			});
+
+		const { default: TemplatesPage } = await import('../routes/templates/+page.svelte');
+		const view = render(
+			TemplatesPage as never,
+			{
+				props: {
+					data: {
+						templates: [
+							{
+								id: 12,
+								name: 'Push A',
+								exercise_count: 1,
+								created_at: '2026-01-01T00:00:00.000Z',
+								updated_at: '2026-01-01T00:00:00.000Z'
+							}
+						]
+					}
+				}
+			} as never
+		);
+
+		expect(await view.findByText('load failed')).toBeInTheDocument();
+		await fireEvent.click(view.getByRole('button', { name: /Push A/i }));
+
+		await waitFor(() => {
+			expect(apiMocks.getWorkoutTemplate).toHaveBeenCalledTimes(2);
+		});
+		expect(view.getByDisplayValue('Recovered Template')).toBeInTheDocument();
+	});
+
 	it('backups page blocks admin actions for non-admin and surfaces export error', async () => {
 		authStateStore.set({
 			status: 'authenticated',
