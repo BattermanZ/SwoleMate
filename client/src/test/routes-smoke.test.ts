@@ -18,6 +18,10 @@ const authStateStore = writable({
 	offline: false
 });
 
+const todayControllerMocks = vi.hoisted(() => ({
+	startSession: vi.fn(async () => undefined)
+}));
+
 vi.mock('$lib/auth', () => ({
 	auth: {
 		state: authStateStore,
@@ -148,7 +152,7 @@ vi.mock('$lib/today/controller', () => {
 			removeExerciseSetting: vi.fn(),
 			sessionNotes: writable(''),
 			start: vi.fn(() => () => undefined),
-			startSession: vi.fn(async () => undefined),
+			startSession: todayControllerMocks.startSession,
 			submitEndSession: vi.fn(async () => undefined),
 			syncPendingSessions: vi.fn(async () => undefined),
 			suggestions: writable<string[]>([]),
@@ -170,6 +174,7 @@ async function importComponent(path: string) {
 
 beforeEach(() => {
 	localStorage.clear();
+	vi.clearAllMocks();
 });
 
 describe('route smoke', () => {
@@ -184,6 +189,16 @@ describe('route smoke', () => {
 		const { getByRole, queryByRole } = render(TodayPage as never);
 		expect(getByRole('heading', { name: 'Today' })).toBeInTheDocument();
 		expect(queryByRole('button', { name: 'Load demo' })).not.toBeInTheDocument();
+	});
+
+	it('shows and starts demo mode when enabled in settings', async () => {
+		localStorage.setItem('settings.showDemoMode', 'true');
+		const TodayPage = await importComponent('../routes/+page.svelte');
+		const { getByRole } = render(TodayPage as never);
+
+		await fireEvent.click(getByRole('button', { name: 'Load demo' }));
+
+		expect(todayControllerMocks.startSession).toHaveBeenCalledWith('demo');
 	});
 
 	it('renders workouts page with basic data', async () => {
