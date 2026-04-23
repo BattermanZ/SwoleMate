@@ -2,11 +2,16 @@ import { fireEvent, render, waitFor } from '@testing-library/svelte';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const gotoMock = vi.fn(async () => undefined);
-const authStateStore = { subscribe: (run: (value: unknown) => void) => (run({
-	status: 'authenticated',
-	user: { id: 1, username: 'admin', role: 'admin', must_change_password: false },
-	offline: false
-}), () => undefined) };
+const authStateStore = {
+	subscribe: (run: (value: unknown) => void) => (
+		run({
+			status: 'authenticated',
+			user: { id: 1, username: 'admin', role: 'admin', must_change_password: false },
+			offline: false
+		}),
+		() => undefined
+	)
+};
 
 const apiMocks = vi.hoisted(() => ({
 	getWorkout: vi.fn(async () => ({
@@ -43,7 +48,10 @@ vi.mock('$lib/api', () => ({
 
 beforeEach(() => {
 	vi.clearAllMocks();
-	vi.stubGlobal('confirm', vi.fn(() => true));
+	vi.stubGlobal(
+		'confirm',
+		vi.fn(() => true)
+	);
 });
 
 describe('workout detail route page', () => {
@@ -129,7 +137,9 @@ describe('workout detail route page', () => {
 
 		await fireEvent.click(view.getByText('Edit times'));
 		await fireEvent.click(view.getByText('Save'));
-		await waitFor(() => expect(apiMocks.updateWorkoutTimes).toHaveBeenCalledWith(7, expect.any(Object)));
+		await waitFor(() =>
+			expect(apiMocks.updateWorkoutTimes).toHaveBeenCalledWith(7, expect.any(Object))
+		);
 		await waitFor(() => expect(apiMocks.getWorkout).toHaveBeenCalledWith(7));
 
 		await fireEvent.click(view.getByText('Delete'));
