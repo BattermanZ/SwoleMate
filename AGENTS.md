@@ -1,7 +1,7 @@
-# agent.md — Minimal AI Agent Protocol
+# AGENTS.md — Minimal AI Agent Protocol
 
-Version: 2.2
-Last updated: 2026-03-03
+Version: 2.4
+Last updated: 2026-04-23
 Scope: Entire repository (unless a subdirectory explicitly overrides this file)
 
 This protocol exists to:
@@ -71,6 +71,7 @@ If none is specified, assume **Coordinator**.
 **Purpose:** Produce code changes exactly as approved.  
 **Outputs:** Patch/diff, file edits, minimal instructions to run relevant checks.  
 **Not allowed:** Unapproved refactors, dependency additions, data format changes, or scope creep.
+**Required at end of turn when new code was written:** Commit the approved change and push it to the remote branch, using the commit rules in Section 7, unless the user explicitly says not to commit or not to push.
 
 #### Reviewer (quality, testing, debugging, performance)
 **Purpose:** Independently assess correctness + non-security risks; propose tests and fixes.  
@@ -145,7 +146,7 @@ Use these only as fallbacks, and only for the affected component.
 
 1) **Coordinator:** confirm scope + acceptance criteria + affected component(s).  
 2) **Implementer:** propose: files to touch, regression test plan, and exact relevant commands. **Wait for approval.**  
-3) **Implementer:** provide patch/diff.  
+3) **Implementer:** provide patch/diff, then if new code was written, commit and push it before ending the turn using the rules in Section 7 unless the user explicitly says not to.  
 4) **Reviewer:** review + confirm the smallest relevant command set to run.
 5) **Security Reviewer:** run a dedicated security pass when the change touches auth, secrets, external input, file handling, networking, public endpoints, or dependencies.
 
@@ -153,7 +154,7 @@ Use these only as fallbacks, and only for the affected component.
 
 ## 7) Commit message format (MUST)
 
-When creating commits, use this format:
+When the Implementer creates a commit for new code, use this format:
 
 1) **Subject line:** `type(scope): concise summary`  
    Example: `test(client): close remaining frontend coverage gaps`
@@ -163,3 +164,21 @@ When creating commits, use this format:
 3) **No literal `\n` text** in commit messages. Use real line breaks.
 
 4) Keep body bullets concrete and implementation-focused (what changed + why).
+
+---
+
+## 8) Branch Workflow (MUST)
+
+- `development` is the long-lived integration branch.
+- `main` is the public/release branch.
+- Merge `development` into `main` with squash merge unless the user says otherwise.
+- After each squash merge to `main`, realign `development` to `origin/main` before new work begins.
+
+### Realign `development`
+1) Confirm the squash merge is present on remote `main`.
+2) Warn if the working tree is dirty.
+3) Create a timestamped backup branch from `development`.
+4) Push the backup branch to every configured remote.
+5) Reset `development` hard to `origin/main`.
+6) Force-push `development` with `--force-with-lease` to every configured remote.
+7) Verify all relevant remote refs for `development` and `main`.
