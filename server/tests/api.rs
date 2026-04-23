@@ -884,6 +884,9 @@ async fn user_foreign_keys_cascade_on_delete() {
         "exercises",
         "sets",
         "exercise_settings",
+        "workout_templates",
+        "workout_template_exercises",
+        "workout_template_exercise_settings",
     ] {
         let rows = sqlx::query(&format!("PRAGMA foreign_key_list('{table}')"))
             .fetch_all(&pool)
@@ -905,6 +908,157 @@ async fn user_foreign_keys_cascade_on_delete() {
         }
         assert!(found, "{table} should have a user_id foreign key");
     }
+}
+
+#[actix_web::test]
+async fn can_create_template_from_workout_and_start_without_sets() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    let _user_id =
+        create_user_as_admin(&app, &admin_cookie, "template-user", "passwordpassword").await;
+    let cookie = login_cookie_active(&app, "template-user", "passwordpassword").await;
+
+    let now = chrono::Utc::now();
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri("/api/workouts")
+        .set_json(json!({ "date": now, "start_time": now, "notes": "source workout" }))
+        .to_request();
+    let workout_id = json_body(test::call_service(&app, req).await).await["id"]
+        .as_i64()
+        .unwrap();
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}/exercises"))
+        .set_json(json!({
+            "exercise_type": "Bench Press",
+            "start_time": now,
+            "notes": "Touch lower chest",
+            "per_side_weight": true,
+            "split_weight": true,
+            "settings": [{ "key": "Bench", "value": "Flat" }]
+        }))
+        .to_request();
+    let exercise_id = json_body(test::call_service(&app, req).await).await["id"]
+        .as_i64()
+        .unwrap();
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/exercises/{exercise_id}/sets"))
+        .set_json(json!({ "reps": 8, "weight": 0, "weight_left": 20, "weight_right": 22.5 }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 201);
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}/template"))
+        .set_json(json!({ "name": "Push A" }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 201);
+    let template = json_body(resp).await;
+
+    let template_id = template["template"]["id"].as_i64().unwrap();
+    assert_eq!(template["template"]["name"], "Push A");
+    assert_eq!(template["exercises"].as_array().unwrap().len(), 1);
+    assert_eq!(template["exercises"][0]["exercise_type"], "Bench Press");
+    assert_eq!(template["exercises"][0]["notes"], "Touch lower chest");
+    assert_eq!(template["exercises"][0]["per_side_weight"], true);
+    assert_eq!(template["exercises"][0]["split_weight"], true);
+    assert_eq!(template["exercises"][0]["settings"][0]["key"], "Bench");
+    assert_eq!(template["exercises"][0]["settings"][0]["value"], "Flat");
+
+    let later = now + chrono::Duration::minutes(5);
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/templates/{template_id}/start"))
+        .set_json(json!({
+            "date": later,
+            "start_time": later,
+            "timezone_offset_minutes": -60
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 201);
+    let started_workout_id = json_body(resp).await["id"].as_i64().unwrap();
+
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri(&format!("/api/workouts/{started_workout_id}"))
+        .to_request();
+    let started = json_body(test::call_service(&app, req).await).await;
+
+    assert_eq!(started["exercises"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        started["exercises"][0]["exercise"]["exercise_type"],
+        "Bench Press"
+    );
+    assert_eq!(
+        started["exercises"][0]["exercise"]["notes"],
+        "Touch lower chest"
+    );
+    assert_eq!(started["exercises"][0]["exercise"]["per_side_weight"], true);
+    assert_eq!(started["exercises"][0]["exercise"]["split_weight"], true);
+    assert_eq!(
+        started["exercises"][0]["exercise"]["settings"][0]["key"],
+        "Bench"
+    );
+    assert_eq!(started["exercises"][0]["sets"].as_array().unwrap().len(), 0);
+}
+
+#[actix_web::test]
+async fn can_duplicate_template_with_same_exercise_metadata() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    let _user_id =
+        create_user_as_admin(&app, &admin_cookie, "template-copy", "passwordpassword").await;
+    let cookie = login_cookie_active(&app, "template-copy", "passwordpassword").await;
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri("/api/templates")
+        .set_json(json!({
+            "name": "Leg Day",
+            "exercises": [
+                {
+                    "exercise_type": "Hack Squat",
+                    "notes": "Feet slightly forward",
+                    "per_side_weight": false,
+                    "split_weight": false,
+                    "settings": [
+                        { "key": "Stance", "value": "Medium" }
+                    ]
+                }
+            ]
+        }))
+        .to_request();
+    let original = json_body(test::call_service(&app, req).await).await;
+    let original_id = original["template"]["id"].as_i64().unwrap();
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/templates/{original_id}/duplicate"))
+        .set_json(json!({ "name": "Leg Day Copy" }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 201);
+    let duplicate = json_body(resp).await;
+
+    let duplicate_id = duplicate["template"]["id"].as_i64().unwrap();
+    assert_ne!(duplicate_id, original_id);
+    assert_eq!(duplicate["template"]["name"], "Leg Day Copy");
+    assert_eq!(duplicate["exercises"].as_array().unwrap().len(), 1);
+    assert_eq!(duplicate["exercises"][0]["exercise_type"], "Hack Squat");
+    assert_eq!(duplicate["exercises"][0]["notes"], "Feet slightly forward");
+    assert_eq!(duplicate["exercises"][0]["settings"][0]["key"], "Stance");
+    assert_eq!(duplicate["exercises"][0]["settings"][0]["value"], "Medium");
+
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri("/api/templates")
+        .to_request();
+    let listed = json_body(test::call_service(&app, req).await).await;
+    let templates = listed.as_array().unwrap();
+    assert_eq!(templates.len(), 2);
+    assert!(templates
+        .iter()
+        .any(|template| { template["id"] == duplicate_id && template["exercise_count"] == 1 }));
 }
 
 #[actix_web::test]

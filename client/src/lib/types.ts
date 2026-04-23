@@ -93,6 +93,69 @@ export interface WorkoutWithExercises extends Workout {
 	}>;
 }
 
+export interface WorkoutTemplate {
+	id: number;
+	name: string;
+	exercise_count: number;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface WorkoutTemplateExerciseSetting {
+	id: number;
+	template_exercise_id: number;
+	key: string;
+	value: string;
+}
+
+export interface WorkoutTemplateExercise {
+	id: number;
+	template_id: number;
+	position: number;
+	exercise_type: string;
+	notes?: string | null;
+	per_side_weight?: boolean;
+	split_weight?: boolean;
+	settings?: WorkoutTemplateExerciseSetting[];
+}
+
+export interface WorkoutTemplateDetail {
+	template: WorkoutTemplate;
+	exercises: WorkoutTemplateExercise[];
+}
+
+export interface WorkoutTemplateExerciseInput {
+	exercise_type: string;
+	notes?: string | null;
+	per_side_weight?: boolean;
+	split_weight?: boolean;
+	settings?: Array<Pick<WorkoutTemplateExerciseSetting, 'key' | 'value'>>;
+}
+
+export interface CreateWorkoutTemplateRequest {
+	name: string;
+	exercises: WorkoutTemplateExerciseInput[];
+}
+
+export interface UpdateWorkoutTemplateRequest {
+	name: string;
+	exercises: WorkoutTemplateExerciseInput[];
+}
+
+export interface DuplicateWorkoutTemplateRequest {
+	name?: string | null;
+}
+
+export interface CreateWorkoutTemplateFromWorkoutRequest {
+	name: string;
+}
+
+export interface StartWorkoutFromTemplateRequest {
+	date: string;
+	start_time: string;
+	timezone_offset_minutes?: number | null;
+}
+
 export interface WorkoutStats {
 	total_workouts: number;
 	average_duration_minutes: number;

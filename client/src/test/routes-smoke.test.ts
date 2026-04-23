@@ -20,7 +20,8 @@ const authStateStore = writable({
 });
 
 const todayControllerMocks = vi.hoisted(() => ({
-	startSession: vi.fn(async () => undefined)
+	startSession: vi.fn(async () => undefined),
+	startSessionFromTemplate: vi.fn(async () => undefined)
 }));
 
 const todayCurrentSessionStore = writable<UiSession | null>(null);
@@ -78,6 +79,15 @@ vi.mock('$lib/api', () => {
 		authLogout: vi.fn(async () => undefined),
 		authChangePassword: vi.fn(async () => undefined),
 		getWorkouts: vi.fn(async () => []),
+		getWorkoutTemplates: vi.fn(async () => [
+			{
+				id: 5,
+				name: 'Push A',
+				exercise_count: 3,
+				created_at: '2026-01-01T00:00:00.000Z',
+				updated_at: '2026-01-02T00:00:00.000Z'
+			}
+		]),
 		getWorkout: vi.fn(async (id: number) => ({
 			workout: {
 				id,
@@ -156,6 +166,7 @@ vi.mock('$lib/today/controller', () => {
 			sessionNotes: writable(''),
 			start: vi.fn(() => () => undefined),
 			startSession: todayControllerMocks.startSession,
+			startSessionFromTemplate: todayControllerMocks.startSessionFromTemplate,
 			submitEndSession: vi.fn(async () => undefined),
 			syncPendingSessions: vi.fn(async () => undefined),
 			suggestions: writable<string[]>([]),
@@ -204,6 +215,16 @@ describe('route smoke', () => {
 		await fireEvent.click(getByRole('button', { name: 'Load demo' }));
 
 		expect(todayControllerMocks.startSession).toHaveBeenCalledWith('demo');
+	});
+
+	it('opens template picker and starts from a template', async () => {
+		const TodayPage = await importComponent('../routes/+page.svelte');
+		const { getByRole, findByRole } = render(TodayPage as never);
+
+		await fireEvent.click(getByRole('button', { name: 'Use template' }));
+		await fireEvent.click(await findByRole('button', { name: /Push A/i }));
+
+		expect(todayControllerMocks.startSessionFromTemplate).toHaveBeenCalledWith(5);
 	});
 
 	it('keeps active exercises open while leaving done exercises collapsed', async () => {

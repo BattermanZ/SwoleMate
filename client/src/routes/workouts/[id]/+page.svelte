@@ -2,7 +2,12 @@
 	import { goto } from '$app/navigation';
 	import EditWorkoutTimesModal from '$lib/components/history/EditWorkoutTimesModal.svelte';
 	import { auth } from '$lib/auth';
-	import { cancelWorkout, getWorkout, updateWorkoutTimes } from '$lib/api';
+	import {
+		cancelWorkout,
+		createWorkoutTemplateFromWorkout,
+		getWorkout,
+		updateWorkoutTimes
+	} from '$lib/api';
 	import type { WorkoutWithExercises } from '$lib/types';
 	import WorkoutDetailsCard from '$lib/components/history/WorkoutDetailsCard.svelte';
 
@@ -14,6 +19,7 @@
 	let editTimesError: string | null = null;
 	let editTimesSaving = false;
 	let deleting = false;
+	let savingTemplate = false;
 	const authState = auth.state;
 
 	function openEditTimes() {
@@ -79,6 +85,35 @@
 			deleting = false;
 		}
 	}
+
+	async function handleSaveAsTemplate() {
+		if (!workout || typeof workout.id !== 'number') {
+			error = 'Invalid workout ID';
+			return;
+		}
+		if ($authState.offline) {
+			error = 'Offline mode: templates are available when you are back online.';
+			return;
+		}
+
+		const defaultName =
+			workout.exercises.length > 0
+				? `${workout.exercises[0].exercise.exercise_type} template`
+				: 'Workout template';
+		const name = prompt('Template name:', defaultName)?.trim();
+		if (!name) return;
+
+		savingTemplate = true;
+		error = null;
+		try {
+			const created = await createWorkoutTemplateFromWorkout(workout.id, { name });
+			await goto(`/templates?template=${created.template.id}`);
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Failed to save template';
+		} finally {
+			savingTemplate = false;
+		}
+	}
 </script>
 
 <div class="space-y-6">
@@ -103,18 +138,22 @@
 		</div>
 	</header>
 
-	<WorkoutDetailsCard
-		{workout}
-		loading={!workout && !error}
-		{error}
-	>
+	<WorkoutDetailsCard {workout} loading={!workout && !error} {error}>
 		<svelte:fragment slot="actions">
 			{#if workout}
 				<button
 					type="button"
 					class="btn btn-sm variant-soft"
+					on:click={handleSaveAsTemplate}
+					disabled={editTimesSaving || deleting || savingTemplate}
+				>
+					Save as template
+				</button>
+				<button
+					type="button"
+					class="btn btn-sm variant-soft"
 					on:click={openEditTimes}
-					disabled={editTimesSaving || deleting}
+					disabled={editTimesSaving || deleting || savingTemplate}
 				>
 					Edit times
 				</button>
@@ -122,7 +161,7 @@
 					type="button"
 					class="btn btn-sm variant-soft-error"
 					on:click={handleDeleteWorkout}
-					disabled={deleting || editTimesSaving}
+					disabled={deleting || editTimesSaving || savingTemplate}
 				>
 					Delete
 				</button>

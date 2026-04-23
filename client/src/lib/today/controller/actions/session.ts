@@ -1,4 +1,10 @@
-import { cancelWorkout, createWorkout, endExercise, endWorkout } from '$lib/api';
+import {
+	cancelWorkout,
+	createWorkout,
+	endExercise,
+	endWorkout,
+	startWorkoutFromTemplate
+} from '$lib/api';
 import { createDemoSession } from '$lib/mocks/today';
 import {
 	deleteOfflineSession,
@@ -21,6 +27,7 @@ import { resetLocalSessionUi } from './shared';
 
 export type SessionActions = {
 	startSession: (mode: 'empty' | 'demo') => Promise<void>;
+	startSessionFromTemplate: (templateId: number) => Promise<void>;
 	cancelSession: () => Promise<void>;
 	openEndModal: () => void;
 	submitEndSession: () => Promise<void>;
@@ -32,6 +39,20 @@ export function createSessionActions(args: {
 	refreshFromBackend: () => Promise<void>;
 }) {
 	const { state, addExercise, refreshFromBackend } = args;
+
+	function beginLocalSession(sessionId: number, startIso: string, notes: string) {
+		const timezoneOffsetMinutes = new Date(startIso).getTimezoneOffset();
+		state.currentSession.set({
+			id: sessionId,
+			startedAt: startIso,
+			timezoneOffsetMinutes,
+			notes,
+			exercises: []
+		});
+		state.sessionNotes.set(notes);
+		state.openExerciseId.set(null);
+		resetLocalSessionUi(state);
+	}
 
 	async function startSession(mode: 'empty' | 'demo') {
 		if (get(state.currentSession)) return;
@@ -50,17 +71,7 @@ export function createSessionActions(args: {
 				timezone_offset_minutes: timezoneOffsetMinutes
 			};
 			const created = await createWorkout(payload);
-
-			state.currentSession.set({
-				id: created.id,
-				startedAt: startIso,
-				timezoneOffsetMinutes,
-				notes: demo?.notes ?? '',
-				exercises: []
-			});
-			state.sessionNotes.set(demo?.notes ?? '');
-			state.openExerciseId.set(null);
-			resetLocalSessionUi(state);
+			beginLocalSession(created.id, startIso, demo?.notes ?? '');
 
 			if (demo) {
 				for (const ex of demo.exercises) {
@@ -83,18 +94,8 @@ export function createSessionActions(args: {
 				setOffline(state, 'Offline mode: started a local session (will sync when back online).');
 				const demo = mode === 'demo' ? createDemoSession() : null;
 				const startIso = demo?.startedAt ?? new Date().toISOString();
-				const timezoneOffsetMinutes = new Date(startIso).getTimezoneOffset();
 				const localId = makeLocalNumericId();
-				state.currentSession.set({
-					id: localId,
-					startedAt: startIso,
-					timezoneOffsetMinutes,
-					notes: demo?.notes ?? '',
-					exercises: []
-				});
-				state.sessionNotes.set(demo?.notes ?? '');
-				state.openExerciseId.set(null);
-				resetLocalSessionUi(state);
+				beginLocalSession(localId, startIso, demo?.notes ?? '');
 
 				if (demo) {
 					for (const ex of demo.exercises) {
@@ -116,6 +117,28 @@ export function createSessionActions(args: {
 				state.error.set(getErrorMessage(e));
 			}
 			await refreshFromBackend();
+		} finally {
+			state.loading.set(false);
+		}
+	}
+
+	async function startSessionFromTemplate(templateId: number) {
+		if (get(state.currentSession)) return;
+		state.error.set(null);
+		state.loading.set(true);
+
+		try {
+			const startIso = new Date().toISOString();
+			const timezoneOffsetMinutes = new Date(startIso).getTimezoneOffset();
+			const created = await startWorkoutFromTemplate(templateId, {
+				date: startIso,
+				start_time: startIso,
+				timezone_offset_minutes: timezoneOffsetMinutes
+			});
+			beginLocalSession(created.id, startIso, '');
+			await refreshFromBackend();
+		} catch (e) {
+			state.error.set(getErrorMessage(e));
 		} finally {
 			state.loading.set(false);
 		}
@@ -254,5 +277,11 @@ export function createSessionActions(args: {
 		}
 	}
 
-	return { startSession, cancelSession, openEndModal, submitEndSession } satisfies SessionActions;
+	return {
+		startSession,
+		startSessionFromTemplate,
+		cancelSession,
+		openEndModal,
+		submitEndSession
+	} satisfies SessionActions;
 }

@@ -135,6 +135,14 @@ pub const SCHEMA_UPDATES: &[(i64, &str)] = &[
         SELECT 1;
         "#,
     ),
+    (
+        12,
+        r#"
+        -- Add workout templates tables.
+        -- Applied via Rust migration logic in `setup_schema` (kept as a placeholder for versioning).
+        SELECT 1;
+        "#,
+    ),
 ];
 
 pub const SCHEMA_VERSION_TABLE: &str = r#"
@@ -279,6 +287,15 @@ pub async fn setup_schema(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<(), sqlx::E
 
             if *version == 11 {
                 migrate_mcp_tokens(pool).await?;
+                sqlx::query("INSERT INTO schema_version (version) VALUES (?)")
+                    .bind(*version)
+                    .execute(pool)
+                    .await?;
+                continue;
+            }
+
+            if *version == 12 {
+                migrate_workout_templates(pool).await?;
                 sqlx::query("INSERT INTO schema_version (version) VALUES (?)")
                     .bind(*version)
                     .execute(pool)
@@ -674,6 +691,57 @@ async fn migrate_oauth_client_foreign_keys(pool: &Pool<Sqlite>) -> Result<(), sq
         .await?;
 
     tx.commit().await?;
+    Ok(())
+}
+
+async fn migrate_workout_templates(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS workout_templates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_workout_templates_user_updated
+            ON workout_templates(user_id, updated_at DESC, id DESC);
+
+        CREATE TABLE IF NOT EXISTS workout_template_exercises (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            template_id INTEGER NOT NULL,
+            position INTEGER NOT NULL,
+            exercise_type TEXT NOT NULL,
+            notes TEXT,
+            per_side_weight INTEGER NOT NULL DEFAULT 0,
+            split_weight INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (template_id) REFERENCES workout_templates(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_workout_template_exercises_user_template
+            ON workout_template_exercises(user_id, template_id, position, id);
+
+        CREATE TABLE IF NOT EXISTS workout_template_exercise_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            template_exercise_id INTEGER NOT NULL,
+            setting_key TEXT NOT NULL,
+            setting_value TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (template_exercise_id) REFERENCES workout_template_exercises(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_workout_template_settings_user_exercise
+            ON workout_template_exercise_settings(user_id, template_exercise_id, id);
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
     Ok(())
 }
 

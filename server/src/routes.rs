@@ -1,6 +1,6 @@
 use crate::backup::{self, BackupType};
 use crate::middleware::{AdminUser, CurrentUser};
-use crate::services::{exercises, progress, workouts};
+use crate::services::{exercises, progress, templates, workouts};
 use crate::{db::Database, errors::AppError, models::*};
 use actix_web::{delete, get, post, put, web, HttpResponse};
 use log::{debug, error, info, warn};
@@ -87,6 +87,86 @@ pub async fn get_workouts(
 ) -> Result<HttpResponse, AppError> {
     let workouts = workouts::list_workouts(db.get_ref(), user.0.id).await?;
     Ok(HttpResponse::Ok().json(workouts))
+}
+
+#[get("/api/templates")]
+pub async fn get_templates(
+    user: CurrentUser,
+    db: web::Data<Database>,
+) -> Result<HttpResponse, AppError> {
+    let templates = templates::list_templates(db.get_ref(), user.0.id).await?;
+    Ok(HttpResponse::Ok().json(templates))
+}
+
+#[post("/api/templates")]
+pub async fn create_template(
+    user: CurrentUser,
+    db: web::Data<Database>,
+    req: web::Json<CreateWorkoutTemplateRequest>,
+) -> Result<HttpResponse, AppError> {
+    req.validate().map_err(AppError::BadRequest)?;
+    let template = templates::create_template(db.get_ref(), user.0.id, &req.0).await?;
+    Ok(HttpResponse::Created().json(template))
+}
+
+#[get("/api/templates/{id}")]
+pub async fn get_template(
+    user: CurrentUser,
+    db: web::Data<Database>,
+    id: web::Path<i64>,
+) -> Result<HttpResponse, AppError> {
+    let template = templates::get_template(db.get_ref(), user.0.id, *id).await?;
+    Ok(HttpResponse::Ok().json(template))
+}
+
+#[put("/api/templates/{id}")]
+pub async fn update_template(
+    user: CurrentUser,
+    db: web::Data<Database>,
+    id: web::Path<i64>,
+    req: web::Json<UpdateWorkoutTemplateRequest>,
+) -> Result<HttpResponse, AppError> {
+    req.validate().map_err(AppError::BadRequest)?;
+    let template = templates::update_template(db.get_ref(), user.0.id, *id, &req.0).await?;
+    Ok(HttpResponse::Ok().json(template))
+}
+
+#[delete("/api/templates/{id}")]
+pub async fn delete_template(
+    user: CurrentUser,
+    db: web::Data<Database>,
+    id: web::Path<i64>,
+) -> Result<HttpResponse, AppError> {
+    templates::delete_template(db.get_ref(), user.0.id, *id).await?;
+    Ok(HttpResponse::NoContent().finish())
+}
+
+#[post("/api/templates/{id}/duplicate")]
+pub async fn duplicate_template(
+    user: CurrentUser,
+    db: web::Data<Database>,
+    id: web::Path<i64>,
+    req: web::Json<DuplicateWorkoutTemplateRequest>,
+) -> Result<HttpResponse, AppError> {
+    req.validate().map_err(AppError::BadRequest)?;
+    let template = templates::duplicate_template(db.get_ref(), user.0.id, *id, &req.0).await?;
+    Ok(HttpResponse::Created().json(template))
+}
+
+#[post("/api/templates/{id}/start")]
+pub async fn start_workout_from_template(
+    user: CurrentUser,
+    db: web::Data<Database>,
+    id: web::Path<i64>,
+    req: web::Json<StartWorkoutFromTemplateRequest>,
+) -> Result<HttpResponse, AppError> {
+    req.validate().map_err(AppError::BadRequest)?;
+    let workout_id =
+        templates::start_workout_from_template(db.get_ref(), user.0.id, *id, &req.0).await?;
+    Ok(HttpResponse::Created().json(json!({
+        "id": workout_id,
+        "message": "Workout started from template"
+    })))
 }
 
 #[post("/api/workouts/{workout_id}/exercises")]
@@ -295,6 +375,19 @@ pub async fn cancel_workout(
     })))
 }
 
+#[post("/api/workouts/{id}/template")]
+pub async fn create_template_from_workout(
+    user: CurrentUser,
+    db: web::Data<Database>,
+    id: web::Path<i64>,
+    req: web::Json<CreateWorkoutTemplateFromWorkoutRequest>,
+) -> Result<HttpResponse, AppError> {
+    req.validate().map_err(AppError::BadRequest)?;
+    let template =
+        templates::create_template_from_workout(db.get_ref(), user.0.id, *id, &req.0).await?;
+    Ok(HttpResponse::Created().json(template))
+}
+
 #[get("/api/backups")]
 pub async fn list_backups(_admin: AdminUser) -> Result<HttpResponse, AppError> {
     let backups = backup::list_backups().await.map_err(|e| {
@@ -488,6 +581,13 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(update_workout_times)
         .service(get_workout)
         .service(get_workouts)
+        .service(get_templates)
+        .service(create_template)
+        .service(get_template)
+        .service(update_template)
+        .service(delete_template)
+        .service(duplicate_template)
+        .service(start_workout_from_template)
         .service(create_exercise)
         .service(end_exercise)
         .service(create_set)
@@ -497,6 +597,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(get_last_exercise_data)
         .service(cancel_exercise)
         .service(cancel_workout)
+        .service(create_template_from_workout)
         .service(list_backups)
         .service(create_manual_backup)
         .service(restore_backup)

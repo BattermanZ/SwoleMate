@@ -50,6 +50,59 @@ vi.mock('$lib/auth', () => ({
 
 const apiMocks = vi.hoisted(() => ({
 	getWorkouts: vi.fn(async () => []),
+	getWorkoutTemplates: vi.fn(async () => []),
+	getWorkoutTemplate: vi.fn(async (id: number) => ({
+		template: {
+			id,
+			name: 'Push A',
+			exercise_count: 1,
+			created_at: '2026-01-01T00:00:00.000Z',
+			updated_at: '2026-01-01T00:00:00.000Z'
+		},
+		exercises: []
+	})),
+	createWorkoutTemplate: vi.fn(async () => ({
+		template: {
+			id: 91,
+			name: 'New Template',
+			exercise_count: 0,
+			created_at: '2026-01-01T00:00:00.000Z',
+			updated_at: '2026-01-01T00:00:00.000Z'
+		},
+		exercises: []
+	})),
+	updateWorkoutTemplate: vi.fn(async () => ({
+		template: {
+			id: 91,
+			name: 'New Template',
+			exercise_count: 0,
+			created_at: '2026-01-01T00:00:00.000Z',
+			updated_at: '2026-01-01T00:00:00.000Z'
+		},
+		exercises: []
+	})),
+	deleteWorkoutTemplate: vi.fn(async () => undefined),
+	duplicateWorkoutTemplate: vi.fn(async () => ({
+		template: {
+			id: 92,
+			name: 'Copy',
+			exercise_count: 0,
+			created_at: '2026-01-01T00:00:00.000Z',
+			updated_at: '2026-01-01T00:00:00.000Z'
+		},
+		exercises: []
+	})),
+	createWorkoutTemplateFromWorkout: vi.fn(async () => ({
+		template: {
+			id: 93,
+			name: 'Saved Template',
+			exercise_count: 1,
+			created_at: '2026-01-01T00:00:00.000Z',
+			updated_at: '2026-01-01T00:00:00.000Z'
+		},
+		exercises: []
+	})),
+	startWorkoutFromTemplate: vi.fn(async () => ({ id: 55 })),
 	getWorkout: vi.fn(async (id: number) => ({
 		workout: {
 			id,
@@ -161,6 +214,50 @@ describe('route behaviors', () => {
 		await fireEvent.click(getByRole('button', { name: 'Delete' }));
 		expect(apiMocks.cancelWorkout).toHaveBeenCalledWith(10);
 	}, 10_000);
+
+	it('workout detail page can save a workout as a template', async () => {
+		const { default: WorkoutDetailPage } = await import('../routes/workouts/[id]/+page.svelte');
+		const view = render(
+			WorkoutDetailPage as never,
+			{
+				props: {
+					data: {
+						error: null,
+						workout: {
+							id: 44,
+							date: '2026-01-01T10:00:00.000Z',
+							start_time: '2026-01-01T10:00:00.000Z',
+							end_time: '2026-01-01T11:00:00.000Z',
+							notes: '',
+							feedback: null,
+							exercises: [
+								{
+									exercise: {
+										id: 3,
+										workout_id: 44,
+										exercise_type: 'Bench Press',
+										start_time: '2026-01-01T10:00:00.000Z',
+										end_time: '2026-01-01T10:15:00.000Z',
+										notes: '',
+										per_side_weight: false,
+										split_weight: false,
+										settings: []
+									},
+									sets: []
+								}
+							]
+						}
+					}
+				}
+			} as never
+		);
+
+		await fireEvent.click(view.getByRole('button', { name: 'Save as template' }));
+
+		expect(apiMocks.createWorkoutTemplateFromWorkout).toHaveBeenCalledWith(44, {
+			name: 'user-a'
+		});
+	});
 
 	it('backups page blocks admin actions for non-admin and surfaces export error', async () => {
 		authStateStore.set({
