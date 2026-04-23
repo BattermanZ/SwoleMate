@@ -225,6 +225,7 @@ describe('route behaviors', () => {
 	});
 
 	it('settings validates password mismatch, rotates MCP tokens, and login shows auth errors', async () => {
+		localStorage.setItem('settings.showDemoMode', 'true');
 		apiMocks.getMcpTokens
 			.mockResolvedValueOnce([
 				{
@@ -273,6 +274,10 @@ describe('route behaviors', () => {
 		const { default: SettingsPage } = await import('../routes/settings/+page.svelte');
 		const view = render(SettingsPage as never);
 		await waitFor(() => expect(apiMocks.getMcpTokens).toHaveBeenCalledTimes(1));
+		const demoModeToggle = view.getByLabelText('Show demo session tools') as HTMLInputElement;
+		expect(demoModeToggle.checked).toBe(true);
+		await fireEvent.click(demoModeToggle);
+		expect(localStorage.getItem('settings.showDemoMode')).toBe('false');
 
 		await fireEvent.click(view.getByText('Create MCP token'));
 		expect(await view.findByText('Token name is required.')).toBeInTheDocument();

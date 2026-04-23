@@ -8,6 +8,7 @@
 		type McpTokenSummary
 	} from '$lib/api';
 	import { auth } from '$lib/auth';
+	import { readDemoModePreference, writeDemoModePreference } from '$lib/preferences/demoMode';
 
 	const authState = auth.state;
 	let currentPassword = '';
@@ -35,6 +36,12 @@
 				expires_at: string | null;
 		  }
 		| null = null;
+	let demoModeEnabled = false;
+
+	function handleDemoModeToggle(enabled: boolean) {
+		demoModeEnabled = enabled;
+		writeDemoModePreference(enabled);
+	}
 
 	function mcpScopesForAccess(access: 'read' | 'write'): string[] {
 		if (access === 'write') {
@@ -213,6 +220,7 @@
 	}
 
 	onMount(() => {
+		demoModeEnabled = readDemoModePreference();
 		void loadMcpTokens();
 	});
 
@@ -450,6 +458,33 @@
 						</button>
 					</div>
 				</form>
+			</div>
+
+			<div class="card variant-glass-surface p-4 space-y-3">
+				<div>
+					<h2 class="text-lg font-semibold tracking-tight">Workout tools</h2>
+					<p class="text-sm opacity-70">
+						Keep demo session tools hidden unless you want quick access for testing or walkthroughs.
+					</p>
+				</div>
+
+				<label
+					class="flex items-start justify-between gap-3 rounded-xl border border-surface-200/50 bg-surface-50/60 p-3 dark:border-surface-700/50 dark:bg-surface-950/30"
+				>
+					<div class="space-y-1">
+						<div class="font-semibold">Show demo session tools</div>
+						<p class="text-sm opacity-70">
+							Add the demo session action back to the Today page header.
+						</p>
+					</div>
+					<input
+						type="checkbox"
+						class="toggle"
+						aria-label="Show demo session tools"
+						checked={demoModeEnabled}
+						on:change={(e) => handleDemoModeToggle(e.currentTarget.checked)}
+					/>
+				</label>
 			</div>
 		</section>
 

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import ExerciseComposer from '$lib/components/today/ExerciseComposer.svelte';
+	import { readDemoModePreference } from '$lib/preferences/demoMode';
 	import EndSessionModal from '$lib/components/today/EndSessionModal.svelte';
 	import RecentSessions from '$lib/components/today/RecentSessions.svelte';
 	import SessionExercise from '$lib/components/today/SessionExercise.svelte';
@@ -48,7 +49,12 @@
 		updateExerciseSetting
 	} = controller;
 
-	onMount(start);
+	let showDemoAction = false;
+
+	onMount(() => {
+		showDemoAction = readDemoModePreference();
+		return start();
+	});
 </script>
 
 <div class="space-y-6">
@@ -135,14 +141,16 @@
 						>
 							Start session
 						</button>
-						<button
-							type="button"
-							class="btn variant-soft w-full sm:w-auto"
-							on:click={() => startSession('demo')}
-							disabled={$loading}
-						>
-							Load demo
-						</button>
+						{#if showDemoAction}
+							<button
+								type="button"
+								class="btn variant-soft w-full sm:w-auto"
+								on:click={() => startSession('demo')}
+								disabled={$loading}
+							>
+								Load demo
+							</button>
+						{/if}
 					</div>
 				{/if}
 			</div>

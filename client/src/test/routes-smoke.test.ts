@@ -1,6 +1,6 @@
 import { fireEvent, render } from '@testing-library/svelte';
 import { readable, writable } from 'svelte/store';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('$app/stores', () => ({
 	page: readable({
@@ -168,6 +168,10 @@ async function importComponent(path: string) {
 	return mod.default;
 }
 
+beforeEach(() => {
+	localStorage.clear();
+});
+
 describe('route smoke', () => {
 	it('renders +layout without throwing', async () => {
 		const Layout = await importComponent('../routes/+layout.svelte');
@@ -177,8 +181,9 @@ describe('route smoke', () => {
 
 	it('renders today page', async () => {
 		const TodayPage = await importComponent('../routes/+page.svelte');
-		const { getByRole } = render(TodayPage as never);
+		const { getByRole, queryByRole } = render(TodayPage as never);
 		expect(getByRole('heading', { name: 'Today' })).toBeInTheDocument();
+		expect(queryByRole('button', { name: 'Load demo' })).not.toBeInTheDocument();
 	});
 
 	it('renders workouts page with basic data', async () => {
