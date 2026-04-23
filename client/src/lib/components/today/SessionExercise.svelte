@@ -30,7 +30,7 @@
 		toggleSplitWeight: { enabled: boolean };
 	}>();
 
-	let setReps = 10;
+	let setReps = 12;
 	let setWeight = 0;
 	let setWeightLeft = 0;
 	let setWeightRight = 0;
