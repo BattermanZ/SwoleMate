@@ -1,4 +1,5 @@
 import { fireEvent, render } from '@testing-library/svelte';
+import type { UiSession } from '$lib/today/types';
 import { readable, writable } from 'svelte/store';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -21,6 +22,9 @@ const authStateStore = writable({
 const todayControllerMocks = vi.hoisted(() => ({
 	startSession: vi.fn(async () => undefined)
 }));
+
+const todayCurrentSessionStore = writable<UiSession | null>(null);
+const todayOpenExerciseIdStore = writable<number | null>(null);
 
 vi.mock('$lib/auth', () => ({
 	auth: {
@@ -124,14 +128,13 @@ vi.mock('$lib/api', () => {
 });
 
 vi.mock('$lib/today/controller', () => {
-	const currentSession = writable(null);
 	return {
 		createTodayController: () => ({
 			addExercise: vi.fn(async () => undefined),
 			addExerciseSetting: vi.fn(),
 			addSet: vi.fn(async () => undefined),
 			cancelSession: vi.fn(async () => undefined),
-			currentSession,
+			currentSession: todayCurrentSessionStore,
 			elapsedLabel: writable('0m'),
 			endModalOpen: writable(false),
 			endMood: writable(null),
@@ -144,7 +147,7 @@ vi.mock('$lib/today/controller', () => {
 			offlineMode: writable(false),
 			markExerciseDone: vi.fn(async () => undefined),
 			openEndModal: vi.fn(),
-			openExerciseId: writable<number | null>(null),
+			openExerciseId: todayOpenExerciseIdStore,
 			pendingSyncCount: writable(0),
 			quickPicks: writable<string[]>([]),
 			recentSessions: writable([]),
@@ -175,6 +178,8 @@ async function importComponent(path: string) {
 beforeEach(() => {
 	localStorage.clear();
 	vi.clearAllMocks();
+	todayCurrentSessionStore.set(null);
+	todayOpenExerciseIdStore.set(null);
 });
 
 describe('route smoke', () => {
@@ -199,6 +204,49 @@ describe('route smoke', () => {
 		await fireEvent.click(getByRole('button', { name: 'Load demo' }));
 
 		expect(todayControllerMocks.startSession).toHaveBeenCalledWith('demo');
+	});
+
+	it('keeps active exercises open while leaving done exercises collapsed', async () => {
+		todayCurrentSessionStore.set({
+			id: 12,
+			startedAt: '2026-01-01T10:00:00.000Z',
+			notes: '',
+			exercises: [
+				{
+					id: 101,
+					name: 'Bench Press',
+					notes: '',
+					startedAt: '2026-01-01T10:00:00.000Z',
+					endedAt: '2026-01-01T10:05:00.000Z',
+					sets: [],
+					settings: [],
+					perSideWeight: false,
+					splitWeight: false,
+					status: 'active' as const
+				},
+				{
+					id: 202,
+					name: 'Cable Row',
+					notes: '',
+					startedAt: '2026-01-01T10:06:00.000Z',
+					endedAt: '2026-01-01T10:15:00.000Z',
+					sets: [],
+					settings: [],
+					perSideWeight: false,
+					splitWeight: false,
+					status: 'done' as const
+				}
+			]
+		});
+
+		const TodayPage = await importComponent('../routes/+page.svelte');
+		const { getByText, queryAllByText } = render(TodayPage as never);
+
+		expect(getByText('Bench Press')).toBeInTheDocument();
+		expect(getByText('Cable Row')).toBeInTheDocument();
+		expect(queryAllByText('Add your first set for this exercise.')).toHaveLength(1);
+		expect(queryAllByText('Mark done')).toHaveLength(1);
+		expect(queryAllByText('Collapse')).toHaveLength(1);
 	});
 
 	it('renders workouts page with basic data', async () => {
