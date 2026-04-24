@@ -2554,6 +2554,16 @@ async fn oauth_token_flow_and_read_only_mcp_tools_work() {
     assert_eq!(workout_resp.status(), 201);
     let workout_id = json_body(workout_resp).await["id"].as_i64().unwrap();
 
+    let req = with_cookie(test::TestRequest::post(), &user_cookie)
+        .uri(&format!("/api/workouts/{workout_id}/exercises"))
+        .set_json(json!({
+            "exercise_type": "Bench Press",
+            "start_time": chrono::Utc::now()
+        }))
+        .to_request();
+    let exercise_resp = test::call_service(&app, req).await;
+    assert_eq!(exercise_resp.status(), 201);
+
     let registered = register_oauth_client(&app, "workouts.read progress.read").await;
     let client_id = registered["client_id"].as_str().unwrap();
     let verifier = "batch2-test-verifier";
@@ -2612,6 +2622,10 @@ async fn oauth_token_flow_and_read_only_mcp_tools_work() {
     assert_eq!(resp.status(), 200);
     let initialize = json_body(resp).await;
     assert_eq!(initialize["result"]["serverInfo"]["name"], "swolemate");
+    assert!(initialize["result"]["instructions"]
+        .as_str()
+        .unwrap()
+        .contains("replace_sets is destructive"));
 
     let req = test::TestRequest::post()
         .uri("/mcp")
@@ -2638,6 +2652,24 @@ async fn oauth_token_flow_and_read_only_mcp_tools_work() {
         .unwrap()
         .iter()
         .any(|tool| tool["name"] == "list_templates"));
+    assert!(listed["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|tool| {
+            tool["name"] == "list_exercise_types"
+                && tool["description"]
+                    .as_str()
+                    .unwrap()
+                    .contains("exact exercise_type")
+        }));
+
+    let listed_types = mcp_call(&app, access_token, 22, "list_exercise_types", json!({})).await;
+    assert!(listed_types["result"]["structuredContent"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|name| name == "Bench Press"));
 
     let req = test::TestRequest::post()
         .uri("/mcp")
@@ -2735,6 +2767,10 @@ async fn mcp_initialize_uses_current_protocol_and_rejects_invalid_request_ids() 
     let body = json_body(resp).await;
     assert_eq!(body["id"], "init-1");
     assert_eq!(body["result"]["protocolVersion"], "2025-11-25");
+    assert!(body["result"]["instructions"]
+        .as_str()
+        .unwrap()
+        .contains("list_exercise_types"));
 
     let req = test::TestRequest::post()
         .uri("/mcp")
@@ -4351,6 +4387,11 @@ async fn invalid_write_mcp_payload_returns_json_rpc_error() {
     .await;
     assert_eq!(body["error"]["code"], -32602);
     assert_eq!(body["error"]["message"], "Invalid params");
+    assert_eq!(body["error"]["data"]["code"], "invalid_params");
+    assert!(body["error"]["data"]["detail"]
+        .as_str()
+        .unwrap()
+        .contains("weight_left and weight_right"));
 
     let too_many_sets = (0..101)
         .map(|_| json!({ "reps": 5, "weight": 20.0 }))
@@ -4368,6 +4409,11 @@ async fn invalid_write_mcp_payload_returns_json_rpc_error() {
     .await;
     assert_eq!(body["error"]["code"], -32602);
     assert_eq!(body["error"]["message"], "Invalid params");
+    assert_eq!(body["error"]["data"]["code"], "invalid_params");
+    assert!(body["error"]["data"]["detail"]
+        .as_str()
+        .unwrap()
+        .contains("at most 100"));
 }
 
 #[actix_web::test]

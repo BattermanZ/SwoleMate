@@ -18,6 +18,7 @@ use url::Url;
 
 const PROTOCOL_VERSION: &str = "2025-11-25";
 const FALLBACK_PROTOCOL_VERSION: &str = "2025-03-26";
+const SERVER_INSTRUCTIONS: &str = "SwoleMate exposes one user's workout log. Start read workflows with list_workouts or list_templates, then call get_workout or get_template to find IDs for nested exercises. Use list_exercise_types before exercise-specific progress queries if you are unsure of the exact exercise name. Use ISO 8601 date-time strings; UTC is safest. timezone_offset_minutes is the user's local offset from UTC in minutes when known. Weight values are kilograms. For split implements, provide weight_left and weight_right together. replace_sets is destructive: it replaces every set on that exercise with exactly the provided array.";
 
 #[derive(Debug, Deserialize)]
 struct RpcRequest {
@@ -124,11 +125,23 @@ fn rpc_error(id: Option<Value>, code: i64, message: &str) -> Value {
     })
 }
 
+fn rpc_error_with_data(id: Option<Value>, code: i64, message: &str, data: Value) -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": id.unwrap_or(Value::Null),
+        "error": {
+            "code": code,
+            "message": message,
+            "data": data
+        }
+    })
+}
+
 fn tool_definitions() -> Value {
     json!([
         {
             "name": "list_workouts",
-            "description": "List workouts for the authenticated user.",
+            "description": "List the authenticated user's workouts. Use this first when you need workout IDs before fetching details or editing a workout.",
             "inputSchema": {
                 "type": "object",
                 "properties": {},
@@ -137,23 +150,32 @@ fn tool_definitions() -> Value {
         },
         {
             "name": "get_workout",
-            "description": "Fetch one workout with its exercises and sets.",
+            "description": "Fetch one workout with nested exercises and sets. Use this to find exercise IDs before calling replace_sets or end_exercise.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "id": { "type": "integer" }
+                    "id": { "type": "integer", "description": "Workout ID from list_workouts or a create_workout response." }
                 },
                 "required": ["id"],
                 "additionalProperties": false
             }
         },
         {
+            "name": "list_exercise_types",
+            "description": "List exercise names already used by the authenticated user. Use this before exercise-specific progress tools when you need the exact exercise_type string.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }
+        },
+        {
             "name": "get_last_exercise_data",
-            "description": "Fetch the last logged exercise instance and sets for an exercise type.",
+            "description": "Fetch the most recent logged exercise instance and sets for an exact exercise_type. Call list_exercise_types first if unsure of spelling.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "exercise_type": { "type": "string" }
+                    "exercise_type": { "type": "string", "description": "Exact exercise name, for example from list_exercise_types." }
                 },
                 "required": ["exercise_type"],
                 "additionalProperties": false
@@ -161,11 +183,11 @@ fn tool_definitions() -> Value {
         },
         {
             "name": "get_exercise_progress",
-            "description": "Fetch progress history for an exercise type.",
+            "description": "Fetch progress history for an exact exercise_type. Requires progress.read scope. Call list_exercise_types first if unsure of spelling.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "exercise_type": { "type": "string" }
+                    "exercise_type": { "type": "string", "description": "Exact exercise name, for example from list_exercise_types." }
                 },
                 "required": ["exercise_type"],
                 "additionalProperties": false
@@ -173,7 +195,7 @@ fn tool_definitions() -> Value {
         },
         {
             "name": "get_workout_stats",
-            "description": "Fetch aggregate workout statistics for the authenticated user.",
+            "description": "Fetch aggregate workout statistics for the authenticated user. Requires progress.read scope.",
             "inputSchema": {
                 "type": "object",
                 "properties": {},
@@ -182,11 +204,11 @@ fn tool_definitions() -> Value {
         },
         {
             "name": "get_volume_stats",
-            "description": "Fetch volume statistics for an exercise type.",
+            "description": "Fetch volume statistics for an exact exercise_type. Requires progress.read scope. Call list_exercise_types first if unsure of spelling.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "exercise_type": { "type": "string" }
+                    "exercise_type": { "type": "string", "description": "Exact exercise name, for example from list_exercise_types." }
                 },
                 "required": ["exercise_type"],
                 "additionalProperties": false
@@ -194,7 +216,7 @@ fn tool_definitions() -> Value {
         },
         {
             "name": "list_templates",
-            "description": "List workout templates for the authenticated user.",
+            "description": "List workout templates for the authenticated user. Use this first when you need template IDs before fetching or starting from a template.",
             "inputSchema": {
                 "type": "object",
                 "properties": {},
@@ -203,7 +225,7 @@ fn tool_definitions() -> Value {
         },
         {
             "name": "get_template",
-            "description": "Fetch one workout template with its ordered exercises.",
+            "description": "Fetch one workout template with ordered exercises. Use this to inspect template contents before update, duplicate, delete, or start_workout_from_template.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -215,14 +237,14 @@ fn tool_definitions() -> Value {
         },
         {
             "name": "create_workout",
-            "description": "Create a workout for the authenticated user.",
+            "description": "Create a workout for the authenticated user. Use ISO 8601 date-time strings; UTC is safest. Requires workouts.write scope.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "date": { "type": "string", "format": "date-time" },
-                    "start_time": { "type": "string", "format": "date-time" },
-                    "notes": { "type": "string" },
-                    "timezone_offset_minutes": { "type": "integer" }
+                    "date": { "type": "string", "format": "date-time", "description": "Workout date/time as ISO 8601." },
+                    "start_time": { "type": "string", "format": "date-time", "description": "Workout start time as ISO 8601." },
+                    "notes": { "type": "string", "description": "Optional user-visible workout notes." },
+                    "timezone_offset_minutes": { "type": "integer", "description": "Optional local offset from UTC in minutes, such as -300 or 60." }
                 },
                 "required": ["date", "start_time"],
                 "additionalProperties": false
@@ -230,7 +252,7 @@ fn tool_definitions() -> Value {
         },
         {
             "name": "create_template",
-            "description": "Create a workout template.",
+            "description": "Create a workout template. Templates define planned exercises, not logged sets. Requires workouts.write scope.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -268,7 +290,7 @@ fn tool_definitions() -> Value {
         },
         {
             "name": "update_template",
-            "description": "Update a workout template.",
+            "description": "Replace a workout template's name and full exercise list. Include every exercise that should remain. Requires workouts.write scope.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -307,7 +329,7 @@ fn tool_definitions() -> Value {
         },
         {
             "name": "delete_template",
-            "description": "Delete a workout template.",
+            "description": "Delete a workout template by ID. This does not delete workouts already created from the template. Requires workouts.write scope.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -319,7 +341,7 @@ fn tool_definitions() -> Value {
         },
         {
             "name": "duplicate_template",
-            "description": "Duplicate a workout template.",
+            "description": "Duplicate a workout template, optionally with a new name. Requires workouts.write scope.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -332,7 +354,7 @@ fn tool_definitions() -> Value {
         },
         {
             "name": "create_template_from_workout",
-            "description": "Create a template from an existing workout.",
+            "description": "Create a workout template from an existing workout's exercises. Logged sets are not copied into the template. Requires workouts.write scope.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -345,7 +367,7 @@ fn tool_definitions() -> Value {
         },
         {
             "name": "start_workout_from_template",
-            "description": "Start a workout by instantiating a template.",
+            "description": "Create a new workout from a template. The new workout receives exercises from the template, usually without sets. Requires workouts.write scope.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -360,13 +382,13 @@ fn tool_definitions() -> Value {
         },
         {
             "name": "add_exercise",
-            "description": "Add an exercise to an existing workout.",
+            "description": "Add an exercise to an existing workout. Use the workout_id from create_workout, list_workouts, or get_workout. Requires workouts.write scope.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "workout_id": { "type": "integer" },
-                    "exercise_type": { "type": "string" },
-                    "start_time": { "type": "string", "format": "date-time" },
+                    "workout_id": { "type": "integer", "description": "Workout ID owned by the authenticated user." },
+                    "exercise_type": { "type": "string", "description": "Exercise name, such as Squat or Bench Press." },
+                    "start_time": { "type": "string", "format": "date-time", "description": "Exercise start time as ISO 8601." },
                     "notes": { "type": "string" },
                     "per_side_weight": { "type": "boolean" },
                     "split_weight": { "type": "boolean" },
@@ -389,21 +411,23 @@ fn tool_definitions() -> Value {
         },
         {
             "name": "replace_sets",
-            "description": "Replace all sets for an exercise.",
+            "description": "Destructively replace all sets for an exercise with exactly the provided sets array. Existing sets not included here are deleted. Fetch the workout first to confirm the exercise_id. Requires workouts.write scope.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "exercise_id": { "type": "integer" },
+                    "exercise_id": { "type": "integer", "description": "Exercise ID from get_workout." },
                     "sets": {
                         "type": "array",
+                        "description": "Complete replacement list, maximum 100 sets.",
+                        "maxItems": 100,
                         "items": {
                             "type": "object",
                             "properties": {
-                                "reps": { "type": "integer" },
-                                "weight": { "type": "number" },
-                                "notes": { "type": "string" },
-                                "weight_left": { "type": "number" },
-                                "weight_right": { "type": "number" }
+                                "reps": { "type": "integer", "description": "Repetition count, 0 to 500." },
+                                "weight": { "type": "number", "description": "Weight in kilograms." },
+                                "notes": { "type": "string", "description": "Optional set note." },
+                                "weight_left": { "type": "number", "description": "Left-side weight in kilograms; provide together with weight_right." },
+                                "weight_right": { "type": "number", "description": "Right-side weight in kilograms; provide together with weight_left." }
                             },
                             "required": ["reps", "weight"],
                             "additionalProperties": false
@@ -416,7 +440,7 @@ fn tool_definitions() -> Value {
         },
         {
             "name": "end_exercise",
-            "description": "End an exercise and optionally update notes and settings.",
+            "description": "End an exercise and optionally update notes, split/per-side flags, and settings. Fetch the workout first to confirm the exercise ID. Requires workouts.write scope.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -444,7 +468,7 @@ fn tool_definitions() -> Value {
         },
         {
             "name": "end_workout",
-            "description": "End a workout and optionally update notes and feedback.",
+            "description": "End a workout and optionally update notes and feedback. feedback must be one of 😊, 😐, or 😞. Requires workouts.write scope.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -505,35 +529,58 @@ fn summarize_audit_value(value: &Value) -> Value {
     }
 }
 
-fn rpc_error_from_app_error(err: AppError) -> (i64, &'static str, &'static str) {
+fn rpc_error_from_app_error(err: AppError) -> (i64, &'static str, &'static str, Option<String>) {
     match err {
-        AppError::BadRequest(_) => (-32602, "Invalid params", "invalid_params"),
-        AppError::NotFound(_) => (-32004, "Not found", "not_found"),
-        AppError::Forbidden | AppError::Unauthorized => (-32001, "Forbidden", "forbidden"),
-        AppError::TooManyRequests(_) => (-32029, "Too Many Requests", "rate_limited"),
-        AppError::Conflict(_) => (-32009, "Conflict", "conflict"),
+        AppError::BadRequest(detail) => (-32602, "Invalid params", "invalid_params", Some(detail)),
+        AppError::NotFound(detail) => (-32004, "Not found", "not_found", Some(detail)),
+        AppError::Forbidden | AppError::Unauthorized => (-32001, "Forbidden", "forbidden", None),
+        AppError::TooManyRequests(detail) => {
+            (-32029, "Too Many Requests", "rate_limited", Some(detail))
+        }
+        AppError::Conflict(detail) => (-32009, "Conflict", "conflict", Some(detail)),
         AppError::DatabaseError(_) | AppError::InternalError(_) => {
-            (-32000, "Internal error", "internal_error")
+            (-32000, "Internal error", "internal_error", None)
         }
     }
 }
 
-fn parse_args<T>(args: &Value) -> Result<T, (i64, &'static str, &'static str)>
+fn parse_args<T>(args: &Value) -> Result<T, (i64, &'static str, &'static str, Option<String>)>
 where
     T: serde::de::DeserializeOwned,
 {
-    serde_json::from_value(args.clone()).map_err(|_| (-32602, "Invalid params", "invalid_params"))
+    serde_json::from_value(args.clone()).map_err(|err| {
+        (
+            -32602,
+            "Invalid params",
+            "invalid_params",
+            Some(err.to_string()),
+        )
+    })
 }
 
 fn require_scope(
     principal: &McpPrincipal,
     scope: authz::McpScope,
-) -> Result<(), (i64, &'static str, &'static str)> {
+) -> Result<(), (i64, &'static str, &'static str, Option<String>)> {
     if authz::has_scope(&principal.scopes, scope) {
         Ok(())
     } else {
-        Err((-32001, "Forbidden", "missing_scope"))
+        Err((
+            -32001,
+            "Forbidden",
+            "missing_scope",
+            Some(format!("Required scope: {}", scope.as_str())),
+        ))
     }
+}
+
+fn invalid_params(detail: impl ToString) -> (i64, &'static str, &'static str, Option<String>) {
+    (
+        -32602,
+        "Invalid params",
+        "invalid_params",
+        Some(detail.to_string()),
+    )
 }
 
 fn valid_request_id(id: &Value) -> bool {
@@ -793,7 +840,8 @@ async fn handle_mcp_message(
                 "serverInfo": {
                     "name": "swolemate",
                     "version": env!("CARGO_PKG_VERSION")
-                }
+                },
+                "instructions": SERVER_INSTRUCTIONS
             }),
         )),
         "notifications/initialized" => None,
@@ -844,7 +892,7 @@ async fn handle_mcp_message(
                         .await;
                     rpc_result(rpc.id.expect("validated request id"), result)
                 }
-                Err((code, message, error_code)) => {
+                Err((code, message, error_code, detail)) => {
                     let _ = db
                         .write_mcp_audit_log(
                             Some(principal.user_id),
@@ -857,7 +905,11 @@ async fn handle_mcp_message(
                             user_agent.as_deref(),
                         )
                         .await;
-                    rpc_error(rpc.id, code, message)
+                    let mut data = json!({ "code": error_code });
+                    if let Some(detail) = detail {
+                        data["detail"] = json!(detail);
+                    }
+                    rpc_error_with_data(rpc.id, code, message, data)
                 }
             };
             Some(response)
@@ -871,7 +923,7 @@ async fn call_tool(
     args: &Value,
     principal: &McpPrincipal,
     db: &Database,
-) -> Result<Value, (i64, &'static str, &'static str)> {
+) -> Result<Value, (i64, &'static str, &'static str, Option<String>)> {
     match name {
         "list_workouts" => {
             require_scope(principal, authz::McpScope::WorkoutsRead)?;
@@ -882,15 +934,21 @@ async fn call_tool(
         }
         "get_workout" => {
             require_scope(principal, authz::McpScope::WorkoutsRead)?;
-            let id = args.get("id").and_then(Value::as_i64).ok_or((
-                -32602,
-                "Invalid params",
-                "invalid_params",
-            ))?;
+            let id = args
+                .get("id")
+                .and_then(Value::as_i64)
+                .ok_or_else(|| invalid_params("id is required and must be an integer"))?;
             let workout = workouts::get_workout_detail(db, principal.user_id, id)
                 .await
                 .map_err(rpc_error_from_app_error)?;
             Ok(tool_success(json!(workout)))
+        }
+        "list_exercise_types" => {
+            require_scope(principal, authz::McpScope::WorkoutsRead)?;
+            let types = exercises::list_exercise_types(db, principal.user_id)
+                .await
+                .map_err(rpc_error_from_app_error)?;
+            Ok(tool_success(json!(types)))
         }
         "list_templates" => {
             require_scope(principal, authz::McpScope::WorkoutsRead)?;
@@ -909,11 +967,10 @@ async fn call_tool(
         }
         "get_last_exercise_data" => {
             require_scope(principal, authz::McpScope::WorkoutsRead)?;
-            let exercise_type = args.get("exercise_type").and_then(Value::as_str).ok_or((
-                -32602,
-                "Invalid params",
-                "invalid_params",
-            ))?;
+            let exercise_type = args
+                .get("exercise_type")
+                .and_then(Value::as_str)
+                .ok_or_else(|| invalid_params("exercise_type is required and must be a string"))?;
             let data = exercises::get_last_exercise_data(db, principal.user_id, exercise_type)
                 .await
                 .map_err(rpc_error_from_app_error)?;
@@ -921,11 +978,10 @@ async fn call_tool(
         }
         "get_exercise_progress" => {
             require_scope(principal, authz::McpScope::ProgressRead)?;
-            let exercise_type = args.get("exercise_type").and_then(Value::as_str).ok_or((
-                -32602,
-                "Invalid params",
-                "invalid_params",
-            ))?;
+            let exercise_type = args
+                .get("exercise_type")
+                .and_then(Value::as_str)
+                .ok_or_else(|| invalid_params("exercise_type is required and must be a string"))?;
             let data = progress::get_exercise_progress(db, principal.user_id, exercise_type)
                 .await
                 .map_err(rpc_error_from_app_error)?;
@@ -940,11 +996,10 @@ async fn call_tool(
         }
         "get_volume_stats" => {
             require_scope(principal, authz::McpScope::ProgressRead)?;
-            let exercise_type = args.get("exercise_type").and_then(Value::as_str).ok_or((
-                -32602,
-                "Invalid params",
-                "invalid_params",
-            ))?;
+            let exercise_type = args
+                .get("exercise_type")
+                .and_then(Value::as_str)
+                .ok_or_else(|| invalid_params("exercise_type is required and must be a string"))?;
             let data = progress::get_volume_stats(db, principal.user_id, exercise_type)
                 .await
                 .map_err(rpc_error_from_app_error)?;
@@ -953,9 +1008,7 @@ async fn call_tool(
         "create_workout" => {
             require_scope(principal, authz::McpScope::WorkoutsWrite)?;
             let request: CreateWorkoutRequest = parse_args(args)?;
-            request
-                .validate()
-                .map_err(|_| (-32602, "Invalid params", "invalid_params"))?;
+            request.validate().map_err(invalid_params)?;
             let workout_id = workouts::create_workout(db, principal.user_id, &request)
                 .await
                 .map_err(rpc_error_from_app_error)?;
@@ -967,9 +1020,7 @@ async fn call_tool(
         "create_template" => {
             require_scope(principal, authz::McpScope::WorkoutsWrite)?;
             let request: CreateWorkoutTemplateRequest = parse_args(args)?;
-            request
-                .validate()
-                .map_err(|_| (-32602, "Invalid params", "invalid_params"))?;
+            request.validate().map_err(invalid_params)?;
             let template = templates::create_template(db, principal.user_id, &request)
                 .await
                 .map_err(rpc_error_from_app_error)?;
@@ -978,10 +1029,7 @@ async fn call_tool(
         "update_template" => {
             require_scope(principal, authz::McpScope::WorkoutsWrite)?;
             let request: UpdateTemplateToolArgs = parse_args(args)?;
-            request
-                .request
-                .validate()
-                .map_err(|_| (-32602, "Invalid params", "invalid_params"))?;
+            request.request.validate().map_err(invalid_params)?;
             let template =
                 templates::update_template(db, principal.user_id, request.id, &request.request)
                     .await
@@ -1001,10 +1049,7 @@ async fn call_tool(
         "duplicate_template" => {
             require_scope(principal, authz::McpScope::WorkoutsWrite)?;
             let request: DuplicateTemplateToolArgs = parse_args(args)?;
-            request
-                .request
-                .validate()
-                .map_err(|_| (-32602, "Invalid params", "invalid_params"))?;
+            request.request.validate().map_err(invalid_params)?;
             let template =
                 templates::duplicate_template(db, principal.user_id, request.id, &request.request)
                     .await
@@ -1014,10 +1059,7 @@ async fn call_tool(
         "create_template_from_workout" => {
             require_scope(principal, authz::McpScope::WorkoutsWrite)?;
             let request: CreateTemplateFromWorkoutToolArgs = parse_args(args)?;
-            request
-                .request
-                .validate()
-                .map_err(|_| (-32602, "Invalid params", "invalid_params"))?;
+            request.request.validate().map_err(invalid_params)?;
             let template = templates::create_template_from_workout(
                 db,
                 principal.user_id,
@@ -1031,10 +1073,7 @@ async fn call_tool(
         "start_workout_from_template" => {
             require_scope(principal, authz::McpScope::WorkoutsWrite)?;
             let request: StartWorkoutFromTemplateToolArgs = parse_args(args)?;
-            request
-                .request
-                .validate()
-                .map_err(|_| (-32602, "Invalid params", "invalid_params"))?;
+            request.request.validate().map_err(invalid_params)?;
             let workout_id = templates::start_workout_from_template(
                 db,
                 principal.user_id,
@@ -1051,10 +1090,7 @@ async fn call_tool(
         "add_exercise" => {
             require_scope(principal, authz::McpScope::WorkoutsWrite)?;
             let request: CreateExerciseToolArgs = parse_args(args)?;
-            request
-                .request
-                .validate()
-                .map_err(|_| (-32602, "Invalid params", "invalid_params"))?;
+            request.request.validate().map_err(invalid_params)?;
             let exercise_id = exercises::create_exercise(
                 db,
                 principal.user_id,
@@ -1072,8 +1108,7 @@ async fn call_tool(
             require_scope(principal, authz::McpScope::WorkoutsWrite)?;
             let request: ReplaceSetsToolArgs = parse_args(args)?;
             for set in &request.sets {
-                set.validate()
-                    .map_err(|_| (-32602, "Invalid params", "invalid_params"))?;
+                set.validate().map_err(invalid_params)?;
             }
             let sets =
                 exercises::replace_sets(db, principal.user_id, request.exercise_id, &request.sets)
@@ -1084,10 +1119,7 @@ async fn call_tool(
         "end_exercise" => {
             require_scope(principal, authz::McpScope::WorkoutsWrite)?;
             let request: EndExerciseToolArgs = parse_args(args)?;
-            request
-                .request
-                .validate()
-                .map_err(|_| (-32602, "Invalid params", "invalid_params"))?;
+            request.request.validate().map_err(invalid_params)?;
             exercises::end_exercise(db, principal.user_id, request.id, &request.request)
                 .await
                 .map_err(rpc_error_from_app_error)?;
@@ -1098,10 +1130,7 @@ async fn call_tool(
         "end_workout" => {
             require_scope(principal, authz::McpScope::WorkoutsWrite)?;
             let request: EndWorkoutToolArgs = parse_args(args)?;
-            request
-                .request
-                .validate()
-                .map_err(|_| (-32602, "Invalid params", "invalid_params"))?;
+            request.request.validate().map_err(invalid_params)?;
             workouts::end_workout(db, principal.user_id, request.id, &request.request)
                 .await
                 .map_err(rpc_error_from_app_error)?;
@@ -1109,7 +1138,7 @@ async fn call_tool(
                 "message": "Workout ended successfully"
             })))
         }
-        _ => Err((-32601, "Tool not found", "tool_not_found")),
+        _ => Err((-32601, "Tool not found", "tool_not_found", None)),
     }
 }
 
