@@ -2,7 +2,7 @@ use crate::auth::{generate_session_token, hash_session_token};
 use crate::db::Database;
 use crate::errors::AppError;
 use crate::middleware::CurrentUser;
-use crate::services::authz::{normalize_scopes, McpScope};
+use crate::services::authz::{all_scopes_supported, normalize_scopes};
 use actix_web::{get, post, web, HttpResponse};
 use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -35,11 +35,6 @@ struct CreatedMcpTokenResponse {
     expires_at: Option<chrono::DateTime<Utc>>,
 }
 
-const ALLOWED_SCOPES: &[&str] = &[
-    McpScope::WorkoutsRead.as_str(),
-    McpScope::ProgressRead.as_str(),
-    McpScope::WorkoutsWrite.as_str(),
-];
 const DEFAULT_TOKEN_EXPIRY_DAYS: i64 = 30;
 
 fn validate_name(name: &str) -> Result<String, AppError> {
@@ -68,10 +63,7 @@ fn validate_scopes(scopes: &[String]) -> Result<Vec<String>, AppError> {
             "at least one valid scope is required".to_string(),
         ));
     }
-    if normalized
-        .iter()
-        .any(|scope| !ALLOWED_SCOPES.iter().any(|allowed| allowed == scope))
-    {
+    if !all_scopes_supported(&normalized) {
         return Err(AppError::BadRequest(
             "unsupported scope requested".to_string(),
         ));

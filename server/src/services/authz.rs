@@ -5,6 +5,12 @@ pub enum McpScope {
     WorkoutsWrite,
 }
 
+pub const ALLOWED_MCP_SCOPES: &[&str] = &[
+    McpScope::WorkoutsRead.as_str(),
+    McpScope::ProgressRead.as_str(),
+    McpScope::WorkoutsWrite.as_str(),
+];
+
 impl McpScope {
     pub const fn as_str(self) -> &'static str {
         match self {
@@ -34,4 +40,10 @@ pub fn normalize_scopes(raw: &str) -> Vec<String> {
 
 pub fn has_scope(granted: &[String], required: McpScope) -> bool {
     granted.iter().any(|scope| scope == required.as_str())
+}
+
+pub fn all_scopes_supported(scopes: &[String]) -> bool {
+    scopes
+        .iter()
+        .all(|scope| ALLOWED_MCP_SCOPES.iter().any(|allowed| allowed == scope))
 }

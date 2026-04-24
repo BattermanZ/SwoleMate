@@ -5,7 +5,7 @@ use crate::auth::rate_limit::{
 use crate::auth::{generate_session_token, hash_session_token};
 use crate::db::Database;
 use crate::oauth::OAuthConfig;
-use crate::services::authz::normalize_scopes;
+use crate::services::authz::{all_scopes_supported, normalize_scopes, ALLOWED_MCP_SCOPES};
 use actix_web::{get, post, web, HttpRequest, HttpResponse};
 use base64::Engine;
 use chrono::Utc;
@@ -302,6 +302,11 @@ pub async fn register_client(
         .map(normalize_scopes)
         .filter(|scopes| !scopes.is_empty())
         .unwrap_or_else(|| cfg.default_scopes.clone());
+    if !all_scopes_supported(&scopes) {
+        return HttpResponse::BadRequest().json(serde_json::json!({
+            "error": "invalid_scope"
+        }));
+    }
 
     let redirect_uris_json = match serde_json::to_string(&body.redirect_uris) {
         Ok(value) => value,
@@ -938,7 +943,7 @@ pub async fn protected_resource_metadata(cfg: web::Data<OAuthConfig>) -> HttpRes
     HttpResponse::Ok().json(serde_json::json!({
         "resource": cfg.resource,
         "authorization_servers": [cfg.issuer],
-        "scopes_supported": ["workouts.read", "progress.read", "workouts.write"]
+        "scopes_supported": ALLOWED_MCP_SCOPES
     }))
 }
 

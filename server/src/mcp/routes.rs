@@ -9,12 +9,15 @@ use crate::models::{
     UpdateWorkoutRequest, UpdateWorkoutTemplateRequest,
 };
 use crate::services::{authz, exercises, progress, templates, workouts};
-use actix_web::{post, web, HttpRequest, HttpResponse};
+use actix_web::http::header;
+use actix_web::{get, post, web, HttpRequest, HttpResponse};
 use chrono::Utc;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use url::Url;
 
 const PROTOCOL_VERSION: &str = "2025-11-25";
+const FALLBACK_PROTOCOL_VERSION: &str = "2025-03-26";
 
 #[derive(Debug, Deserialize)]
 struct RpcRequest {
@@ -24,6 +27,17 @@ struct RpcRequest {
     method: String,
     #[serde(default)]
     params: Value,
+}
+
+#[derive(Debug, Deserialize)]
+struct RpcResponse {
+    jsonrpc: String,
+    #[serde(default)]
+    id: Option<Value>,
+    #[serde(default)]
+    result: Option<Value>,
+    #[serde(default)]
+    error: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -530,8 +544,103 @@ fn valid_request_id(id: &Value) -> bool {
     }
 }
 
-fn is_notification_method(method: &str) -> bool {
-    method.starts_with("notifications/")
+fn configured_origin(raw: Option<String>) -> Option<String> {
+    raw.and_then(|value| {
+        let trimmed = value.trim().trim_end_matches('/').to_string();
+        if trimmed.is_empty() {
+            return None;
+        }
+        if let Ok(url) = Url::parse(&trimmed) {
+            if let Some(host) = url.host_str() {
+                let mut origin = format!("{}://{}", url.scheme(), host);
+                if let Some(port) = url.port() {
+                    origin.push_str(&format!(":{port}"));
+                }
+                return Some(origin);
+            }
+        } else {
+            return Some(trimmed);
+        }
+        None
+    })
+}
+
+fn allowed_origin_values() -> Vec<String> {
+    let mut origins = std::env::var("CORS_ALLOWED_ORIGINS")
+        .ok()
+        .map(|raw| {
+            raw.split(',')
+                .filter_map(|value| configured_origin(Some(value.to_string())))
+                .collect::<Vec<_>>()
+        })
+        .filter(|values| !values.is_empty())
+        .unwrap_or_else(|| {
+            configured_origin(
+                std::env::var("FRONTEND_URL")
+                    .ok()
+                    .or_else(|| Some("http://localhost:2470".to_string())),
+            )
+            .into_iter()
+            .collect()
+        });
+
+    if let Some(origin) = configured_origin(std::env::var("MCP_PUBLIC_BASE_URL").ok()) {
+        origins.push(origin);
+    }
+    if cfg!(debug_assertions) {
+        origins.push("http://localhost:2470".to_string());
+        origins.push("http://127.0.0.1:2470".to_string());
+    }
+    origins.sort();
+    origins.dedup();
+    origins
+}
+
+fn origin_is_allowed(req: &HttpRequest) -> bool {
+    let Some(origin) = req
+        .headers()
+        .get(header::ORIGIN)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| configured_origin(Some(value.to_string())))
+    else {
+        return true;
+    };
+
+    allowed_origin_values()
+        .iter()
+        .any(|allowed| allowed == &origin)
+}
+
+fn protocol_version_is_supported(req: &HttpRequest) -> bool {
+    let Some(version) = req
+        .headers()
+        .get("MCP-Protocol-Version")
+        .and_then(|value| value.to_str().ok())
+    else {
+        return true;
+    };
+
+    matches!(version, PROTOCOL_VERSION | FALLBACK_PROTOCOL_VERSION)
+}
+
+fn accepts_json_or_event_stream(req: &HttpRequest) -> bool {
+    let Some(accept) = req
+        .headers()
+        .get(header::ACCEPT)
+        .and_then(|value| value.to_str().ok())
+    else {
+        return true;
+    };
+
+    accept
+        .split(',')
+        .map(|item| item.split(';').next().unwrap_or("").trim())
+        .any(|item| {
+            matches!(
+                item,
+                "*/*" | "application/*" | "application/json" | "text/event-stream"
+            )
+        })
 }
 
 #[post("/mcp")]
@@ -541,6 +650,16 @@ pub async fn handle_mcp(
     db: web::Data<Database>,
     body: web::Bytes,
 ) -> HttpResponse {
+    if !origin_is_allowed(&req) {
+        return HttpResponse::Forbidden().json(rpc_error(None, -32001, "Forbidden"));
+    }
+    if !protocol_version_is_supported(&req) {
+        return HttpResponse::BadRequest().json(rpc_error(None, -32600, "Invalid Request"));
+    }
+    if !accepts_json_or_event_stream(&req) {
+        return HttpResponse::NotAcceptable().json(rpc_error(None, -32600, "Invalid Request"));
+    }
+
     let payload: Value = match serde_json::from_slice(&body) {
         Ok(payload) => payload,
         Err(_) => {
@@ -582,6 +701,23 @@ async fn handle_mcp_message(
     db: &Database,
     payload: Value,
 ) -> Option<Value> {
+    let explicit_null_id = payload
+        .as_object()
+        .and_then(|map| map.get("id"))
+        .is_some_and(Value::is_null);
+    if explicit_null_id {
+        return Some(rpc_error(Some(Value::Null), -32600, "Invalid Request"));
+    }
+
+    if let Ok(response) = serde_json::from_value::<RpcResponse>(payload.clone()) {
+        if response.jsonrpc == "2.0"
+            && response.id.is_some()
+            && (response.result.is_some() || response.error.is_some())
+        {
+            return None;
+        }
+    }
+
     let rpc: RpcRequest = match serde_json::from_value(payload) {
         Ok(rpc) => rpc,
         Err(_) => return Some(rpc_error(None, -32600, "Invalid Request")),
@@ -591,8 +727,9 @@ async fn handle_mcp_message(
         return Some(rpc_error(rpc.id, -32600, "Invalid Request"));
     }
 
-    let is_notification = rpc.id.is_none() && is_notification_method(&rpc.method);
-    if !is_notification {
+    if rpc.id.is_none() {
+        return None;
+    } else {
         match rpc.id.as_ref() {
             Some(id) if valid_request_id(id) => {}
             _ => return Some(rpc_error(rpc.id, -32600, "Invalid Request")),
@@ -977,5 +1114,19 @@ async fn call_tool(
 }
 
 pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg.service(handle_mcp);
+    cfg.service(handle_mcp).service(handle_mcp_get);
+}
+
+#[get("/mcp")]
+pub async fn handle_mcp_get(req: HttpRequest) -> HttpResponse {
+    if !origin_is_allowed(&req) {
+        return HttpResponse::Forbidden().finish();
+    }
+    if !protocol_version_is_supported(&req) {
+        return HttpResponse::BadRequest().finish();
+    }
+
+    HttpResponse::MethodNotAllowed()
+        .insert_header((header::ALLOW, "POST"))
+        .finish()
 }

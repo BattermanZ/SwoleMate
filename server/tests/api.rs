@@ -2444,10 +2444,31 @@ async fn oauth_metadata_and_client_registration_work() {
     assert_eq!(resp.status(), 200);
     let resource = json_body(resp).await;
     assert!(resource["resource"].as_str().unwrap().ends_with("/mcp"));
+    assert_eq!(
+        resource["scopes_supported"].as_array().unwrap(),
+        &vec![
+            json!("workouts.read"),
+            json!("progress.read"),
+            json!("workouts.write")
+        ]
+    );
 
     let registered = register_oauth_client(&app, "workouts.read progress.read").await;
     assert_eq!(registered["token_endpoint_auth_method"], "none");
     assert_eq!(registered["response_types"][0], "code");
+
+    let req = test::TestRequest::post()
+        .uri("/oauth/register")
+        .set_json(json!({
+            "client_name": "Invalid Scope Client",
+            "redirect_uris": ["https://client.example/callback"],
+            "scope": "workouts.read admin.write"
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+    let body = json_body(resp).await;
+    assert_eq!(body["error"], "invalid_scope");
 }
 
 #[actix_web::test]
@@ -2715,12 +2736,37 @@ async fn mcp_initialize_uses_current_protocol_and_rejects_invalid_request_ids() 
     assert_eq!(body["id"], "init-1");
     assert_eq!(body["result"]["protocolVersion"], "2025-11-25");
 
-    for invalid_payload in [
-        json!({
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {token}"),
+        ))
+        .set_json(json!({
             "jsonrpc": "2.0",
-            "method": "ping",
+            "method": "notifications/unknown",
             "params": {}
-        }),
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), actix_web::http::StatusCode::ACCEPTED);
+
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {token}"),
+        ))
+        .set_json(json!({
+            "jsonrpc": "2.0",
+            "id": 99,
+            "result": {}
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), actix_web::http::StatusCode::ACCEPTED);
+
+    for invalid_payload in [
         json!({
             "jsonrpc": "2.0",
             "id": null,
@@ -2823,13 +2869,94 @@ async fn mcp_accepts_json_rpc_batches_and_skips_notification_responses() {
     assert_eq!(resp.status(), 200);
     let body = json_body(resp).await;
     let responses = body.as_array().unwrap();
-    assert_eq!(responses.len(), 3);
+    assert_eq!(responses.len(), 2);
     assert_eq!(responses[0]["id"], 1);
     assert!(responses[0]["result"].is_object());
     assert_eq!(responses[1]["id"], "tools");
     assert!(responses[1]["result"]["tools"].as_array().unwrap().len() > 1);
-    assert_eq!(responses[2]["error"]["code"], -32600);
-    assert_eq!(responses[2]["error"]["message"], "Invalid Request");
+}
+
+#[actix_web::test]
+async fn mcp_transport_rejects_bad_origin_and_protocol_headers() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "mcp-transport", "passwordpassword").await;
+    let user_cookie = login_cookie_active(&app, "mcp-transport", "passwordpassword").await;
+    let created = create_mcp_personal_token(
+        &app,
+        &user_cookie,
+        "Transport",
+        &["workouts.read"],
+        Some(30),
+    )
+    .await;
+    let token = created["token"].as_str().unwrap();
+
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {token}"),
+        ))
+        .insert_header((actix_web::http::header::ORIGIN, "https://evil.example"))
+        .set_json(json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "ping",
+            "params": {}
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), actix_web::http::StatusCode::FORBIDDEN);
+
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {token}"),
+        ))
+        .insert_header((actix_web::http::header::ORIGIN, "http://localhost:2470"))
+        .insert_header(("MCP-Protocol-Version", "2025-11-25"))
+        .set_json(json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "ping",
+            "params": {}
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 200);
+
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {token}"),
+        ))
+        .insert_header(("MCP-Protocol-Version", "not-a-version"))
+        .set_json(json!({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "ping",
+            "params": {}
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), actix_web::http::StatusCode::BAD_REQUEST);
+
+    let req = test::TestRequest::get()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {token}"),
+        ))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(
+        resp.status(),
+        actix_web::http::StatusCode::METHOD_NOT_ALLOWED
+    );
 }
 
 #[actix_web::test]
@@ -4219,6 +4346,23 @@ async fn invalid_write_mcp_payload_returns_json_rpc_error() {
             "sets": [
                 { "reps": 5, "weight": 20.0, "weight_left": 10.0 }
             ]
+        }),
+    )
+    .await;
+    assert_eq!(body["error"]["code"], -32602);
+    assert_eq!(body["error"]["message"], "Invalid params");
+
+    let too_many_sets = (0..101)
+        .map(|_| json!({ "reps": 5, "weight": 20.0 }))
+        .collect::<Vec<_>>();
+    let body = mcp_call(
+        &app,
+        access_token,
+        2,
+        "replace_sets",
+        json!({
+            "exercise_id": 123,
+            "sets": too_many_sets
         }),
     )
     .await;
