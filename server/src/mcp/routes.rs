@@ -14,7 +14,7 @@ use chrono::Utc;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-const PROTOCOL_VERSION: &str = "2025-11-05";
+const PROTOCOL_VERSION: &str = "2025-11-25";
 
 #[derive(Debug, Deserialize)]
 struct RpcRequest {
@@ -91,23 +91,23 @@ struct StartWorkoutFromTemplateToolArgs {
     request: StartWorkoutFromTemplateRequest,
 }
 
-fn rpc_result(id: Option<Value>, result: Value) -> HttpResponse {
-    HttpResponse::Ok().json(json!({
+fn rpc_result(id: Value, result: Value) -> Value {
+    json!({
         "jsonrpc": "2.0",
-        "id": id.unwrap_or(Value::Null),
+        "id": id,
         "result": result
-    }))
+    })
 }
 
-fn rpc_error(id: Option<Value>, code: i64, message: &str) -> HttpResponse {
-    HttpResponse::Ok().json(json!({
+fn rpc_error(id: Option<Value>, code: i64, message: &str) -> Value {
+    json!({
         "jsonrpc": "2.0",
         "id": id.unwrap_or(Value::Null),
         "error": {
             "code": code,
             "message": message
         }
-    }))
+    })
 }
 
 fn tool_definitions() -> Value {
@@ -522,16 +522,81 @@ fn require_scope(
     }
 }
 
+fn valid_request_id(id: &Value) -> bool {
+    match id {
+        Value::String(_) => true,
+        Value::Number(number) => number.as_i64().is_some() || number.as_u64().is_some(),
+        _ => false,
+    }
+}
+
+fn is_notification_method(method: &str) -> bool {
+    method.starts_with("notifications/")
+}
+
 #[post("/mcp")]
 pub async fn handle_mcp(
     req: HttpRequest,
     principal: McpPrincipal,
     db: web::Data<Database>,
-    body: web::Json<RpcRequest>,
+    body: web::Bytes,
 ) -> HttpResponse {
-    let rpc = body.into_inner();
+    let payload: Value = match serde_json::from_slice(&body) {
+        Ok(payload) => payload,
+        Err(_) => {
+            return HttpResponse::Ok().json(rpc_error(None, -32700, "Parse error"));
+        }
+    };
+
+    match payload {
+        Value::Array(items) => {
+            if items.is_empty() {
+                return HttpResponse::Ok().json(rpc_error(None, -32600, "Invalid Request"));
+            }
+
+            let mut responses = Vec::new();
+            for item in items {
+                if let Some(response) =
+                    handle_mcp_message(&req, &principal, db.get_ref(), item).await
+                {
+                    responses.push(response);
+                }
+            }
+
+            if responses.is_empty() {
+                HttpResponse::Accepted().finish()
+            } else {
+                HttpResponse::Ok().json(responses)
+            }
+        }
+        item => match handle_mcp_message(&req, &principal, db.get_ref(), item).await {
+            Some(response) => HttpResponse::Ok().json(response),
+            None => HttpResponse::Accepted().finish(),
+        },
+    }
+}
+
+async fn handle_mcp_message(
+    req: &HttpRequest,
+    principal: &McpPrincipal,
+    db: &Database,
+    payload: Value,
+) -> Option<Value> {
+    let rpc: RpcRequest = match serde_json::from_value(payload) {
+        Ok(rpc) => rpc,
+        Err(_) => return Some(rpc_error(None, -32600, "Invalid Request")),
+    };
+
     if rpc.jsonrpc != "2.0" {
-        return rpc_error(rpc.id, -32600, "Invalid Request");
+        return Some(rpc_error(rpc.id, -32600, "Invalid Request"));
+    }
+
+    let is_notification = rpc.id.is_none() && is_notification_method(&rpc.method);
+    if !is_notification {
+        match rpc.id.as_ref() {
+            Some(id) if valid_request_id(id) => {}
+            _ => return Some(rpc_error(rpc.id, -32600, "Invalid Request")),
+        }
     }
 
     let now = Utc::now();
@@ -575,12 +640,12 @@ pub async fn handle_mcp(
                 user_agent.as_deref(),
             )
             .await;
-        return rpc_error(rpc.id, -32029, "Too Many Requests");
+        return Some(rpc_error(rpc.id, -32029, "Too Many Requests"));
     }
 
     match rpc.method.as_str() {
-        "initialize" => rpc_result(
-            rpc.id,
+        "initialize" => Some(rpc_result(
+            rpc.id.expect("validated request id"),
             json!({
                 "protocolVersion": PROTOCOL_VERSION,
                 "capabilities": {
@@ -593,11 +658,17 @@ pub async fn handle_mcp(
                     "version": env!("CARGO_PKG_VERSION")
                 }
             }),
-        ),
-        "notifications/initialized" => HttpResponse::Accepted().finish(),
-        "ping" => rpc_result(rpc.id, json!({})),
-        "tools/list" => rpc_result(rpc.id, json!({ "tools": tool_definitions() })),
-        "resources/list" => rpc_result(rpc.id, json!({ "resources": [] })),
+        )),
+        "notifications/initialized" => None,
+        "ping" => Some(rpc_result(rpc.id.expect("validated request id"), json!({}))),
+        "tools/list" => Some(rpc_result(
+            rpc.id.expect("validated request id"),
+            json!({ "tools": tool_definitions() }),
+        )),
+        "resources/list" => Some(rpc_result(
+            rpc.id.expect("validated request id"),
+            json!({ "resources": [] }),
+        )),
         "tools/call" => {
             let name = rpc
                 .params
@@ -620,7 +691,7 @@ pub async fn handle_mcp(
                 .and_then(|value| value.to_str().ok())
                 .map(str::to_string);
 
-            let response = match call_tool(name, &args, &principal, db.get_ref()).await {
+            let response = match call_tool(name, &args, principal, db).await {
                 Ok(result) => {
                     let _ = db
                         .write_mcp_audit_log(
@@ -634,7 +705,7 @@ pub async fn handle_mcp(
                             user_agent.as_deref(),
                         )
                         .await;
-                    rpc_result(rpc.id, result)
+                    rpc_result(rpc.id.expect("validated request id"), result)
                 }
                 Err((code, message, error_code)) => {
                     let _ = db
@@ -652,9 +723,9 @@ pub async fn handle_mcp(
                     rpc_error(rpc.id, code, message)
                 }
             };
-            response
+            Some(response)
         }
-        _ => rpc_error(rpc.id, -32601, "Method not found"),
+        _ => Some(rpc_error(rpc.id, -32601, "Method not found")),
     }
 }
 

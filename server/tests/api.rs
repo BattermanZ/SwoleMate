@@ -2678,6 +2678,161 @@ async fn oauth_token_flow_and_read_only_mcp_tools_work() {
 }
 
 #[actix_web::test]
+async fn mcp_initialize_uses_current_protocol_and_rejects_invalid_request_ids() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "mcp-jsonrpc", "passwordpassword").await;
+    let user_cookie = login_cookie_active(&app, "mcp-jsonrpc", "passwordpassword").await;
+    let created =
+        create_mcp_personal_token(&app, &user_cookie, "JSON-RPC", &["workouts.read"], Some(30))
+            .await;
+    let token = created["token"].as_str().unwrap();
+
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {token}"),
+        ))
+        .set_json(json!({
+            "jsonrpc": "2.0",
+            "id": "init-1",
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+                "clientInfo": {
+                    "name": "test-client",
+                    "version": "1.0.0"
+                }
+            }
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 200);
+    let body = json_body(resp).await;
+    assert_eq!(body["id"], "init-1");
+    assert_eq!(body["result"]["protocolVersion"], "2025-11-25");
+
+    for invalid_payload in [
+        json!({
+            "jsonrpc": "2.0",
+            "method": "ping",
+            "params": {}
+        }),
+        json!({
+            "jsonrpc": "2.0",
+            "id": null,
+            "method": "ping",
+            "params": {}
+        }),
+        json!({
+            "jsonrpc": "2.0",
+            "id": 1.5,
+            "method": "ping",
+            "params": {}
+        }),
+    ] {
+        let req = test::TestRequest::post()
+            .uri("/mcp")
+            .insert_header((
+                actix_web::http::header::AUTHORIZATION,
+                format!("Bearer {token}"),
+            ))
+            .set_json(invalid_payload)
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), 200);
+        let body = json_body(resp).await;
+        assert_eq!(body["error"]["code"], -32600);
+        assert_eq!(body["error"]["message"], "Invalid Request");
+    }
+}
+
+#[actix_web::test]
+async fn mcp_notifications_do_not_emit_json_rpc_responses() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "mcp-notify", "passwordpassword").await;
+    let user_cookie = login_cookie_active(&app, "mcp-notify", "passwordpassword").await;
+    let created =
+        create_mcp_personal_token(&app, &user_cookie, "Notify", &["workouts.read"], Some(30)).await;
+    let token = created["token"].as_str().unwrap();
+
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {token}"),
+        ))
+        .set_json(json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized",
+            "params": {}
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), actix_web::http::StatusCode::ACCEPTED);
+}
+
+#[actix_web::test]
+async fn mcp_accepts_json_rpc_batches_and_skips_notification_responses() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "mcp-batch", "passwordpassword").await;
+    let user_cookie = login_cookie_active(&app, "mcp-batch", "passwordpassword").await;
+    let created =
+        create_mcp_personal_token(&app, &user_cookie, "Batch", &["workouts.read"], Some(30)).await;
+    let token = created["token"].as_str().unwrap();
+
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {token}"),
+        ))
+        .set_json(json!([
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "ping",
+                "params": {}
+            },
+            {
+                "jsonrpc": "2.0",
+                "method": "notifications/initialized",
+                "params": {}
+            },
+            {
+                "jsonrpc": "2.0",
+                "id": "tools",
+                "method": "tools/list",
+                "params": {}
+            },
+            {
+                "jsonrpc": "2.0",
+                "method": "resources/list",
+                "params": {}
+            }
+        ]))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 200);
+    let body = json_body(resp).await;
+    let responses = body.as_array().unwrap();
+    assert_eq!(responses.len(), 3);
+    assert_eq!(responses[0]["id"], 1);
+    assert!(responses[0]["result"].is_object());
+    assert_eq!(responses[1]["id"], "tools");
+    assert!(responses[1]["result"]["tools"].as_array().unwrap().len() > 1);
+    assert_eq!(responses[2]["error"]["code"], -32600);
+    assert_eq!(responses[2]["error"]["message"], "Invalid Request");
+}
+
+#[actix_web::test]
 async fn oauth_registration_is_disabled_by_default() {
     let _env = TestEnv::new();
     let (_db, _admin_cookie, app) = setup_test_app().await;
