@@ -124,13 +124,16 @@ describe('api client behavior', () => {
 		const fetcher = vi.fn(async (input: URL | RequestInfo, init?: RequestInit) => {
 			seen.push({ url: String(input), init });
 			if (seen.length === 1) {
-				return jsonResponse({
-					id: 4,
-					token: 'smcp_test',
-					name: 'Claude Desktop',
-					scopes: ['workouts.read', 'progress.read'],
-					expires_at: '2026-02-01T00:00:00.000Z'
-				}, 201);
+				return jsonResponse(
+					{
+						id: 4,
+						token: 'smcp_test',
+						name: 'Claude Desktop',
+						scopes: ['workouts.read', 'progress.read'],
+						expires_at: '2026-02-01T00:00:00.000Z'
+					},
+					201
+				);
 			}
 			if (seen.length === 2) {
 				return jsonResponse([

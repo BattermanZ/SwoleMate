@@ -8,6 +8,7 @@ mod exercises;
 pub mod mcp_tokens;
 pub mod oauth;
 mod progress;
+mod templates;
 mod workouts;
 
 #[derive(Clone)]

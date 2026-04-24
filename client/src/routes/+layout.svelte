@@ -15,6 +15,7 @@
 	// Navigation items
 	const navItems = [
 		{ href: '/', label: 'Today', icon: '💪' },
+		{ href: '/templates', label: 'Templates', icon: '🗂️' },
 		{ href: '/workouts', label: 'History', icon: '📅' },
 		{ href: '/progress', label: 'Progress', icon: '📈' },
 		{ href: '/settings', label: 'Settings', icon: '⚙️' },

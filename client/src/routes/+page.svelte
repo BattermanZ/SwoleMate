@@ -1,10 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { getWorkoutTemplates } from '$lib/api';
 	import ExerciseComposer from '$lib/components/today/ExerciseComposer.svelte';
+	import { readDemoModePreference } from '$lib/preferences/demoMode';
 	import EndSessionModal from '$lib/components/today/EndSessionModal.svelte';
 	import RecentSessions from '$lib/components/today/RecentSessions.svelte';
 	import SessionExercise from '$lib/components/today/SessionExercise.svelte';
 	import { createTodayController } from '$lib/today/controller';
+	import type { WorkoutTemplate } from '$lib/types';
 	import { formatDateRelative, formatTime } from '$lib/utils/date';
 
 	const controller = createTodayController();
@@ -36,6 +39,7 @@
 		sessionNotes,
 		start,
 		startSession,
+		startSessionFromTemplate,
 		submitEndSession,
 		syncPendingSessions,
 		suggestions,
@@ -48,7 +52,35 @@
 		updateExerciseSetting
 	} = controller;
 
-	onMount(start);
+	let showDemoAction = false;
+	let templatePickerOpen = false;
+	let templateLoading = false;
+	let templateError: string | null = null;
+	let templates: WorkoutTemplate[] = [];
+
+	onMount(() => {
+		showDemoAction = readDemoModePreference();
+		return start();
+	});
+
+	async function openTemplatePicker() {
+		templatePickerOpen = true;
+		templateError = null;
+		templateLoading = true;
+
+		try {
+			templates = await getWorkoutTemplates();
+		} catch (error) {
+			templateError = error instanceof Error ? error.message : 'Failed to load templates';
+		} finally {
+			templateLoading = false;
+		}
+	}
+
+	async function handleStartFromTemplate(templateId: number) {
+		await startSessionFromTemplate(templateId);
+		if (!$error) templatePickerOpen = false;
+	}
 </script>
 
 <div class="space-y-6">
@@ -138,11 +170,21 @@
 						<button
 							type="button"
 							class="btn variant-soft w-full sm:w-auto"
-							on:click={() => startSession('demo')}
-							disabled={$loading}
+							on:click={openTemplatePicker}
+							disabled={$loading || $offlineMode}
 						>
-							Load demo
+							Use template
 						</button>
+						{#if showDemoAction}
+							<button
+								type="button"
+								class="btn variant-soft w-full sm:w-auto"
+								on:click={() => startSession('demo')}
+								disabled={$loading}
+							>
+								Load demo
+							</button>
+						{/if}
 					</div>
 				{/if}
 			</div>
@@ -169,6 +211,53 @@
 			</div>
 		{/if}
 	</header>
+
+	{#if templatePickerOpen && !$currentSession}
+		<section class="card variant-glass-surface p-4 space-y-3">
+			<div class="flex items-start justify-between gap-3">
+				<div>
+					<h2 class="text-lg font-semibold">Start from template</h2>
+					<p class="text-sm opacity-75">
+						Templates preload your exercise plan without carrying over reps or weight.
+					</p>
+				</div>
+				<button
+					type="button"
+					class="btn btn-sm variant-soft"
+					on:click={() => (templatePickerOpen = false)}
+					disabled={$loading}
+				>
+					Close
+				</button>
+			</div>
+
+			{#if templateError}
+				<div class="alert variant-filled-error">{templateError}</div>
+			{:else if templateLoading}
+				<div class="text-sm opacity-70">Loading templates…</div>
+			{:else if templates.length === 0}
+				<div class="card variant-ghost p-4 text-sm opacity-80">
+					No templates yet. Create one from the Templates page or save a past workout as a template.
+				</div>
+			{:else}
+				<div class="grid gap-3 sm:grid-cols-2">
+					{#each templates as template (template.id)}
+						<button
+							type="button"
+							class="text-left rounded-2xl border border-surface-200/50 bg-surface-50/70 p-4 transition hover:border-primary-500/50 hover:bg-surface-100/70 dark:border-surface-700/50 dark:bg-surface-950/30"
+							on:click={() => handleStartFromTemplate(template.id)}
+							disabled={$loading}
+						>
+							<div class="font-semibold">{template.name}</div>
+							<div class="text-sm opacity-70">
+								{template.exercise_count} exercise{template.exercise_count === 1 ? '' : 's'}
+							</div>
+						</button>
+					{/each}
+				</div>
+			{/if}
+		</section>
+	{/if}
 
 	<div class="grid gap-6 md:grid-cols-12">
 		<section class="md:col-span-7 lg:col-span-8 space-y-4 min-w-0">
@@ -197,7 +286,7 @@
 						{#each $currentSession.exercises as ex (ex.id)}
 							<SessionExercise
 								exercise={ex}
-								isOpen={$openExerciseId === ex.id}
+								isOpen={ex.status !== 'done' || $openExerciseId === ex.id}
 								disabled={$loading}
 								lastTime={getLastTimeForExercise(ex.name)}
 								on:toggle={() => toggleExercise(ex.id)}

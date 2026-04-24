@@ -50,6 +50,59 @@ vi.mock('$lib/auth', () => ({
 
 const apiMocks = vi.hoisted(() => ({
 	getWorkouts: vi.fn(async () => []),
+	getWorkoutTemplates: vi.fn(async () => []),
+	getWorkoutTemplate: vi.fn(async (id: number) => ({
+		template: {
+			id,
+			name: 'Push A',
+			exercise_count: 1,
+			created_at: '2026-01-01T00:00:00.000Z',
+			updated_at: '2026-01-01T00:00:00.000Z'
+		},
+		exercises: []
+	})),
+	createWorkoutTemplate: vi.fn(async () => ({
+		template: {
+			id: 91,
+			name: 'New Template',
+			exercise_count: 0,
+			created_at: '2026-01-01T00:00:00.000Z',
+			updated_at: '2026-01-01T00:00:00.000Z'
+		},
+		exercises: []
+	})),
+	updateWorkoutTemplate: vi.fn(async () => ({
+		template: {
+			id: 91,
+			name: 'New Template',
+			exercise_count: 0,
+			created_at: '2026-01-01T00:00:00.000Z',
+			updated_at: '2026-01-01T00:00:00.000Z'
+		},
+		exercises: []
+	})),
+	deleteWorkoutTemplate: vi.fn(async () => undefined),
+	duplicateWorkoutTemplate: vi.fn(async () => ({
+		template: {
+			id: 92,
+			name: 'Copy',
+			exercise_count: 0,
+			created_at: '2026-01-01T00:00:00.000Z',
+			updated_at: '2026-01-01T00:00:00.000Z'
+		},
+		exercises: []
+	})),
+	createWorkoutTemplateFromWorkout: vi.fn(async () => ({
+		template: {
+			id: 93,
+			name: 'Saved Template',
+			exercise_count: 1,
+			created_at: '2026-01-01T00:00:00.000Z',
+			updated_at: '2026-01-01T00:00:00.000Z'
+		},
+		exercises: []
+	})),
+	startWorkoutFromTemplate: vi.fn(async () => ({ id: 55 })),
 	getWorkout: vi.fn(async (id: number) => ({
 		workout: {
 			id,
@@ -162,6 +215,93 @@ describe('route behaviors', () => {
 		expect(apiMocks.cancelWorkout).toHaveBeenCalledWith(10);
 	}, 10_000);
 
+	it('workout detail page can save a workout as a template', async () => {
+		const { default: WorkoutDetailPage } = await import('../routes/workouts/[id]/+page.svelte');
+		const view = render(
+			WorkoutDetailPage as never,
+			{
+				props: {
+					data: {
+						error: null,
+						workout: {
+							id: 44,
+							date: '2026-01-01T10:00:00.000Z',
+							start_time: '2026-01-01T10:00:00.000Z',
+							end_time: '2026-01-01T11:00:00.000Z',
+							notes: '',
+							feedback: null,
+							exercises: [
+								{
+									exercise: {
+										id: 3,
+										workout_id: 44,
+										exercise_type: 'Bench Press',
+										start_time: '2026-01-01T10:00:00.000Z',
+										end_time: '2026-01-01T10:15:00.000Z',
+										notes: '',
+										per_side_weight: false,
+										split_weight: false,
+										settings: []
+									},
+									sets: []
+								}
+							]
+						}
+					}
+				}
+			} as never
+		);
+
+		await fireEvent.click(view.getByRole('button', { name: 'Save as template' }));
+
+		expect(apiMocks.createWorkoutTemplateFromWorkout).toHaveBeenCalledWith(44, {
+			name: 'user-a'
+		});
+	});
+
+	it('templates page can retry loading the same template after an error', async () => {
+		apiMocks.getWorkoutTemplate
+			.mockRejectedValueOnce(new Error('load failed'))
+			.mockResolvedValueOnce({
+				template: {
+					id: 12,
+					name: 'Recovered Template',
+					exercise_count: 1,
+					created_at: '2026-01-01T00:00:00.000Z',
+					updated_at: '2026-01-01T00:00:00.000Z'
+				},
+				exercises: []
+			});
+
+		const { default: TemplatesPage } = await import('../routes/templates/+page.svelte');
+		const view = render(
+			TemplatesPage as never,
+			{
+				props: {
+					data: {
+						templates: [
+							{
+								id: 12,
+								name: 'Push A',
+								exercise_count: 1,
+								created_at: '2026-01-01T00:00:00.000Z',
+								updated_at: '2026-01-01T00:00:00.000Z'
+							}
+						]
+					}
+				}
+			} as never
+		);
+
+		expect(await view.findByText('load failed')).toBeInTheDocument();
+		await fireEvent.click(view.getByRole('button', { name: /Push A/i }));
+
+		await waitFor(() => {
+			expect(apiMocks.getWorkoutTemplate).toHaveBeenCalledTimes(2);
+		});
+		expect(view.getByDisplayValue('Recovered Template')).toBeInTheDocument();
+	});
+
 	it('backups page blocks admin actions for non-admin and surfaces export error', async () => {
 		authStateStore.set({
 			status: 'authenticated',
@@ -225,6 +365,7 @@ describe('route behaviors', () => {
 	});
 
 	it('settings validates password mismatch, rotates MCP tokens, and login shows auth errors', async () => {
+		localStorage.setItem('settings.showDemoMode', 'true');
 		apiMocks.getMcpTokens
 			.mockResolvedValueOnce([
 				{
@@ -273,6 +414,10 @@ describe('route behaviors', () => {
 		const { default: SettingsPage } = await import('../routes/settings/+page.svelte');
 		const view = render(SettingsPage as never);
 		await waitFor(() => expect(apiMocks.getMcpTokens).toHaveBeenCalledTimes(1));
+		const demoModeToggle = view.getByLabelText('Show demo session tools') as HTMLInputElement;
+		expect(demoModeToggle.checked).toBe(true);
+		await fireEvent.click(demoModeToggle);
+		expect(localStorage.getItem('settings.showDemoMode')).toBe('false');
 
 		await fireEvent.click(view.getByText('Create MCP token'));
 		expect(await view.findByText('Token name is required.')).toBeInTheDocument();

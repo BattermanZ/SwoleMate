@@ -1,8 +1,6 @@
 <script lang="ts">
 	function resetUiPreferences() {
-		if (
-			!confirm('Reset local UI preferences? (Theme, progress selection, and legacy settings)')
-		) {
+		if (!confirm('Reset local UI preferences? (Theme, progress selection, and legacy settings)')) {
 			return;
 		}
 

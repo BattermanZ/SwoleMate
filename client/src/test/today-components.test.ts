@@ -2,6 +2,7 @@ import { fireEvent, render } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 import ExerciseComposer from '$lib/components/today/ExerciseComposer.svelte';
 import EndSessionModal from '$lib/components/today/EndSessionModal.svelte';
+import SessionExercise from '$lib/components/today/SessionExercise.svelte';
 
 describe('today components', () => {
 	it('adds from enter, suggestion, and quick pick in exercise composer', async () => {
@@ -50,5 +51,29 @@ describe('today components', () => {
 		expect(submit.disabled).toBe(false);
 		await fireEvent.click(submit);
 		expect(onSubmit).toHaveBeenCalledTimes(1);
+	});
+
+	it('defaults reps to 12 for a new exercise with no history', () => {
+		const { getByLabelText } = render(SessionExercise, {
+			props: {
+				exercise: {
+					id: 1,
+					name: 'Bench Press',
+					notes: '',
+					startedAt: '2026-01-01T10:00:00.000Z',
+					endedAt: '2026-01-01T10:00:00.000Z',
+					sets: [],
+					settings: [],
+					perSideWeight: false,
+					splitWeight: false,
+					status: 'active'
+				},
+				isOpen: true,
+				disabled: false,
+				lastTime: undefined
+			}
+		});
+
+		expect(getByLabelText('Reps')).toHaveValue(12);
 	});
 });

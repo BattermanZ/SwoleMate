@@ -8,9 +8,16 @@ import type {
 	CreateExerciseRequest,
 	UpdateExerciseRequest,
 	CreateSetRequest,
+	CreateWorkoutTemplateFromWorkoutRequest,
+	CreateWorkoutTemplateRequest,
 	WorkoutStats,
+	DuplicateWorkoutTemplateRequest,
 	ExerciseProgress,
-	VolumeStats
+	StartWorkoutFromTemplateRequest,
+	UpdateWorkoutTemplateRequest,
+	VolumeStats,
+	WorkoutTemplate,
+	WorkoutTemplateDetail
 } from './types';
 import { config } from './config';
 
@@ -217,6 +224,121 @@ export async function replaceSets(
 
 export async function getWorkouts(fetcher: Fetcher = fetch): Promise<Workout[]> {
 	const response = await fetcher(`${API_BASE}/api/workouts`, withCredentials(undefined));
+	return handleResponse(response);
+}
+
+export async function getWorkoutTemplates(fetcher: Fetcher = fetch): Promise<WorkoutTemplate[]> {
+	const response = await fetcher(`${API_BASE}/api/templates`, withCredentials(undefined));
+	return handleResponse(response);
+}
+
+export async function getWorkoutTemplate(
+	id: number,
+	fetcher: Fetcher = fetch
+): Promise<WorkoutTemplateDetail> {
+	const response = await fetcher(`${API_BASE}/api/templates/${id}`, withCredentials(undefined));
+	return handleResponse(response);
+}
+
+export async function createWorkoutTemplate(
+	template: CreateWorkoutTemplateRequest,
+	fetcher: Fetcher = fetch
+): Promise<WorkoutTemplateDetail> {
+	const response = await fetcher(
+		`${API_BASE}/api/templates`,
+		withCredentials({
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify(template)
+		})
+	);
+	return handleResponse(response);
+}
+
+export async function updateWorkoutTemplate(
+	id: number,
+	template: UpdateWorkoutTemplateRequest,
+	fetcher: Fetcher = fetch
+): Promise<WorkoutTemplateDetail> {
+	const response = await fetcher(
+		`${API_BASE}/api/templates/${id}`,
+		withCredentials({
+			method: 'PUT',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify(template)
+		})
+	);
+	return handleResponse(response);
+}
+
+export async function deleteWorkoutTemplate(id: number, fetcher: Fetcher = fetch): Promise<void> {
+	const response = await fetcher(
+		`${API_BASE}/api/templates/${id}`,
+		withCredentials({
+			method: 'DELETE',
+			headers: {
+				'Content-Type': 'application/json'
+			}
+		})
+	);
+	return handleResponse(response);
+}
+
+export async function duplicateWorkoutTemplate(
+	id: number,
+	payload: DuplicateWorkoutTemplateRequest,
+	fetcher: Fetcher = fetch
+): Promise<WorkoutTemplateDetail> {
+	const response = await fetcher(
+		`${API_BASE}/api/templates/${id}/duplicate`,
+		withCredentials({
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify(payload)
+		})
+	);
+	return handleResponse(response);
+}
+
+export async function createWorkoutTemplateFromWorkout(
+	workoutId: number,
+	payload: CreateWorkoutTemplateFromWorkoutRequest,
+	fetcher: Fetcher = fetch
+): Promise<WorkoutTemplateDetail> {
+	const response = await fetcher(
+		`${API_BASE}/api/workouts/${workoutId}/template`,
+		withCredentials({
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify(payload)
+		})
+	);
+	return handleResponse(response);
+}
+
+export async function startWorkoutFromTemplate(
+	id: number,
+	payload: StartWorkoutFromTemplateRequest,
+	fetcher: Fetcher = fetch
+): Promise<{ id: number }> {
+	const response = await fetcher(
+		`${API_BASE}/api/templates/${id}/start`,
+		withCredentials({
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify(payload)
+		})
+	);
 	return handleResponse(response);
 }
 

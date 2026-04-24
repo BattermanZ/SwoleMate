@@ -1,6 +1,7 @@
 import { fireEvent, render } from '@testing-library/svelte';
+import type { UiSession } from '$lib/today/types';
 import { readable, writable } from 'svelte/store';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('$app/stores', () => ({
 	page: readable({
@@ -17,6 +18,14 @@ const authStateStore = writable({
 	user: { id: 1, username: 'admin', role: 'admin' as const, must_change_password: false },
 	offline: false
 });
+
+const todayControllerMocks = vi.hoisted(() => ({
+	startSession: vi.fn(async () => undefined),
+	startSessionFromTemplate: vi.fn(async () => undefined)
+}));
+
+const todayCurrentSessionStore = writable<UiSession | null>(null);
+const todayOpenExerciseIdStore = writable<number | null>(null);
 
 vi.mock('$lib/auth', () => ({
 	auth: {
@@ -70,6 +79,15 @@ vi.mock('$lib/api', () => {
 		authLogout: vi.fn(async () => undefined),
 		authChangePassword: vi.fn(async () => undefined),
 		getWorkouts: vi.fn(async () => []),
+		getWorkoutTemplates: vi.fn(async () => [
+			{
+				id: 5,
+				name: 'Push A',
+				exercise_count: 3,
+				created_at: '2026-01-01T00:00:00.000Z',
+				updated_at: '2026-01-02T00:00:00.000Z'
+			}
+		]),
 		getWorkout: vi.fn(async (id: number) => ({
 			workout: {
 				id,
@@ -120,14 +138,13 @@ vi.mock('$lib/api', () => {
 });
 
 vi.mock('$lib/today/controller', () => {
-	const currentSession = writable(null);
 	return {
 		createTodayController: () => ({
 			addExercise: vi.fn(async () => undefined),
 			addExerciseSetting: vi.fn(),
 			addSet: vi.fn(async () => undefined),
 			cancelSession: vi.fn(async () => undefined),
-			currentSession,
+			currentSession: todayCurrentSessionStore,
 			elapsedLabel: writable('0m'),
 			endModalOpen: writable(false),
 			endMood: writable(null),
@@ -140,7 +157,7 @@ vi.mock('$lib/today/controller', () => {
 			offlineMode: writable(false),
 			markExerciseDone: vi.fn(async () => undefined),
 			openEndModal: vi.fn(),
-			openExerciseId: writable<number | null>(null),
+			openExerciseId: todayOpenExerciseIdStore,
 			pendingSyncCount: writable(0),
 			quickPicks: writable<string[]>([]),
 			recentSessions: writable([]),
@@ -148,7 +165,8 @@ vi.mock('$lib/today/controller', () => {
 			removeExerciseSetting: vi.fn(),
 			sessionNotes: writable(''),
 			start: vi.fn(() => () => undefined),
-			startSession: vi.fn(async () => undefined),
+			startSession: todayControllerMocks.startSession,
+			startSessionFromTemplate: todayControllerMocks.startSessionFromTemplate,
 			submitEndSession: vi.fn(async () => undefined),
 			syncPendingSessions: vi.fn(async () => undefined),
 			suggestions: writable<string[]>([]),
@@ -168,6 +186,13 @@ async function importComponent(path: string) {
 	return mod.default;
 }
 
+beforeEach(() => {
+	localStorage.clear();
+	vi.clearAllMocks();
+	todayCurrentSessionStore.set(null);
+	todayOpenExerciseIdStore.set(null);
+});
+
 describe('route smoke', () => {
 	it('renders +layout without throwing', async () => {
 		const Layout = await importComponent('../routes/+layout.svelte');
@@ -177,8 +202,72 @@ describe('route smoke', () => {
 
 	it('renders today page', async () => {
 		const TodayPage = await importComponent('../routes/+page.svelte');
-		const { getByRole } = render(TodayPage as never);
+		const { getByRole, queryByRole } = render(TodayPage as never);
 		expect(getByRole('heading', { name: 'Today' })).toBeInTheDocument();
+		expect(queryByRole('button', { name: 'Load demo' })).not.toBeInTheDocument();
+	});
+
+	it('shows and starts demo mode when enabled in settings', async () => {
+		localStorage.setItem('settings.showDemoMode', 'true');
+		const TodayPage = await importComponent('../routes/+page.svelte');
+		const { getByRole } = render(TodayPage as never);
+
+		await fireEvent.click(getByRole('button', { name: 'Load demo' }));
+
+		expect(todayControllerMocks.startSession).toHaveBeenCalledWith('demo');
+	});
+
+	it('opens template picker and starts from a template', async () => {
+		const TodayPage = await importComponent('../routes/+page.svelte');
+		const { getByRole, findByRole } = render(TodayPage as never);
+
+		await fireEvent.click(getByRole('button', { name: 'Use template' }));
+		await fireEvent.click(await findByRole('button', { name: /Push A/i }));
+
+		expect(todayControllerMocks.startSessionFromTemplate).toHaveBeenCalledWith(5);
+	});
+
+	it('keeps active exercises open while leaving done exercises collapsed', async () => {
+		todayCurrentSessionStore.set({
+			id: 12,
+			startedAt: '2026-01-01T10:00:00.000Z',
+			notes: '',
+			exercises: [
+				{
+					id: 101,
+					name: 'Bench Press',
+					notes: '',
+					startedAt: '2026-01-01T10:00:00.000Z',
+					endedAt: '2026-01-01T10:05:00.000Z',
+					sets: [],
+					settings: [],
+					perSideWeight: false,
+					splitWeight: false,
+					status: 'active' as const
+				},
+				{
+					id: 202,
+					name: 'Cable Row',
+					notes: '',
+					startedAt: '2026-01-01T10:06:00.000Z',
+					endedAt: '2026-01-01T10:15:00.000Z',
+					sets: [],
+					settings: [],
+					perSideWeight: false,
+					splitWeight: false,
+					status: 'done' as const
+				}
+			]
+		});
+
+		const TodayPage = await importComponent('../routes/+page.svelte');
+		const { getByText, queryAllByText } = render(TodayPage as never);
+
+		expect(getByText('Bench Press')).toBeInTheDocument();
+		expect(getByText('Cable Row')).toBeInTheDocument();
+		expect(queryAllByText('Add your first set for this exercise.')).toHaveLength(1);
+		expect(queryAllByText('Mark done')).toHaveLength(1);
+		expect(queryAllByText('Collapse')).toHaveLength(1);
 	});
 
 	it('renders workouts page with basic data', async () => {

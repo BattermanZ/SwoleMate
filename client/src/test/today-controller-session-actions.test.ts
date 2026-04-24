@@ -7,14 +7,16 @@ const apiMocks = vi.hoisted(() => ({
 	createWorkout: vi.fn(),
 	cancelWorkout: vi.fn(),
 	endExercise: vi.fn(),
-	endWorkout: vi.fn()
+	endWorkout: vi.fn(),
+	startWorkoutFromTemplate: vi.fn()
 }));
 
 vi.mock('$lib/api', () => ({
 	createWorkout: apiMocks.createWorkout,
 	cancelWorkout: apiMocks.cancelWorkout,
 	endExercise: apiMocks.endExercise,
-	endWorkout: apiMocks.endWorkout
+	endWorkout: apiMocks.endWorkout,
+	startWorkoutFromTemplate: apiMocks.startWorkoutFromTemplate
 }));
 
 const demoMocks = vi.hoisted(() => ({
@@ -222,5 +224,30 @@ describe('today controller session actions', () => {
 		expect(offlineActionMocks.setOffline).not.toHaveBeenCalled();
 		expect(get(state.error)).toBe('server rejected payload');
 		expect(refreshFromBackend).toHaveBeenCalledTimes(1);
+	});
+
+	it('starts a session from a template without offline fallback', async () => {
+		apiMocks.startWorkoutFromTemplate.mockResolvedValueOnce({ id: 77 });
+
+		const state = createTodayState();
+		const refreshFromBackend = vi.fn(async () => undefined);
+		const actions = createSessionActions({
+			state,
+			addExercise: vi.fn(async () => undefined),
+			refreshFromBackend
+		});
+
+		await actions.startSessionFromTemplate(12);
+
+		expect(apiMocks.startWorkoutFromTemplate).toHaveBeenCalledWith(
+			12,
+			expect.objectContaining({
+				start_time: expect.any(String),
+				date: expect.any(String)
+			})
+		);
+		expect(get(state.currentSession)?.id).toBe(77);
+		expect(refreshFromBackend).toHaveBeenCalledTimes(1);
+		expect(offlineActionMocks.setOffline).not.toHaveBeenCalled();
 	});
 });

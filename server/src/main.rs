@@ -329,7 +329,6 @@ async fn main() -> std::io::Result<()> {
     // Get frontend URL from environment
     let frontend_url =
         env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:2470".to_string());
-    info!("Allowing CORS for frontend URL: {}", frontend_url);
 
     let cors_allowed_origins = env::var("CORS_ALLOWED_ORIGINS")
         .ok()
@@ -340,6 +339,15 @@ async fn main() -> std::io::Result<()> {
                 .collect::<Vec<_>>()
         })
         .filter(|v| !v.is_empty());
+
+    if let Some(origins) = cors_allowed_origins.as_ref() {
+        info!(
+            "Allowing CORS origins from CORS_ALLOWED_ORIGINS: {}",
+            origins.join(", ")
+        );
+    } else {
+        info!("Allowing CORS origin from FRONTEND_URL: {}", frontend_url);
+    }
 
     let json_body_limit = env::var("JSON_BODY_LIMIT_BYTES")
         .ok()
@@ -378,6 +386,7 @@ async fn main() -> std::io::Result<()> {
                 actix_web::http::header::AUTHORIZATION,
                 actix_web::http::header::ACCEPT,
                 actix_web::http::header::CONTENT_TYPE,
+                actix_web::http::header::HeaderName::from_static("mcp-protocol-version"),
             ])
             .max_age(3600);
 

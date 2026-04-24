@@ -8,6 +8,7 @@
 		type McpTokenSummary
 	} from '$lib/api';
 	import { auth } from '$lib/auth';
+	import { readDemoModePreference, writeDemoModePreference } from '$lib/preferences/demoMode';
 
 	const authState = auth.state;
 	let currentPassword = '';
@@ -27,14 +28,18 @@
 	let newTokenName = '';
 	let newTokenAccess: 'read' | 'write' = 'read';
 	let newTokenExpiryDays = 30;
-	let createdToken:
-		| {
-				name: string;
-				token: string;
-				scopes: string[];
-				expires_at: string | null;
-		  }
-		| null = null;
+	let createdToken: {
+		name: string;
+		token: string;
+		scopes: string[];
+		expires_at: string | null;
+	} | null = null;
+	let demoModeEnabled = false;
+
+	function handleDemoModeToggle(enabled: boolean) {
+		demoModeEnabled = enabled;
+		writeDemoModePreference(enabled);
+	}
 
 	function mcpScopesForAccess(access: 'read' | 'write'): string[] {
 		if (access === 'write') {
@@ -93,7 +98,11 @@
 			mcpError = 'Token name is required.';
 			return;
 		}
-		if (!Number.isFinite(newTokenExpiryDays) || newTokenExpiryDays < 1 || newTokenExpiryDays > 365) {
+		if (
+			!Number.isFinite(newTokenExpiryDays) ||
+			newTokenExpiryDays < 1 ||
+			newTokenExpiryDays > 365
+		) {
 			mcpError = 'Expiry must be between 1 and 365 days.';
 			return;
 		}
@@ -161,7 +170,9 @@
 			mcpError = 'Offline mode: rotate MCP access tokens when online.';
 			return;
 		}
-		if (!confirm(`Rotate MCP token "${token.name}"? The old token will stop working immediately.`)) {
+		if (
+			!confirm(`Rotate MCP token "${token.name}"? The old token will stop working immediately.`)
+		) {
 			return;
 		}
 
@@ -213,6 +224,7 @@
 	}
 
 	onMount(() => {
+		demoModeEnabled = readDemoModePreference();
 		void loadMcpTokens();
 	});
 
@@ -249,8 +261,8 @@
 				<div>
 					<h2 class="text-lg font-semibold tracking-tight">AI access</h2>
 					<p class="text-sm opacity-70">
-						Create scoped MCP tokens for AI tools. Tokens are shown once, scoped, and can be
-						rotated or revoked from here.
+						Create scoped MCP tokens for AI tools. Tokens are shown once, scoped, and can be rotated
+						or revoked from here.
 					</p>
 				</div>
 
@@ -292,8 +304,8 @@
 					</div>
 
 					<div class="text-xs opacity-70">
-						Use <code>Authorization: Bearer smcp_...</code> with your MCP client. Default to read-only unless the
-						tool needs write access.
+						Use <code>Authorization: Bearer smcp_...</code> with your MCP client. Default to read-only
+						unless the tool needs write access.
 					</div>
 					{#if newTokenAccess === 'write'}
 						<div
@@ -339,13 +351,17 @@
 						<div class="flex items-start justify-between gap-3">
 							<div>
 								<div class="font-semibold">Copy this token now</div>
-								<div class="text-sm opacity-80">It will not be shown again after you leave this page.</div>
+								<div class="text-sm opacity-80">
+									It will not be shown again after you leave this page.
+								</div>
 							</div>
 							<button type="button" class="btn variant-soft-primary" on:click={copyCreatedToken}>
 								Copy token
 							</button>
 						</div>
-						<code class="block overflow-x-auto rounded-lg bg-surface-950/90 p-3 text-xs text-surface-50">
+						<code
+							class="block overflow-x-auto rounded-lg bg-surface-950/90 p-3 text-xs text-surface-50"
+						>
 							{createdToken.token}
 						</code>
 						<div class="flex flex-wrap gap-2">
@@ -353,7 +369,9 @@
 								<span class="badge variant-soft-primary">{scope}</span>
 							{/each}
 						</div>
-						<div class="text-xs opacity-75">{createdToken.name} · expires {formatDateTime(createdToken.expires_at)}</div>
+						<div class="text-xs opacity-75">
+							{createdToken.name} · expires {formatDateTime(createdToken.expires_at)}
+						</div>
 					</div>
 				{/if}
 			</div>
@@ -450,6 +468,33 @@
 						</button>
 					</div>
 				</form>
+			</div>
+
+			<div class="card variant-glass-surface p-4 space-y-3">
+				<div>
+					<h2 class="text-lg font-semibold tracking-tight">Workout tools</h2>
+					<p class="text-sm opacity-70">
+						Keep demo session tools hidden unless you want quick access for testing or walkthroughs.
+					</p>
+				</div>
+
+				<label
+					class="flex items-start justify-between gap-3 rounded-xl border border-surface-200/50 bg-surface-50/60 p-3 dark:border-surface-700/50 dark:bg-surface-950/30"
+				>
+					<div class="space-y-1">
+						<div class="font-semibold">Show demo session tools</div>
+						<p class="text-sm opacity-70">
+							Add the demo session action back to the Today page header.
+						</p>
+					</div>
+					<input
+						type="checkbox"
+						class="toggle"
+						aria-label="Show demo session tools"
+						checked={demoModeEnabled}
+						on:change={(e) => handleDemoModeToggle(e.currentTarget.checked)}
+					/>
+				</label>
 			</div>
 		</section>
 

@@ -884,6 +884,9 @@ async fn user_foreign_keys_cascade_on_delete() {
         "exercises",
         "sets",
         "exercise_settings",
+        "workout_templates",
+        "workout_template_exercises",
+        "workout_template_exercise_settings",
     ] {
         let rows = sqlx::query(&format!("PRAGMA foreign_key_list('{table}')"))
             .fetch_all(&pool)
@@ -905,6 +908,221 @@ async fn user_foreign_keys_cascade_on_delete() {
         }
         assert!(found, "{table} should have a user_id foreign key");
     }
+}
+
+#[actix_web::test]
+async fn can_create_template_from_workout_and_start_without_sets() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    let _user_id =
+        create_user_as_admin(&app, &admin_cookie, "template-user", "passwordpassword").await;
+    let cookie = login_cookie_active(&app, "template-user", "passwordpassword").await;
+
+    let now = chrono::Utc::now();
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri("/api/workouts")
+        .set_json(json!({ "date": now, "start_time": now, "notes": "source workout" }))
+        .to_request();
+    let workout_id = json_body(test::call_service(&app, req).await).await["id"]
+        .as_i64()
+        .unwrap();
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}/exercises"))
+        .set_json(json!({
+            "exercise_type": "Bench Press",
+            "start_time": now,
+            "notes": "Touch lower chest",
+            "per_side_weight": true,
+            "split_weight": true,
+            "settings": [{ "key": "Bench", "value": "Flat" }]
+        }))
+        .to_request();
+    let exercise_id = json_body(test::call_service(&app, req).await).await["id"]
+        .as_i64()
+        .unwrap();
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/exercises/{exercise_id}/sets"))
+        .set_json(json!({ "reps": 8, "weight": 0, "weight_left": 20, "weight_right": 22.5 }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 201);
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}/template"))
+        .set_json(json!({ "name": "Push A" }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 201);
+    let template = json_body(resp).await;
+
+    let template_id = template["template"]["id"].as_i64().unwrap();
+    assert_eq!(template["template"]["name"], "Push A");
+    assert_eq!(template["exercises"].as_array().unwrap().len(), 1);
+    assert_eq!(template["exercises"][0]["exercise_type"], "Bench Press");
+    assert_eq!(template["exercises"][0]["notes"], "Touch lower chest");
+    assert_eq!(template["exercises"][0]["per_side_weight"], true);
+    assert_eq!(template["exercises"][0]["split_weight"], true);
+    assert_eq!(template["exercises"][0]["settings"][0]["key"], "Bench");
+    assert_eq!(template["exercises"][0]["settings"][0]["value"], "Flat");
+
+    let later = now + chrono::Duration::minutes(5);
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/templates/{template_id}/start"))
+        .set_json(json!({
+            "date": later,
+            "start_time": later,
+            "timezone_offset_minutes": -60
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 201);
+    let started_workout_id = json_body(resp).await["id"].as_i64().unwrap();
+
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri(&format!("/api/workouts/{started_workout_id}"))
+        .to_request();
+    let started = json_body(test::call_service(&app, req).await).await;
+
+    assert_eq!(started["exercises"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        started["exercises"][0]["exercise"]["exercise_type"],
+        "Bench Press"
+    );
+    assert_eq!(
+        started["exercises"][0]["exercise"]["notes"],
+        "Touch lower chest"
+    );
+    assert_eq!(started["exercises"][0]["exercise"]["per_side_weight"], true);
+    assert_eq!(started["exercises"][0]["exercise"]["split_weight"], true);
+    assert_eq!(
+        started["exercises"][0]["exercise"]["settings"][0]["key"],
+        "Bench"
+    );
+    assert_eq!(started["exercises"][0]["sets"].as_array().unwrap().len(), 0);
+}
+
+#[actix_web::test]
+async fn can_duplicate_template_with_same_exercise_metadata() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    let _user_id =
+        create_user_as_admin(&app, &admin_cookie, "template-copy", "passwordpassword").await;
+    let cookie = login_cookie_active(&app, "template-copy", "passwordpassword").await;
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri("/api/templates")
+        .set_json(json!({
+            "name": "Leg Day",
+            "exercises": [
+                {
+                    "exercise_type": "Hack Squat",
+                    "notes": "Feet slightly forward",
+                    "per_side_weight": false,
+                    "split_weight": false,
+                    "settings": [
+                        { "key": "Stance", "value": "Medium" }
+                    ]
+                }
+            ]
+        }))
+        .to_request();
+    let original = json_body(test::call_service(&app, req).await).await;
+    let original_id = original["template"]["id"].as_i64().unwrap();
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/templates/{original_id}/duplicate"))
+        .set_json(json!({ "name": "Leg Day Copy" }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 201);
+    let duplicate = json_body(resp).await;
+
+    let duplicate_id = duplicate["template"]["id"].as_i64().unwrap();
+    assert_ne!(duplicate_id, original_id);
+    assert_eq!(duplicate["template"]["name"], "Leg Day Copy");
+    assert_eq!(duplicate["exercises"].as_array().unwrap().len(), 1);
+    assert_eq!(duplicate["exercises"][0]["exercise_type"], "Hack Squat");
+    assert_eq!(duplicate["exercises"][0]["notes"], "Feet slightly forward");
+    assert_eq!(duplicate["exercises"][0]["settings"][0]["key"], "Stance");
+    assert_eq!(duplicate["exercises"][0]["settings"][0]["value"], "Medium");
+
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri("/api/templates")
+        .to_request();
+    let listed = json_body(test::call_service(&app, req).await).await;
+    let templates = listed.as_array().unwrap();
+    assert_eq!(templates.len(), 2);
+    assert!(templates
+        .iter()
+        .any(|template| { template["id"] == duplicate_id && template["exercise_count"] == 1 }));
+}
+
+#[actix_web::test]
+async fn start_template_rolls_back_when_template_data_is_invalid() {
+    let _env = TestEnv::new();
+    let (db, admin_cookie, app) = setup_test_app().await;
+
+    let user_id =
+        create_user_as_admin(&app, &admin_cookie, "template-bad", "passwordpassword").await;
+    let cookie = login_cookie_active(&app, "template-bad", "passwordpassword").await;
+
+    let now = chrono::Utc::now();
+    let pool = db.pool().await;
+    let template_id: i64 = sqlx::query_scalar(
+        r#"
+        INSERT INTO workout_templates (user_id, name, created_at, updated_at)
+        VALUES (?, ?, ?, ?)
+        RETURNING id
+        "#,
+    )
+    .bind(user_id)
+    .bind("Broken Template")
+    .bind(now)
+    .bind(now)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    sqlx::query(
+        r#"
+        INSERT INTO workout_template_exercises (
+            user_id, template_id, position, exercise_type, notes, per_side_weight, split_weight
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        "#,
+    )
+    .bind(user_id)
+    .bind(template_id)
+    .bind(0_i64)
+    .bind("")
+    .bind("corrupt row")
+    .bind(false)
+    .bind(false)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/templates/{template_id}/start"))
+        .set_json(json!({
+            "date": now,
+            "start_time": now,
+            "timezone_offset_minutes": -60
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+
+    let workout_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM workouts WHERE user_id = ?")
+        .bind(user_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(workout_count, 0);
 }
 
 #[actix_web::test]
@@ -2226,10 +2444,31 @@ async fn oauth_metadata_and_client_registration_work() {
     assert_eq!(resp.status(), 200);
     let resource = json_body(resp).await;
     assert!(resource["resource"].as_str().unwrap().ends_with("/mcp"));
+    assert_eq!(
+        resource["scopes_supported"].as_array().unwrap(),
+        &vec![
+            json!("workouts.read"),
+            json!("progress.read"),
+            json!("workouts.write")
+        ]
+    );
 
     let registered = register_oauth_client(&app, "workouts.read progress.read").await;
     assert_eq!(registered["token_endpoint_auth_method"], "none");
     assert_eq!(registered["response_types"][0], "code");
+
+    let req = test::TestRequest::post()
+        .uri("/oauth/register")
+        .set_json(json!({
+            "client_name": "Invalid Scope Client",
+            "redirect_uris": ["https://client.example/callback"],
+            "scope": "workouts.read admin.write"
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+    let body = json_body(resp).await;
+    assert_eq!(body["error"], "invalid_scope");
 }
 
 #[actix_web::test]
@@ -2315,6 +2554,16 @@ async fn oauth_token_flow_and_read_only_mcp_tools_work() {
     assert_eq!(workout_resp.status(), 201);
     let workout_id = json_body(workout_resp).await["id"].as_i64().unwrap();
 
+    let req = with_cookie(test::TestRequest::post(), &user_cookie)
+        .uri(&format!("/api/workouts/{workout_id}/exercises"))
+        .set_json(json!({
+            "exercise_type": "Bench Press",
+            "start_time": chrono::Utc::now()
+        }))
+        .to_request();
+    let exercise_resp = test::call_service(&app, req).await;
+    assert_eq!(exercise_resp.status(), 201);
+
     let registered = register_oauth_client(&app, "workouts.read progress.read").await;
     let client_id = registered["client_id"].as_str().unwrap();
     let verifier = "batch2-test-verifier";
@@ -2373,6 +2622,10 @@ async fn oauth_token_flow_and_read_only_mcp_tools_work() {
     assert_eq!(resp.status(), 200);
     let initialize = json_body(resp).await;
     assert_eq!(initialize["result"]["serverInfo"]["name"], "swolemate");
+    assert!(initialize["result"]["instructions"]
+        .as_str()
+        .unwrap()
+        .contains("replace_sets is destructive"));
 
     let req = test::TestRequest::post()
         .uri("/mcp")
@@ -2394,6 +2647,29 @@ async fn oauth_token_flow_and_read_only_mcp_tools_work() {
         .unwrap()
         .iter()
         .any(|tool| tool["name"] == "list_workouts"));
+    assert!(listed["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|tool| tool["name"] == "list_templates"));
+    assert!(listed["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|tool| {
+            tool["name"] == "list_exercise_types"
+                && tool["description"]
+                    .as_str()
+                    .unwrap()
+                    .contains("exact exercise_type")
+        }));
+
+    let listed_types = mcp_call(&app, access_token, 22, "list_exercise_types", json!({})).await;
+    assert!(listed_types["result"]["structuredContent"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|name| name == "Bench Press"));
 
     let req = test::TestRequest::post()
         .uri("/mcp")
@@ -2452,6 +2728,271 @@ async fn oauth_token_flow_and_read_only_mcp_tools_work() {
     let resp = test::call_service(&app, req).await;
     let body = json_body(resp).await;
     assert_eq!(body["error"]["message"], "Forbidden");
+}
+
+#[actix_web::test]
+async fn mcp_initialize_uses_current_protocol_and_rejects_invalid_request_ids() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "mcp-jsonrpc", "passwordpassword").await;
+    let user_cookie = login_cookie_active(&app, "mcp-jsonrpc", "passwordpassword").await;
+    let created =
+        create_mcp_personal_token(&app, &user_cookie, "JSON-RPC", &["workouts.read"], Some(30))
+            .await;
+    let token = created["token"].as_str().unwrap();
+
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {token}"),
+        ))
+        .set_json(json!({
+            "jsonrpc": "2.0",
+            "id": "init-1",
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+                "clientInfo": {
+                    "name": "test-client",
+                    "version": "1.0.0"
+                }
+            }
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 200);
+    let body = json_body(resp).await;
+    assert_eq!(body["id"], "init-1");
+    assert_eq!(body["result"]["protocolVersion"], "2025-11-25");
+    assert!(body["result"]["instructions"]
+        .as_str()
+        .unwrap()
+        .contains("list_exercise_types"));
+
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {token}"),
+        ))
+        .set_json(json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/unknown",
+            "params": {}
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), actix_web::http::StatusCode::ACCEPTED);
+
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {token}"),
+        ))
+        .set_json(json!({
+            "jsonrpc": "2.0",
+            "id": 99,
+            "result": {}
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), actix_web::http::StatusCode::ACCEPTED);
+
+    for invalid_payload in [
+        json!({
+            "jsonrpc": "2.0",
+            "id": null,
+            "method": "ping",
+            "params": {}
+        }),
+        json!({
+            "jsonrpc": "2.0",
+            "id": 1.5,
+            "method": "ping",
+            "params": {}
+        }),
+    ] {
+        let req = test::TestRequest::post()
+            .uri("/mcp")
+            .insert_header((
+                actix_web::http::header::AUTHORIZATION,
+                format!("Bearer {token}"),
+            ))
+            .set_json(invalid_payload)
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), 200);
+        let body = json_body(resp).await;
+        assert_eq!(body["error"]["code"], -32600);
+        assert_eq!(body["error"]["message"], "Invalid Request");
+    }
+}
+
+#[actix_web::test]
+async fn mcp_notifications_do_not_emit_json_rpc_responses() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "mcp-notify", "passwordpassword").await;
+    let user_cookie = login_cookie_active(&app, "mcp-notify", "passwordpassword").await;
+    let created =
+        create_mcp_personal_token(&app, &user_cookie, "Notify", &["workouts.read"], Some(30)).await;
+    let token = created["token"].as_str().unwrap();
+
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {token}"),
+        ))
+        .set_json(json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized",
+            "params": {}
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), actix_web::http::StatusCode::ACCEPTED);
+}
+
+#[actix_web::test]
+async fn mcp_accepts_json_rpc_batches_and_skips_notification_responses() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "mcp-batch", "passwordpassword").await;
+    let user_cookie = login_cookie_active(&app, "mcp-batch", "passwordpassword").await;
+    let created =
+        create_mcp_personal_token(&app, &user_cookie, "Batch", &["workouts.read"], Some(30)).await;
+    let token = created["token"].as_str().unwrap();
+
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {token}"),
+        ))
+        .set_json(json!([
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "ping",
+                "params": {}
+            },
+            {
+                "jsonrpc": "2.0",
+                "method": "notifications/initialized",
+                "params": {}
+            },
+            {
+                "jsonrpc": "2.0",
+                "id": "tools",
+                "method": "tools/list",
+                "params": {}
+            },
+            {
+                "jsonrpc": "2.0",
+                "method": "resources/list",
+                "params": {}
+            }
+        ]))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 200);
+    let body = json_body(resp).await;
+    let responses = body.as_array().unwrap();
+    assert_eq!(responses.len(), 2);
+    assert_eq!(responses[0]["id"], 1);
+    assert!(responses[0]["result"].is_object());
+    assert_eq!(responses[1]["id"], "tools");
+    assert!(responses[1]["result"]["tools"].as_array().unwrap().len() > 1);
+}
+
+#[actix_web::test]
+async fn mcp_transport_rejects_bad_origin_and_protocol_headers() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "mcp-transport", "passwordpassword").await;
+    let user_cookie = login_cookie_active(&app, "mcp-transport", "passwordpassword").await;
+    let created = create_mcp_personal_token(
+        &app,
+        &user_cookie,
+        "Transport",
+        &["workouts.read"],
+        Some(30),
+    )
+    .await;
+    let token = created["token"].as_str().unwrap();
+
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {token}"),
+        ))
+        .insert_header((actix_web::http::header::ORIGIN, "https://evil.example"))
+        .set_json(json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "ping",
+            "params": {}
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), actix_web::http::StatusCode::FORBIDDEN);
+
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {token}"),
+        ))
+        .insert_header((actix_web::http::header::ORIGIN, "http://localhost:2470"))
+        .insert_header(("MCP-Protocol-Version", "2025-11-25"))
+        .set_json(json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "ping",
+            "params": {}
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 200);
+
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {token}"),
+        ))
+        .insert_header(("MCP-Protocol-Version", "not-a-version"))
+        .set_json(json!({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "ping",
+            "params": {}
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), actix_web::http::StatusCode::BAD_REQUEST);
+
+    let req = test::TestRequest::get()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {token}"),
+        ))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(
+        resp.status(),
+        actix_web::http::StatusCode::METHOD_NOT_ALLOWED
+    );
 }
 
 #[actix_web::test]
@@ -3105,6 +3646,81 @@ async fn oauth_token_flow_and_write_mcp_tools_work() {
             .unwrap()
             .len(),
         2
+    );
+
+    let created_template = mcp_call(
+        &app,
+        access_token,
+        7,
+        "create_template_from_workout",
+        json!({
+            "workout_id": workout_id,
+            "name": "MCP Push A"
+        }),
+    )
+    .await;
+    let template_id = created_template["result"]["structuredContent"]["template"]["id"]
+        .as_i64()
+        .unwrap();
+    assert_eq!(
+        created_template["result"]["structuredContent"]["exercises"][0]["exercise_type"],
+        "bench press"
+    );
+
+    let list_templates = mcp_call(&app, access_token, 8, "list_templates", json!({})).await;
+    assert!(list_templates["result"]["structuredContent"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|template| template["id"] == template_id));
+
+    let duplicated = mcp_call(
+        &app,
+        access_token,
+        9,
+        "duplicate_template",
+        json!({
+            "id": template_id,
+            "name": "MCP Push A Copy"
+        }),
+    )
+    .await;
+    let duplicate_id = duplicated["result"]["structuredContent"]["template"]["id"]
+        .as_i64()
+        .unwrap();
+    assert_ne!(duplicate_id, template_id);
+
+    let started = mcp_call(
+        &app,
+        access_token,
+        10,
+        "start_workout_from_template",
+        json!({
+            "template_id": duplicate_id,
+            "date": now + chrono::Duration::minutes(60),
+            "start_time": now + chrono::Duration::minutes(60),
+            "timezone_offset_minutes": -60
+        }),
+    )
+    .await;
+    let started_workout_id = started["result"]["structuredContent"]["id"]
+        .as_i64()
+        .unwrap();
+
+    let started_workout = mcp_call(
+        &app,
+        access_token,
+        11,
+        "get_workout",
+        json!({ "id": started_workout_id }),
+    )
+    .await;
+    assert_eq!(
+        started_workout["result"]["structuredContent"]["exercises"][0]["sets"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0
     );
 }
 
@@ -3771,6 +4387,33 @@ async fn invalid_write_mcp_payload_returns_json_rpc_error() {
     .await;
     assert_eq!(body["error"]["code"], -32602);
     assert_eq!(body["error"]["message"], "Invalid params");
+    assert_eq!(body["error"]["data"]["code"], "invalid_params");
+    assert!(body["error"]["data"]["detail"]
+        .as_str()
+        .unwrap()
+        .contains("weight_left and weight_right"));
+
+    let too_many_sets = (0..101)
+        .map(|_| json!({ "reps": 5, "weight": 20.0 }))
+        .collect::<Vec<_>>();
+    let body = mcp_call(
+        &app,
+        access_token,
+        2,
+        "replace_sets",
+        json!({
+            "exercise_id": 123,
+            "sets": too_many_sets
+        }),
+    )
+    .await;
+    assert_eq!(body["error"]["code"], -32602);
+    assert_eq!(body["error"]["message"], "Invalid params");
+    assert_eq!(body["error"]["data"]["code"], "invalid_params");
+    assert!(body["error"]["data"]["detail"]
+        .as_str()
+        .unwrap()
+        .contains("at most 100"));
 }
 
 #[actix_web::test]

@@ -5,6 +5,8 @@ use crate::{
 };
 use serde::Serialize;
 
+const MAX_SETS_PER_EXERCISE_REPLACE: usize = 100;
+
 #[derive(Debug, Serialize)]
 pub struct LastExerciseData {
     pub exercise: Exercise,
@@ -44,6 +46,11 @@ pub async fn replace_sets(
     exercise_id: i64,
     requests: &[CreateSetRequest],
 ) -> Result<Vec<Set>, AppError> {
+    if requests.len() > MAX_SETS_PER_EXERCISE_REPLACE {
+        return Err(AppError::BadRequest(format!(
+            "sets must have at most {MAX_SETS_PER_EXERCISE_REPLACE} items"
+        )));
+    }
     db.replace_sets_for_exercise(user_id, exercise_id, requests)
         .await
 }
