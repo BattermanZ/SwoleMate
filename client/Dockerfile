@@ -1,5 +1,5 @@
 # Stage 1: Build
-FROM node:24-slim AS builder
+FROM docker.io/library/node:24-slim AS builder
 WORKDIR /app
 
 # Install dependencies
@@ -11,7 +11,7 @@ COPY . .
 RUN npm run build
 
 # Stage 2: Serve with nginx
-FROM nginx:alpine
+FROM docker.io/library/nginx:alpine
 # Copy the built static files
 COPY --from=builder /app/build /usr/share/nginx/html
 # Copy nginx configuration
