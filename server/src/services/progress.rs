@@ -1,5 +1,6 @@
 use crate::{db::Database, errors::AppError, models::Exercise};
 use serde::Serialize;
+use serde_json::{json, Value};
 
 #[derive(Debug, Serialize)]
 pub struct ExerciseProgressEntry {
@@ -19,8 +20,21 @@ pub async fn get_exercise_progress(
         .collect())
 }
 
-pub async fn get_workout_stats(db: &Database, user_id: i64) -> Result<serde_json::Value, AppError> {
-    db.get_workout_stats(user_id).await
+pub async fn get_workout_stats(db: &Database, user_id: i64) -> Result<Value, AppError> {
+    let mut stats = db.get_workout_stats(user_id).await?;
+    let frequency = db.get_calendar_workout_frequency(user_id).await?;
+
+    if let Some(object) = stats.as_object_mut() {
+        object.insert(
+            "workout_frequency".to_string(),
+            json!({
+                "average_per_week": frequency.average_per_week,
+                "trend": frequency.trend
+            }),
+        );
+    }
+
+    Ok(stats)
 }
 
 pub async fn get_volume_stats(
