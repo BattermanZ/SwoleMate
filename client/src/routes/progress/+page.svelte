@@ -10,6 +10,8 @@
 	import OverallCharts from '$lib/components/progress/OverallCharts.svelte';
 
 	let selectedExercise = '';
+	let loadedExercise = '';
+	let requestedExercise = '';
 	let exerciseTypes: string[] = [];
 	let workoutStats: WorkoutStats | null = null;
 	let volumeStats: VolumeStats | null = null;
@@ -19,6 +21,9 @@
 	let loadingExercise = false;
 	let errorOverall: string | null = null;
 	let errorExercise: string | null = null;
+
+	let exerciseRequestId = 0;
+	let exerciseWatcherEnabled = false;
 
 	function getErrorMessage(e: unknown): string {
 		if (e instanceof Error) return e.message;
@@ -38,50 +43,90 @@
 		}
 	}
 
-	async function loadExerciseTypes() {
+	async function loadExerciseTypes(): Promise<string> {
 		try {
 			exerciseTypes = await getExerciseTypes();
 			const stored = localStorage.getItem('progress.selectedExercise');
 			selectedExercise =
 				stored && exerciseTypes.includes(stored) ? stored : (exerciseTypes[0] ?? '');
+			return selectedExercise;
 		} catch (e) {
+			exerciseTypes = [];
+			selectedExercise = '';
+			loadedExercise = '';
+			requestedExercise = '';
+			volumeStats = null;
+			exerciseProgress = null;
+			errorExercise = getErrorMessage(e);
 			logger.error('progress', 'Error loading exercise types', { error: e });
+			return '';
 		}
 	}
 
-	async function loadExercise() {
-		if (!selectedExercise) return;
+	async function loadExercise(exercise = selectedExercise) {
+		const requestId = ++exerciseRequestId;
+		requestedExercise = exercise;
+
+		if (!exercise) {
+			loadedExercise = '';
+			requestedExercise = '';
+			volumeStats = null;
+			exerciseProgress = null;
+			loadingExercise = false;
+			return;
+		}
+
 		loadingExercise = true;
 		errorExercise = null;
+		loadedExercise = '';
+		volumeStats = null;
+		exerciseProgress = null;
+
 		try {
-			localStorage.setItem('progress.selectedExercise', selectedExercise);
-			[volumeStats, exerciseProgress] = await Promise.all([
-				getVolumeStats(selectedExercise),
-				getExerciseProgress(selectedExercise)
+			localStorage.setItem('progress.selectedExercise', exercise);
+			const [nextVolumeStats, nextExerciseProgress] = await Promise.all([
+				getVolumeStats(exercise),
+				getExerciseProgress(exercise)
 			]);
+
+			if (requestId !== exerciseRequestId || exercise !== selectedExercise) return;
+
+			volumeStats = nextVolumeStats;
+			exerciseProgress = nextExerciseProgress;
+			loadedExercise = exercise;
 		} catch (e) {
+			if (requestId !== exerciseRequestId) return;
 			errorExercise = getErrorMessage(e);
-			logger.error('progress', 'Error loading exercise data', { error: e, selectedExercise });
+			loadedExercise = '';
+			volumeStats = null;
+			exerciseProgress = null;
+			logger.error('progress', 'Error loading exercise data', { error: e, selectedExercise: exercise });
 		} finally {
-			loadingExercise = false;
+			if (requestId === exerciseRequestId) {
+				loadingExercise = false;
+				requestedExercise = '';
+			}
 		}
 	}
 
 	async function refreshAll() {
-		await Promise.all([loadOverall(), loadExerciseTypes()]);
-		await loadExercise();
+		exerciseWatcherEnabled = false;
+		const [, exercise] = await Promise.all([loadOverall(), loadExerciseTypes()]);
+		if (exercise) await loadExercise(exercise);
+		exerciseWatcherEnabled = true;
 	}
-
-	let lastLoadedExercise = '';
 
 	onMount(async () => {
 		await refreshAll();
-		lastLoadedExercise = selectedExercise;
 	});
 
-	$: if (selectedExercise && selectedExercise !== lastLoadedExercise) {
-		lastLoadedExercise = selectedExercise;
-		void loadExercise();
+	$: if (
+		exerciseWatcherEnabled &&
+		selectedExercise &&
+		selectedExercise !== loadedExercise &&
+		selectedExercise !== requestedExercise
+	) {
+		void loadExercise(selectedExercise);
 	}
 </script>
 
@@ -106,7 +151,7 @@
 				{errorExercise}
 			/>
 
-			{#if volumeStats}
+			{#if volumeStats && loadedExercise === selectedExercise}
 				<ExerciseCharts {volumeStats} {exerciseProgress} />
 				<RecentExerciseSessions {exerciseProgress} />
 			{/if}
