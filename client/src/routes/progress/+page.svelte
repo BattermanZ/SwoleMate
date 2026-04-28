@@ -12,6 +12,7 @@
 	let selectedExercise = '';
 	let loadedExercise = '';
 	let requestedExercise = '';
+	let failedExercise = '';
 	let exerciseTypes: string[] = [];
 	let workoutStats: WorkoutStats | null = null;
 	let volumeStats: VolumeStats | null = null;
@@ -55,6 +56,7 @@
 			selectedExercise = '';
 			loadedExercise = '';
 			requestedExercise = '';
+			failedExercise = '';
 			volumeStats = null;
 			exerciseProgress = null;
 			errorExercise = getErrorMessage(e);
@@ -70,6 +72,7 @@
 		if (!exercise) {
 			loadedExercise = '';
 			requestedExercise = '';
+			failedExercise = '';
 			volumeStats = null;
 			exerciseProgress = null;
 			loadingExercise = false;
@@ -79,6 +82,7 @@
 		loadingExercise = true;
 		errorExercise = null;
 		loadedExercise = '';
+		failedExercise = '';
 		volumeStats = null;
 		exerciseProgress = null;
 
@@ -98,6 +102,7 @@
 			if (requestId !== exerciseRequestId) return;
 			errorExercise = getErrorMessage(e);
 			loadedExercise = '';
+			failedExercise = exercise;
 			volumeStats = null;
 			exerciseProgress = null;
 			logger.error('progress', 'Error loading exercise data', { error: e, selectedExercise: exercise });
@@ -124,7 +129,8 @@
 		exerciseWatcherEnabled &&
 		selectedExercise &&
 		selectedExercise !== loadedExercise &&
-		selectedExercise !== requestedExercise
+		selectedExercise !== requestedExercise &&
+		selectedExercise !== failedExercise
 	) {
 		void loadExercise(selectedExercise);
 	}
