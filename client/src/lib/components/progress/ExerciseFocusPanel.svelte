@@ -34,7 +34,9 @@
 		</label>
 	</div>
 
-	{#if volumeStats}
+	{#if errorExercise}
+		<div class="alert variant-filled-error">{errorExercise}</div>
+	{:else if volumeStats}
 		<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
 			<div class="card variant-glass-surface p-3 border-l-4 border-primary-500/60">
 				<div class="text-xs font-semibold opacity-70">All‑time max</div>
@@ -58,8 +60,6 @@
 			<div class="h-4 w-36 bg-surface-200/60 dark:bg-surface-700/50 rounded"></div>
 			<div class="mt-3 h-8 w-48 bg-surface-200/60 dark:bg-surface-700/50 rounded"></div>
 		</div>
-	{:else if errorExercise}
-		<div class="alert variant-filled-error">{errorExercise}</div>
 	{:else if selectedExercise}
 		<div class="card variant-ghost p-4 text-center opacity-80">
 			No progress data yet for <span class="font-semibold">{selectedExercise}</span>.
