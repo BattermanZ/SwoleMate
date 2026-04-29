@@ -153,6 +153,29 @@ describe('layout behavior', () => {
 		);
 	});
 
+	it('moves the active mobile tab when the route changes', async () => {
+		const { default: Layout } = await import('../routes/+layout.svelte');
+		const view = render(Layout as never);
+		const mobileNav = view.getByRole('navigation', { name: 'Primary mobile navigation' });
+
+		expect(within(mobileNav).getByRole('link', { name: /Today/i })).toHaveAttribute(
+			'aria-current',
+			'page'
+		);
+
+		pageStore.set({ url: new URL('http://localhost/progress') });
+
+		await waitFor(() => {
+			expect(within(mobileNav).getByRole('link', { name: /Today/i })).not.toHaveAttribute(
+				'aria-current'
+			);
+			expect(within(mobileNav).getByRole('link', { name: /Progress/i })).toHaveAttribute(
+				'aria-current',
+				'page'
+			);
+		});
+	});
+
 	it('toggles the .dark class and persists to localStorage', async () => {
 		localStorage.removeItem('theme');
 		document.documentElement.classList.remove('dark');

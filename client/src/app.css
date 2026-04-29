@@ -53,7 +53,7 @@ body {
 }
 
 .app-content {
-	padding-bottom: calc(env(safe-area-inset-bottom) + 6.75rem);
+	padding-bottom: calc(env(safe-area-inset-bottom) + 5.75rem);
 }
 
 @media (min-width: 768px) {
@@ -64,11 +64,11 @@ body {
 
 .mobile-tab {
 	display: grid;
-	min-height: 3.25rem;
+	min-height: 3rem;
 	place-items: center;
 	gap: 0.125rem;
 	border-radius: 0.75rem;
-	padding: 0.375rem 0.25rem;
+	padding: 0.25rem;
 	color: color-mix(in oklab, var(--color-surface-950-50) 72%, transparent);
 	text-decoration: none;
 	transition:

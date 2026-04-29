@@ -11,6 +11,7 @@
 	let darkMode = false;
 	const THEME_KEY = 'theme';
 	const authState = auth.state;
+	$: currentPath = $page.url.pathname;
 
 	// Navigation items
 	const navItems = [
@@ -24,8 +25,8 @@
 		{ href: '/backups', label: 'Backups', icon: '💾' }
 	];
 
-	$: isLogin = $page.url.pathname === '/login';
-	$: isSettings = $page.url.pathname === '/settings';
+	$: isLogin = currentPath === '/login';
+	$: isSettings = currentPath === '/settings';
 	$: mustChangePassword =
 		$authState.status === 'authenticated' && $authState.user?.must_change_password;
 	$: canSeeAdmin =
@@ -47,10 +48,9 @@
 	$: secondaryMobileNavItems = visibleNavItems.filter(
 		(item) => !primaryMobileNavItems.some((primary) => primary.href === item.href)
 	);
-	$: isMoreActive = secondaryMobileNavItems.some((item) => isNavItemActive(item.href));
+	$: isMoreActive = secondaryMobileNavItems.some((item) => isNavItemActive(item.href, currentPath));
 
-	function isNavItemActive(href: string): boolean {
-		const pathname = $page.url.pathname;
+	function isNavItemActive(href: string, pathname: string): boolean {
 		if (href === '/') return pathname === '/';
 		return pathname === href || pathname.startsWith(`${href}/`);
 	}
@@ -131,7 +131,7 @@
 		void goto('/settings');
 	}
 
-	$: if (isLogin || $page.url.pathname) {
+	$: if (isLogin || currentPath) {
 		moreMenuOpen = false;
 	}
 
@@ -144,7 +144,7 @@
 
 <div class="app-shell">
 	<AppBar class="app-shell-header bg-surface-100-800-token border-b-2 relative z-50">
-		<AppBar.Toolbar class="grid grid-cols-[1fr_auto] items-center gap-3">
+		<AppBar.Toolbar class="grid grid-cols-[1fr_auto] items-center gap-3 py-2 md:py-3">
 			<AppBar.Lead>
 				<a href="/" class="flex items-center gap-2">
 					<span class="text-2xl">💪</span>
@@ -159,7 +159,7 @@
 								<li>
 									<a
 										href={item.href}
-										class="btn btn-sm {isNavItemActive(item.href)
+										class="btn btn-sm {isNavItemActive(item.href, currentPath)
 											? 'variant-filled-primary'
 											: 'variant-ghost-primary'}"
 									>
@@ -212,7 +212,7 @@
 						<li>
 							<a
 								href={item.href}
-								class="btn w-full justify-start {isNavItemActive(item.href)
+								class="btn w-full justify-start {isNavItemActive(item.href, currentPath)
 									? 'variant-filled-primary'
 									: 'variant-ghost-primary'}"
 								on:click={closeMoreMenu}
@@ -261,8 +261,10 @@
 					<li>
 						<a
 							href={item.href}
-							class="mobile-tab {isNavItemActive(item.href) ? 'mobile-tab-active' : ''}"
-							aria-current={isNavItemActive(item.href) ? 'page' : undefined}
+							class="mobile-tab {isNavItemActive(item.href, currentPath)
+								? 'mobile-tab-active'
+								: ''}"
+							aria-current={isNavItemActive(item.href, currentPath) ? 'page' : undefined}
 						>
 							<span class="mobile-tab-icon">{item.icon}</span>
 							<span class="mobile-tab-label">{item.label}</span>
