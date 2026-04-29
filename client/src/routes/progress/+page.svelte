@@ -12,7 +12,6 @@
 	let selectedExercise = '';
 	let loadedExercise = '';
 	let requestedExercise = '';
-	let failedExercise = '';
 	let exerciseTypes: string[] = [];
 	let workoutStats: WorkoutStats | null = null;
 	let volumeStats: VolumeStats | null = null;
@@ -24,7 +23,6 @@
 	let errorExercise: string | null = null;
 
 	let exerciseRequestId = 0;
-	let exerciseWatcherEnabled = false;
 
 	function getErrorMessage(e: unknown): string {
 		if (e instanceof Error) return e.message;
@@ -56,7 +54,6 @@
 			selectedExercise = '';
 			loadedExercise = '';
 			requestedExercise = '';
-			failedExercise = '';
 			volumeStats = null;
 			exerciseProgress = null;
 			errorExercise = getErrorMessage(e);
@@ -72,7 +69,6 @@
 		if (!exercise) {
 			loadedExercise = '';
 			requestedExercise = '';
-			failedExercise = '';
 			volumeStats = null;
 			exerciseProgress = null;
 			loadingExercise = false;
@@ -82,7 +78,6 @@
 		loadingExercise = true;
 		errorExercise = null;
 		loadedExercise = '';
-		failedExercise = '';
 		volumeStats = null;
 		exerciseProgress = null;
 
@@ -102,10 +97,12 @@
 			if (requestId !== exerciseRequestId) return;
 			errorExercise = getErrorMessage(e);
 			loadedExercise = '';
-			failedExercise = exercise;
 			volumeStats = null;
 			exerciseProgress = null;
-			logger.error('progress', 'Error loading exercise data', { error: e, selectedExercise: exercise });
+			logger.error('progress', 'Error loading exercise data', {
+				error: e,
+				selectedExercise: exercise
+			});
 		} finally {
 			if (requestId === exerciseRequestId) {
 				loadingExercise = false;
@@ -115,25 +112,21 @@
 	}
 
 	async function refreshAll() {
-		exerciseWatcherEnabled = false;
 		const [, exercise] = await Promise.all([loadOverall(), loadExerciseTypes()]);
 		if (exercise) await loadExercise(exercise);
-		exerciseWatcherEnabled = true;
+	}
+
+	function selectExercise(event: CustomEvent<string>) {
+		const exercise = event.detail;
+		selectedExercise = exercise;
+		if (exercise && exercise !== loadedExercise && exercise !== requestedExercise) {
+			void loadExercise(exercise);
+		}
 	}
 
 	onMount(async () => {
 		await refreshAll();
 	});
-
-	$: if (
-		exerciseWatcherEnabled &&
-		selectedExercise &&
-		selectedExercise !== loadedExercise &&
-		selectedExercise !== requestedExercise &&
-		selectedExercise !== failedExercise
-	) {
-		void loadExercise(selectedExercise);
-	}
 </script>
 
 <div class="space-y-6">
@@ -155,6 +148,7 @@
 				{volumeStats}
 				{loadingExercise}
 				{errorExercise}
+				on:select={selectExercise}
 			/>
 
 			{#if volumeStats && loadedExercise === selectedExercise}

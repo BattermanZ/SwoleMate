@@ -47,7 +47,9 @@
 	$: hasWeeklyVolume = weeklyVolumeRows.length > 0;
 	$: hasMonthlyVolume = monthlyVolumeRows.length > 0;
 	$: hasSessionProgress = sessionProgressRows.some((ep) =>
-		ep.sets.some((set) => getEffectiveWeight(set, ep.exercise) > 0 || getSetVolume(set, ep.exercise) > 0)
+		ep.sets.some(
+			(set) => getEffectiveWeight(set, ep.exercise) > 0 || getSetVolume(set, ep.exercise) > 0
+		)
 	);
 
 	function destroyCharts() {
@@ -103,9 +105,22 @@
 				options: {
 					...base,
 					scales: {
-						x: { ...(baseScales.x ?? {}), title: { display: true, text: 'Week', color: theme.mutedText } },
-						y: { ...(baseScales.y ?? {}), beginAtZero: true, title: { display: true, text: 'Volume (kg)', color: theme.mutedText } },
-						y1: { position: 'right', beginAtZero: true, ticks: { color: theme.mutedText }, grid: { drawOnChartArea: false }, title: { display: true, text: 'Estimated 1RM (kg)', color: theme.mutedText } }
+						x: {
+							...(baseScales.x ?? {}),
+							title: { display: true, text: 'Week', color: theme.mutedText }
+						},
+						y: {
+							...(baseScales.y ?? {}),
+							beginAtZero: true,
+							title: { display: true, text: 'Volume (kg)', color: theme.mutedText }
+						},
+						y1: {
+							position: 'right',
+							beginAtZero: true,
+							ticks: { color: theme.mutedText },
+							grid: { drawOnChartArea: false },
+							title: { display: true, text: 'Estimated 1RM (kg)', color: theme.mutedText }
+						}
 					}
 				}
 			});
@@ -160,9 +175,25 @@
 				options: {
 					...baseOptions(theme),
 					scales: {
-						x: { type: 'time', time: { unit: 'week' }, ticks: { color: theme.mutedText }, grid: { color: theme.grid }, title: { display: true, text: 'Date', color: theme.mutedText } },
-						y: { ...(baseScales.y ?? {}), beginAtZero: true, title: { display: true, text: 'Weight (kg)', color: theme.mutedText } },
-						y1: { position: 'right', beginAtZero: true, ticks: { color: theme.mutedText }, grid: { drawOnChartArea: false }, title: { display: true, text: 'Volume (kg)', color: theme.mutedText } }
+						x: {
+							type: 'time',
+							time: { unit: 'week' },
+							ticks: { color: theme.mutedText },
+							grid: { color: theme.grid },
+							title: { display: true, text: 'Date', color: theme.mutedText }
+						},
+						y: {
+							...(baseScales.y ?? {}),
+							beginAtZero: true,
+							title: { display: true, text: 'Weight (kg)', color: theme.mutedText }
+						},
+						y1: {
+							position: 'right',
+							beginAtZero: true,
+							ticks: { color: theme.mutedText },
+							grid: { drawOnChartArea: false },
+							title: { display: true, text: 'Volume (kg)', color: theme.mutedText }
+						}
 					}
 				}
 			});
@@ -190,8 +221,15 @@
 				options: {
 					...base,
 					scales: {
-						x: { ...(baseScales.x ?? {}), title: { display: true, text: 'Month', color: theme.mutedText } },
-						y: { ...(baseScales.y ?? {}), beginAtZero: true, title: { display: true, text: 'Volume (kg)', color: theme.mutedText } }
+						x: {
+							...(baseScales.x ?? {}),
+							title: { display: true, text: 'Month', color: theme.mutedText }
+						},
+						y: {
+							...(baseScales.y ?? {}),
+							beginAtZero: true,
+							title: { display: true, text: 'Volume (kg)', color: theme.mutedText }
+						}
 					}
 				}
 			});
@@ -236,9 +274,15 @@
 			</div>
 		</div>
 		{#if hasWeeklyVolume}
-			<div class="mt-3 h-72 relative overflow-hidden"><canvas bind:this={volumeCanvas}></canvas></div>
+			<div class="mt-3 h-72 relative overflow-hidden">
+				<canvas bind:this={volumeCanvas}></canvas>
+			</div>
 		{:else}
-			<div class="mt-3 rounded-xl border border-surface-200/50 p-4 text-sm opacity-70 dark:border-surface-700/50">No weekly volume data yet. Complete a few sets for this exercise to unlock the trend.</div>
+			<div
+				class="mt-3 rounded-xl border border-surface-200/50 p-4 text-sm opacity-70 dark:border-surface-700/50"
+			>
+				No weekly volume data yet. Complete a few sets for this exercise to unlock the trend.
+			</div>
 		{/if}
 	</div>
 
@@ -250,9 +294,15 @@
 			</div>
 		</div>
 		{#if hasSessionProgress}
-			<div class="mt-3 h-72 relative overflow-hidden"><canvas bind:this={progressCanvas}></canvas></div>
+			<div class="mt-3 h-72 relative overflow-hidden">
+				<canvas bind:this={progressCanvas}></canvas>
+			</div>
 		{:else}
-			<div class="mt-3 rounded-xl border border-surface-200/50 p-4 text-sm opacity-70 dark:border-surface-700/50">No session trend yet. Log weighted sets for this exercise to see progression over time.</div>
+			<div
+				class="mt-3 rounded-xl border border-surface-200/50 p-4 text-sm opacity-70 dark:border-surface-700/50"
+			>
+				No session trend yet. Log weighted sets for this exercise to see progression over time.
+			</div>
 		{/if}
 	</div>
 </div>
@@ -265,8 +315,14 @@
 		</div>
 	</div>
 	{#if hasMonthlyVolume}
-		<div class="mt-3 h-64 relative overflow-hidden"><canvas bind:this={monthlyVolumeCanvas}></canvas></div>
+		<div class="mt-3 h-64 relative overflow-hidden">
+			<canvas bind:this={monthlyVolumeCanvas}></canvas>
+		</div>
 	{:else}
-		<div class="mt-3 rounded-xl border border-surface-200/50 p-4 text-sm opacity-70 dark:border-surface-700/50">No monthly volume yet. This will appear once the selected exercise has logged volume.</div>
+		<div
+			class="mt-3 rounded-xl border border-surface-200/50 p-4 text-sm opacity-70 dark:border-surface-700/50"
+		>
+			No monthly volume yet. This will appear once the selected exercise has logged volume.
+		</div>
 	{/if}
 </div>

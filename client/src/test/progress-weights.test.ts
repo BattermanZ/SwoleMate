@@ -44,12 +44,16 @@ describe('progress weight helpers', () => {
 		const ex = exercise({ per_side_weight: true, split_weight: true });
 
 		expect(getEffectiveWeight(set({ weight: 20, weight_left: 18, weight_right: 22 }), ex)).toBe(40);
-		expect(getSetVolume(set({ reps: 8, weight: 20, weight_left: 18, weight_right: 22 }), ex)).toBe(320);
+		expect(getSetVolume(set({ reps: 8, weight: 20, weight_left: 18, weight_right: 22 }), ex)).toBe(
+			320
+		);
 	});
 
 	it('falls back to doubled base weight when split data is incomplete', () => {
 		const ex = exercise({ per_side_weight: true, split_weight: true });
 
-		expect(getEffectiveWeight(set({ weight: 20, weight_left: 18, weight_right: undefined }), ex)).toBe(40);
+		expect(
+			getEffectiveWeight(set({ weight: 20, weight_left: 18, weight_right: undefined }), ex)
+		).toBe(40);
 	});
 });

@@ -1,6 +1,9 @@
 import type { Exercise, Set } from '$lib/types';
 
-export function getEffectiveWeight(set: Set, exercise: Pick<Exercise, 'per_side_weight' | 'split_weight'>): number {
+export function getEffectiveWeight(
+	set: Set,
+	exercise: Pick<Exercise, 'per_side_weight' | 'split_weight'>
+): number {
 	const baseWeight = Number(set.weight);
 	if (!Number.isFinite(baseWeight)) return 0;
 
@@ -15,7 +18,10 @@ export function getEffectiveWeight(set: Set, exercise: Pick<Exercise, 'per_side_
 	return baseWeight * 2;
 }
 
-export function getSetVolume(set: Set, exercise: Pick<Exercise, 'per_side_weight' | 'split_weight'>): number {
+export function getSetVolume(
+	set: Set,
+	exercise: Pick<Exercise, 'per_side_weight' | 'split_weight'>
+): number {
 	const reps = Number(set.reps);
 	if (!Number.isFinite(reps)) return 0;
 	return reps * getEffectiveWeight(set, exercise);
