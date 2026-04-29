@@ -1,5 +1,5 @@
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/svelte';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, waitFor } from '@testing-library/svelte';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const apiMocks = vi.hoisted(() => ({
 	getWorkoutStats: vi.fn(),
@@ -62,10 +62,6 @@ describe('progress route page', () => {
 		apiMocks.getExerciseTypes.mockResolvedValue(['Bench Press', 'Squat']);
 		apiMocks.getVolumeStats.mockResolvedValue(null);
 		apiMocks.getExerciseProgress.mockResolvedValue([]);
-	});
-
-	afterEach(() => {
-		cleanup();
 	});
 
 	it('loads overall and exercise data on mount', async () => {

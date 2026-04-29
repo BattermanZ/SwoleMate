@@ -194,12 +194,6 @@ beforeEach(() => {
 });
 
 describe('route smoke', () => {
-	it('renders +layout without throwing', async () => {
-		const Layout = await importComponent('../routes/+layout.svelte');
-		const { getByText } = render(Layout as never);
-		expect(getByText('SwoleMate')).toBeInTheDocument();
-	}, 30_000);
-
 	it('renders today page', async () => {
 		const TodayPage = await importComponent('../routes/+page.svelte');
 		const { getByRole, queryByRole } = render(TodayPage as never);

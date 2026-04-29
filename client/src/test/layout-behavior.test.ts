@@ -1,4 +1,4 @@
-import { render, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, waitFor } from '@testing-library/svelte';
 import { writable } from 'svelte/store';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -108,5 +108,24 @@ describe('layout behavior', () => {
 				view.getByText('Offline mode: showing cached data. Some actions are disabled.')
 			).toBeInTheDocument();
 		});
+	});
+
+	it('toggles the .dark class and persists to localStorage', async () => {
+		localStorage.removeItem('theme');
+		document.documentElement.classList.remove('dark');
+
+		const { default: Layout } = await import('../routes/+layout.svelte');
+		const { getByRole } = render(Layout as never);
+
+		const toggle = getByRole('button', { name: /toggle dark mode/i });
+		expect(document.documentElement.classList.contains('dark')).toBe(false);
+
+		await fireEvent.click(toggle);
+		expect(document.documentElement.classList.contains('dark')).toBe(true);
+		expect(localStorage.getItem('theme')).toBe('dark');
+
+		await fireEvent.click(toggle);
+		expect(document.documentElement.classList.contains('dark')).toBe(false);
+		expect(localStorage.getItem('theme')).toBe('light');
 	});
 });
