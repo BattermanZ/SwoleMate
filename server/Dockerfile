@@ -1,5 +1,5 @@
 # Stage 1: Plan
-FROM docker.io/library/rust:1.93-slim AS planner
+FROM docker.io/library/rust:1.95-slim AS planner
 WORKDIR /usr/src/app
 ENV SQLX_OFFLINE=true
 
@@ -16,7 +16,7 @@ COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
 # Stage 2: Build
-FROM docker.io/library/rust:1.93-slim AS builder
+FROM docker.io/library/rust:1.95-slim AS builder
 WORKDIR /usr/src/app
 ENV SQLX_OFFLINE=true
 
