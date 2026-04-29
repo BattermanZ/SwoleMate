@@ -181,9 +181,9 @@ describe('layout behavior', () => {
 		document.documentElement.classList.remove('dark');
 
 		const { default: Layout } = await import('../routes/+layout.svelte');
-		const { getByRole } = render(Layout as never);
+		const { getAllByRole } = render(Layout as never);
 
-		const toggle = getByRole('button', { name: /toggle dark mode/i });
+		const [toggle] = getAllByRole('button', { name: /toggle dark mode/i });
 		expect(document.documentElement.classList.contains('dark')).toBe(false);
 
 		await fireEvent.click(toggle);
