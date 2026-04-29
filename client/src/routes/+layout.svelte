@@ -143,8 +143,8 @@
 </script>
 
 <div class="app-shell">
-	<AppBar class="app-shell-header bg-surface-100-800-token border-b-2 relative z-50">
-		<AppBar.Toolbar class="grid grid-cols-[1fr_auto] items-center gap-3 py-2 md:py-3">
+	<AppBar class="app-shell-header bg-surface-100-800-token border-b relative z-50">
+		<AppBar.Toolbar class="grid grid-cols-[1fr_auto] items-center gap-3 py-1 md:py-3">
 			<AppBar.Lead>
 				<a href="/" class="flex items-center gap-2">
 					<span class="text-2xl">💪</span>
@@ -253,7 +253,7 @@
 
 	{#if !isLogin}
 		<nav
-			class="fixed bottom-0 left-0 right-0 z-50 border-t border-surface-200/80 bg-surface-50-900-token px-2 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] shadow-[0_-10px_30px_rgba(15,23,42,0.12)] md:hidden dark:border-surface-700/80 dark:shadow-[0_-10px_30px_rgba(2,6,23,0.34)]"
+			class="fixed bottom-0 left-0 right-0 z-50 border-t border-surface-200/70 bg-surface-50-900-token px-2 pt-1 pb-[max(env(safe-area-inset-bottom),0.375rem)] shadow-[0_-8px_24px_rgba(15,23,42,0.1)] md:hidden dark:border-surface-700/70 dark:shadow-[0_-8px_24px_rgba(2,6,23,0.3)]"
 			aria-label="Primary mobile navigation"
 		>
 			<ul class="list-nav grid grid-cols-5 gap-1">
