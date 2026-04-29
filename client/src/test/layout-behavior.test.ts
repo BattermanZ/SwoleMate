@@ -1,4 +1,4 @@
-import { fireEvent, render, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, waitFor, within } from '@testing-library/svelte';
 import { writable } from 'svelte/store';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -108,6 +108,49 @@ describe('layout behavior', () => {
 				view.getByText('Offline mode: showing cached data. Some actions are disabled.')
 			).toBeInTheDocument();
 		});
+
+		const mobileNav = view.getByRole('navigation', { name: 'Primary mobile navigation' });
+		await fireEvent.click(within(mobileNav).getByRole('button', { name: /open more navigation/i }));
+		const moreMenu = view.getByRole('dialog');
+		expect(within(moreMenu).queryByRole('link', { name: /Admin/i })).not.toBeInTheDocument();
+		expect(within(moreMenu).queryByRole('link', { name: /Backups/i })).not.toBeInTheDocument();
+	});
+
+	it('renders mobile bottom navigation and opens secondary routes from More', async () => {
+		const { default: Layout } = await import('../routes/+layout.svelte');
+		const view = render(Layout as never);
+
+		const mobileNav = view.getByRole('navigation', { name: 'Primary mobile navigation' });
+		expect(within(mobileNav).getByRole('link', { name: /Today/i })).toHaveAttribute('href', '/');
+		expect(within(mobileNav).getByRole('link', { name: /Templates/i })).toHaveAttribute(
+			'href',
+			'/templates'
+		);
+		expect(within(mobileNav).getByRole('link', { name: /History/i })).toHaveAttribute(
+			'href',
+			'/workouts'
+		);
+		expect(within(mobileNav).getByRole('link', { name: /Progress/i })).toHaveAttribute(
+			'href',
+			'/progress'
+		);
+
+		await fireEvent.click(within(mobileNav).getByRole('button', { name: /open more navigation/i }));
+
+		const moreMenu = view.getByRole('dialog');
+		expect(within(moreMenu).getByRole('link', { name: /Settings/i })).toHaveAttribute(
+			'href',
+			'/settings'
+		);
+		expect(within(moreMenu).getByRole('link', { name: /Help/i })).toHaveAttribute('href', '/help');
+		expect(within(moreMenu).getByRole('link', { name: /Admin/i })).toHaveAttribute(
+			'href',
+			'/admin'
+		);
+		expect(within(moreMenu).getByRole('link', { name: /Backups/i })).toHaveAttribute(
+			'href',
+			'/backups'
+		);
 	});
 
 	it('toggles the .dark class and persists to localStorage', async () => {

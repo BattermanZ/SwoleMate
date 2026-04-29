@@ -7,7 +7,7 @@
 	import { auth } from '$lib/auth';
 	import { logger } from '$lib/logger';
 
-	let drawerOpen = false;
+	let moreMenuOpen = false;
 	let darkMode = false;
 	const THEME_KEY = 'theme';
 	const authState = auth.state;
@@ -41,9 +41,22 @@
 		if (item.href === '/backups') return canSeeBackups;
 		return true;
 	});
+	$: primaryMobileNavItems = visibleNavItems.filter((item) =>
+		['/', '/templates', '/workouts', '/progress'].includes(item.href)
+	);
+	$: secondaryMobileNavItems = visibleNavItems.filter(
+		(item) => !primaryMobileNavItems.some((primary) => primary.href === item.href)
+	);
+	$: isMoreActive = secondaryMobileNavItems.some((item) => isNavItemActive(item.href));
 
-	function toggleDrawer(): void {
-		drawerOpen = !drawerOpen;
+	function isNavItemActive(href: string): boolean {
+		const pathname = $page.url.pathname;
+		if (href === '/') return pathname === '/';
+		return pathname === href || pathname.startsWith(`${href}/`);
+	}
+
+	function closeMoreMenu(): void {
+		moreMenuOpen = false;
 	}
 
 	function applyTheme(next: boolean) {
@@ -118,6 +131,10 @@
 		void goto('/settings');
 	}
 
+	$: if (isLogin || $page.url.pathname) {
+		moreMenuOpen = false;
+	}
+
 	$: {
 		const shouldEnableRemoteLogs =
 			!import.meta.env.DEV && $authState.status === 'authenticated' && !$authState.offline;
@@ -142,7 +159,7 @@
 								<li>
 									<a
 										href={item.href}
-										class="btn btn-sm {$page.url.pathname === item.href
+										class="btn btn-sm {isNavItemActive(item.href)
 											? 'variant-filled-primary'
 											: 'variant-ghost-primary'}"
 									>
@@ -153,14 +170,6 @@
 							{/each}
 						</ul>
 					</nav>
-				{/if}
-
-				{#if !isLogin}
-					<div class="md:hidden">
-						<button class="btn btn-sm variant-ghost-primary" on:click={toggleDrawer}>
-							<span>☰</span>
-						</button>
-					</div>
 				{/if}
 
 				<button
@@ -190,25 +199,23 @@
 		</AppBar.Toolbar>
 	</AppBar>
 
-	{#if drawerOpen && !isLogin}
-		<div class="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
-			<button
-				class="absolute inset-0 bg-black/50"
-				aria-label="Close menu"
-				on:click={() => (drawerOpen = false)}
+	{#if moreMenuOpen && !isLogin}
+		<div class="fixed inset-0 z-40 md:hidden" role="dialog" aria-modal="true">
+			<button class="absolute inset-0 bg-black/50" aria-label="Close menu" on:click={closeMoreMenu}
 			></button>
 			<nav
-				class="absolute right-0 top-0 h-full w-72 bg-surface-50-900-token shadow-lg overflow-y-auto drawer-content p-4 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pr-[env(safe-area-inset-right)]"
+				id="mobile-more-menu"
+				class="absolute bottom-0 left-0 right-0 max-h-[75dvh] overflow-y-auto rounded-t-2xl border-t border-surface-200/70 bg-surface-50-900-token p-4 pb-[calc(env(safe-area-inset-bottom)+5.75rem)] shadow-xl dark:border-surface-700/70"
 			>
-				<ul class="list-nav flex flex-col space-y-4">
-					{#each visibleNavItems as item}
+				<ul class="list-nav flex flex-col gap-2">
+					{#each secondaryMobileNavItems as item}
 						<li>
 							<a
 								href={item.href}
-								class="btn w-full justify-start {$page.url.pathname === item.href
+								class="btn w-full justify-start {isNavItemActive(item.href)
 									? 'variant-filled-primary'
 									: 'variant-ghost-primary'}"
-								on:click={() => (drawerOpen = false)}
+								on:click={closeMoreMenu}
 							>
 								<span class="text-xl">{item.icon}</span>
 								<span>{item.label}</span>
@@ -221,7 +228,7 @@
 								type="button"
 								class="btn w-full justify-start variant-soft-error"
 								on:click={() => {
-									drawerOpen = false;
+									closeMoreMenu();
 									void auth.logout();
 								}}
 							>
@@ -243,4 +250,39 @@
 		{/if}
 		<slot />
 	</main>
+
+	{#if !isLogin}
+		<nav
+			class="fixed bottom-0 left-0 right-0 z-50 border-t border-surface-200/80 bg-surface-50-900-token px-2 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] shadow-[0_-10px_30px_rgba(15,23,42,0.12)] md:hidden dark:border-surface-700/80 dark:shadow-[0_-10px_30px_rgba(2,6,23,0.34)]"
+			aria-label="Primary mobile navigation"
+		>
+			<ul class="list-nav grid grid-cols-5 gap-1">
+				{#each primaryMobileNavItems as item}
+					<li>
+						<a
+							href={item.href}
+							class="mobile-tab {isNavItemActive(item.href) ? 'mobile-tab-active' : ''}"
+							aria-current={isNavItemActive(item.href) ? 'page' : undefined}
+						>
+							<span class="mobile-tab-icon">{item.icon}</span>
+							<span class="mobile-tab-label">{item.label}</span>
+						</a>
+					</li>
+				{/each}
+				<li>
+					<button
+						type="button"
+						class="mobile-tab {isMoreActive || moreMenuOpen ? 'mobile-tab-active' : ''}"
+						aria-label="Open more navigation"
+						aria-expanded={moreMenuOpen}
+						aria-controls="mobile-more-menu"
+						on:click={() => (moreMenuOpen = !moreMenuOpen)}
+					>
+						<span class="mobile-tab-icon" aria-hidden="true">•••</span>
+						<span class="mobile-tab-label">More</span>
+					</button>
+				</li>
+			</ul>
+		</nav>
+	{/if}
 </div>
