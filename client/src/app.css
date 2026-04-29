@@ -11,6 +11,7 @@
 	--color-surface-50-900: var(--color-surface-50);
 	--color-surface-100-800: var(--color-surface-100);
 	--mobile-nav-safe-bottom: max(0.25rem, calc(env(safe-area-inset-bottom) - 1rem));
+	--mobile-nav-row-height: 3.25rem;
 }
 
 html.dark {
@@ -108,7 +109,7 @@ body {
 }
 
 .app-content {
-	padding-bottom: calc(var(--mobile-nav-safe-bottom) + 4rem);
+	padding-bottom: calc(var(--mobile-nav-safe-bottom) + var(--mobile-nav-row-height) + 0.75rem);
 }
 
 @media (min-width: 768px) {
@@ -124,11 +125,16 @@ body {
 	left: 0;
 	z-index: 50;
 	display: block;
-	height: calc(3.5rem + var(--mobile-nav-safe-bottom));
+	height: calc(var(--mobile-nav-row-height) + var(--mobile-nav-safe-bottom) + 0.5rem);
 	border-top: 1px solid color-mix(in oklab, var(--color-surface-950-50) 18%, transparent);
 	background-color: var(--color-surface-50-900);
 	padding: 0.25rem 0.5rem var(--mobile-nav-safe-bottom);
 	box-shadow: 0 -8px 24px color-mix(in oklab, var(--color-surface-950) 10%, transparent);
+}
+
+.mobile-bottom-nav .list-nav {
+	height: var(--mobile-nav-row-height);
+	align-items: center;
 }
 
 @media (min-width: 768px) {
@@ -140,6 +146,7 @@ body {
 .mobile-tab {
 	display: grid;
 	height: 3rem;
+	width: 100%;
 	place-items: center;
 	align-content: center;
 	gap: 0.0625rem;
