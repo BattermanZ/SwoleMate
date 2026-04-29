@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { createEventDispatcher } from 'svelte';
 	import type { VolumeStats } from '$lib/types';
 	import RepPrs from '$lib/components/progress/RepPrs.svelte';
 
@@ -8,6 +9,8 @@
 
 	export let loadingExercise = false;
 	export let errorExercise: string | null = null;
+
+	const dispatch = createEventDispatcher<{ select: string }>();
 </script>
 
 <div class="card variant-glass-surface p-4 space-y-3 min-w-0">
@@ -22,6 +25,7 @@
 				class="select w-full sm:w-72 min-w-0"
 				bind:value={selectedExercise}
 				disabled={loadingExercise}
+				on:change={() => dispatch('select', selectedExercise)}
 			>
 				{#if exerciseTypes.length === 0}
 					<option value="">No exercises yet</option>
