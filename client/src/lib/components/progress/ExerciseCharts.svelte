@@ -7,6 +7,7 @@
 		observeTheme,
 		rgba,
 		readTheme,
+		sqliteWeekKeyToTimestamp,
 		upsertChart,
 		type AnyChart,
 		type ChartTheme
@@ -73,16 +74,27 @@
 			x?: Record<string, unknown>;
 			y?: Record<string, unknown>;
 		};
+		const weeklyVolumePoints = weeklyVolumeRows
+			.map((v) => ({
+				x: sqliteWeekKeyToTimestamp(v.week),
+				y: v.total_volume
+			}))
+			.filter((p): p is { x: number; y: number } => p.x != null);
+		const weeklyOneRepMaxPoints = weeklyVolumeRows
+			.map((v) => ({
+				x: sqliteWeekKeyToTimestamp(v.week),
+				y: v.max_estimated_1rm
+			}))
+			.filter((p): p is { x: number; y: number } => p.x != null);
 
 		if (hasWeeklyVolume) {
 			volumeChart = upsertChart(volumeChart, volumeCanvas, {
 				type: 'line',
 				data: {
-					labels: weeklyVolumeRows.map((v) => v.week),
 					datasets: [
 						{
 							label: 'Weekly volume (kg)',
-							data: weeklyVolumeRows.map((v) => v.total_volume),
+							data: weeklyVolumePoints,
 							borderColor: theme.primary,
 							backgroundColor: rgba(theme.primary, theme.isDark ? 0.22 : 0.14),
 							pointRadius: 3,
@@ -92,7 +104,7 @@
 						},
 						{
 							label: 'Best estimated 1RM (kg)',
-							data: weeklyVolumeRows.map((v) => v.max_estimated_1rm),
+							data: weeklyOneRepMaxPoints,
 							borderColor: theme.tertiary,
 							backgroundColor: rgba(theme.tertiary, theme.isDark ? 0.18 : 0.12),
 							pointRadius: 3,
@@ -106,8 +118,11 @@
 					...base,
 					scales: {
 						x: {
-							...(baseScales.x ?? {}),
-							title: { display: true, text: 'Week', color: theme.mutedText }
+							type: 'time',
+							time: { unit: 'month' },
+							ticks: { color: theme.mutedText, source: 'auto' },
+							grid: { color: theme.grid },
+							title: { display: true, text: 'Month', color: theme.mutedText }
 						},
 						y: {
 							...(baseScales.y ?? {}),

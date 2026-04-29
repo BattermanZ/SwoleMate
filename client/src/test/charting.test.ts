@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { formatMonthLabel, observeTheme, readTheme, rgba } from '$lib/progress/charting';
+import {
+	formatMonthLabel,
+	observeTheme,
+	readTheme,
+	rgba,
+	sqliteWeekKeyToTimestamp
+} from '$lib/progress/charting';
 
 describe('progress charting helpers', () => {
 	it('converts rgb, rgba, and hex colors to rgba', () => {
@@ -16,6 +22,13 @@ describe('progress charting helpers', () => {
 	it('formats month labels and preserves invalid values', () => {
 		expect(formatMonthLabel('2026-03')).toMatch(/26$/);
 		expect(formatMonthLabel('not-a-month')).toBe('not-a-month');
+	});
+
+	it('converts SQLite week keys to week start timestamps', () => {
+		expect(sqliteWeekKeyToTimestamp('2026-15')).toBe(Date.UTC(2026, 3, 13));
+		expect(sqliteWeekKeyToTimestamp('2026-W15')).toBe(Date.UTC(2026, 3, 13));
+		expect(sqliteWeekKeyToTimestamp('2026-00')).toBe(Date.UTC(2026, 0, 1));
+		expect(sqliteWeekKeyToTimestamp('not-a-week')).toBeNull();
 	});
 
 	it('reads theme defaults and reacts to dark mode class', () => {
