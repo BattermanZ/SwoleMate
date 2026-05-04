@@ -18,7 +18,7 @@ use url::Url;
 
 const PROTOCOL_VERSION: &str = "2025-11-25";
 const FALLBACK_PROTOCOL_VERSION: &str = "2025-03-26";
-const SERVER_INSTRUCTIONS: &str = "SwoleMate exposes one user's workout log. Start read workflows with list_workouts or list_templates, then call get_workout or get_template to find IDs for nested exercises. Use list_exercise_types before exercise-specific progress queries if you are unsure of the exact exercise name. Use ISO 8601 date-time strings; UTC is safest. timezone_offset_minutes is the user's local offset from UTC in minutes when known. Weight values are kilograms. For split implements, provide weight_left and weight_right together. replace_sets is destructive: it replaces every set on that exercise with exactly the provided array.";
+const SERVER_INSTRUCTIONS: &str = "SwoleMate exposes one user's workout log. Start read workflows with list_workouts or list_templates, then call get_workout or get_template to find IDs for nested exercises. Use list_exercise_types before exercise-specific progress queries if you are unsure of the exact exercise name. Use ISO 8601 date-time strings; UTC is safest. timezone_offset_minutes is the user's local offset from UTC in minutes when known. Weight values are kilograms. Timed sets use duration_seconds. For split implements, provide weight_left and weight_right together. replace_sets is destructive: it replaces every set on that exercise with exactly the provided array.";
 
 #[derive(Debug, Deserialize)]
 struct RpcRequest {
@@ -425,6 +425,7 @@ fn tool_definitions() -> Value {
                             "properties": {
                                 "reps": { "type": "integer", "description": "Repetition count, 0 to 500." },
                                 "weight": { "type": "number", "description": "Weight in kilograms." },
+                                "duration_seconds": { "type": "integer", "description": "Optional timed-set duration in seconds." },
                                 "notes": { "type": "string", "description": "Optional set note." },
                                 "weight_left": { "type": "number", "description": "Left-side weight in kilograms; provide together with weight_right." },
                                 "weight_right": { "type": "number", "description": "Right-side weight in kilograms; provide together with weight_left." }

@@ -6,6 +6,7 @@ export type UiSet = {
 	weight: number;
 	weightLeft?: number;
 	weightRight?: number;
+	durationSeconds?: number;
 };
 
 export type UiExerciseSetting = {
@@ -22,6 +23,9 @@ export type UiExercise = {
 	endedAt: string;
 	sets: UiSet[];
 	settings: UiExerciseSetting[];
+	tracksReps?: boolean;
+	tracksTime?: boolean;
+	tracksWeight?: boolean;
 	perSideWeight: boolean;
 	splitWeight: boolean;
 	status: 'active' | 'done';

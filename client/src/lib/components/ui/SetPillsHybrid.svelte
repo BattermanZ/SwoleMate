@@ -1,8 +1,15 @@
 <script lang="ts">
-	type SetLike = { reps: number; weight: number; weightLeft?: number; weightRight?: number };
+	type SetLike = {
+		reps: number;
+		weight: number;
+		weightLeft?: number;
+		weightRight?: number;
+		durationSeconds?: number;
+	};
 	type SetGroup = {
 		reps: number;
-		weightLabel: string;
+		durationLabel?: string;
+		weightLabel?: string;
 		totalWeight: number;
 		count: number;
 	};
@@ -28,18 +35,33 @@
 		return left === right ? `${left}kg/side` : `${left}/${right}kg`;
 	}
 
+	function formatDuration(seconds: number): string {
+		const minutes = Math.floor(seconds / 60);
+		const remaining = seconds % 60;
+		if (minutes <= 0) return `${remaining}s`;
+		return `${minutes}:${String(remaining).padStart(2, '0')}`;
+	}
+
+	function hasWeight(set: SetLike): boolean {
+		return set.weight > 0 || set.weightLeft != null || set.weightRight != null;
+	}
+
 	function groupSets(items: SetLike[]): SetGroup[] {
 		const groups: SetGroup[] = [];
 		for (const set of items) {
-			const weightLabel = formatWeight(set);
-			const key = `${set.reps}×${weightLabel}`;
-			const existing = groups.find((g) => `${g.reps}×${g.weightLabel}` === key);
+			const durationLabel = set.durationSeconds ? formatDuration(set.durationSeconds) : undefined;
+			const weightLabel = hasWeight(set) ? formatWeight(set) : undefined;
+			const key = `${set.reps}:${durationLabel ?? ''}:${weightLabel ?? ''}`;
+			const existing = groups.find(
+				(g) => `${g.reps}:${g.durationLabel ?? ''}:${g.weightLabel ?? ''}` === key
+			);
 			if (existing) {
 				existing.count += 1;
 				continue;
 			}
 			groups.push({
 				reps: set.reps,
+				durationLabel,
 				weightLabel,
 				totalWeight: setTotalWeight(set),
 				count: 1
@@ -71,8 +93,15 @@
 			{#if g.count > 1}
 				<span class="set-pill__count">{g.count}×</span>
 			{/if}
-			<span class="set-pill__reps">{g.reps}×</span>
-			<span class="set-pill__weight set-pill__weight--scale">{g.weightLabel}</span>
+			{#if g.reps > 0}
+				<span class="set-pill__reps">{g.reps}×</span>
+			{/if}
+			{#if g.durationLabel}
+				<span class="set-pill__duration">{g.durationLabel}</span>
+			{/if}
+			{#if g.weightLabel}
+				<span class="set-pill__weight set-pill__weight--scale">{g.weightLabel}</span>
+			{/if}
 		</span>
 	{/each}
 </div>
@@ -96,9 +125,10 @@
 
 	.set-pill__count,
 	.set-pill__reps,
+	.set-pill__duration,
 	.set-pill__weight {
 		font-weight: 800;
-		letter-spacing: -0.01em;
+		letter-spacing: 0;
 		line-height: 1;
 		white-space: nowrap;
 	}
@@ -112,6 +142,16 @@
 		background-color: color-mix(
 			in oklab,
 			var(--color-secondary-500) 26%,
+			var(--color-surface-50-950)
+		);
+		color: var(--color-surface-950-50);
+		border-left: 1px solid color-mix(in oklab, var(--color-surface-950-50) 14%, transparent);
+	}
+
+	.set-pill__duration {
+		background-color: color-mix(
+			in oklab,
+			var(--color-tertiary-500) 28%,
 			var(--color-surface-50-950)
 		);
 		color: var(--color-surface-950-50);
@@ -133,6 +173,7 @@
 
 	.set-pills[data-size='xs'] .set-pill__count,
 	.set-pills[data-size='xs'] .set-pill__reps,
+	.set-pills[data-size='xs'] .set-pill__duration,
 	.set-pills[data-size='xs'] .set-pill__weight {
 		padding: 0.22rem 0.5rem;
 		font-size: 0.72rem;
@@ -144,6 +185,7 @@
 
 	.set-pills[data-size='sm'] .set-pill__count,
 	.set-pills[data-size='sm'] .set-pill__reps,
+	.set-pills[data-size='sm'] .set-pill__duration,
 	.set-pills[data-size='sm'] .set-pill__weight {
 		padding: 0.26rem 0.6rem;
 		font-size: 0.78rem;
@@ -155,6 +197,7 @@
 
 	.set-pills[data-size='md'] .set-pill__count,
 	.set-pills[data-size='md'] .set-pill__reps,
+	.set-pills[data-size='md'] .set-pill__duration,
 	.set-pills[data-size='md'] .set-pill__weight {
 		padding: 0.32rem 0.7rem;
 		font-size: 0.86rem;

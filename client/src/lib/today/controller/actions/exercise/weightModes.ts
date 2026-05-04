@@ -3,6 +3,7 @@ import { get } from 'svelte/store';
 import { persistInProgressSession, setOffline } from '../../offline';
 import type { TodayState } from '../../state';
 import { getErrorMessage, isNetworkFailure } from '../../utils';
+import { trackingFieldsSetting } from '$lib/today/tracking';
 
 export type ExerciseWeightModeActions = {
 	toggleExercisePerSideWeight: (exerciseId: number, enabled: boolean) => Promise<void>;
@@ -65,7 +66,14 @@ export function createExerciseWeightModeActions(args: {
 				notes: ex.notes || undefined,
 				per_side_weight: enabled,
 				split_weight: nextSplit,
-				settings: ex.settings.map((s) => ({ key: s.key, value: s.value }))
+				settings: [
+					...ex.settings.map((s) => ({ key: s.key, value: s.value })),
+					trackingFieldsSetting({
+						reps: ex.tracksReps ?? true,
+						time: ex.tracksTime ?? false,
+						weight: ex.tracksWeight ?? true
+					})
+				]
 			});
 
 			if (nextSets.length) {
@@ -76,6 +84,7 @@ export function createExerciseWeightModeActions(args: {
 						weight: s.weight,
 						weight_left: s.weightLeft,
 						weight_right: s.weightRight,
+						duration_seconds: s.durationSeconds,
 						notes: undefined
 					}))
 				);
@@ -93,7 +102,8 @@ export function createExerciseWeightModeActions(args: {
 										reps: Number(s.reps),
 										weight: s.weight,
 										weightLeft: s.weight_left ?? undefined,
-										weightRight: s.weight_right ?? undefined
+										weightRight: s.weight_right ?? undefined,
+										durationSeconds: s.duration_seconds ?? undefined
 									}))
 								}
 							: e
@@ -155,7 +165,14 @@ export function createExerciseWeightModeActions(args: {
 				notes: ex.notes || undefined,
 				per_side_weight: true,
 				split_weight: enabled,
-				settings: ex.settings.map((s) => ({ key: s.key, value: s.value }))
+				settings: [
+					...ex.settings.map((s) => ({ key: s.key, value: s.value })),
+					trackingFieldsSetting({
+						reps: ex.tracksReps ?? true,
+						time: ex.tracksTime ?? false,
+						weight: ex.tracksWeight ?? true
+					})
+				]
 			});
 
 			if (nextSets.length) {
@@ -166,6 +183,7 @@ export function createExerciseWeightModeActions(args: {
 						weight: s.weight,
 						weight_left: s.weightLeft,
 						weight_right: s.weightRight,
+						duration_seconds: s.durationSeconds,
 						notes: undefined
 					}))
 				);
@@ -183,7 +201,8 @@ export function createExerciseWeightModeActions(args: {
 										reps: Number(s.reps),
 										weight: s.weight,
 										weightLeft: s.weight_left ?? undefined,
-										weightRight: s.weight_right ?? undefined
+										weightRight: s.weight_right ?? undefined,
+										durationSeconds: s.duration_seconds ?? undefined
 									}))
 								}
 							: e

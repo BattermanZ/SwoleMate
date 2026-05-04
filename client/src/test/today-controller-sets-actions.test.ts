@@ -70,6 +70,48 @@ describe('today controller set actions', () => {
 		});
 	});
 
+	it('adds timed set online with duration seconds', async () => {
+		apiMocks.createSet.mockResolvedValueOnce({ id: 89 });
+
+		const state = createTodayState();
+		state.currentSession.set({
+			id: 5,
+			startedAt: '2026-01-01T10:00:00.000Z',
+			notes: '',
+			exercises: [
+				{
+					id: 9,
+					name: 'Plank',
+					notes: '',
+					startedAt: '2026-01-01T10:00:00.000Z',
+					endedAt: '2026-01-01T10:05:00.000Z',
+					status: 'active',
+					perSideWeight: false,
+					splitWeight: false,
+					tracksReps: false,
+					tracksTime: true,
+					tracksWeight: false,
+					settings: [],
+					sets: []
+				}
+			]
+		});
+
+		const actions = createExerciseSetActions({ state });
+		await actions.addSet(9, 0, 0, undefined, undefined, 75);
+
+		expect(apiMocks.createSet).toHaveBeenCalledWith(
+			9,
+			expect.objectContaining({ reps: 0, weight: 0, duration_seconds: 75 })
+		);
+		expect(get(state.currentSession)!.exercises[0]!.sets[0]).toMatchObject({
+			id: 89,
+			reps: 0,
+			weight: 0,
+			durationSeconds: 75
+		});
+	});
+
 	it('falls back to offline add-set flow on network failure', async () => {
 		apiMocks.createSet.mockRejectedValueOnce(new TypeError('Failed to fetch'));
 

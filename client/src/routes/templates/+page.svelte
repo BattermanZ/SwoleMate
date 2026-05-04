@@ -17,6 +17,12 @@
 		WorkoutTemplateDetail,
 		WorkoutTemplateExerciseInput
 	} from '$lib/types';
+	import {
+		decodeTrackingFields,
+		isTrackingFieldsSetting,
+		trackingFieldsSetting,
+		TRACKING_FIELDS_SETTING_KEY
+	} from '$lib/today/tracking';
 
 	export let data: { templates: WorkoutTemplate[] };
 
@@ -32,6 +38,9 @@
 		notes: string;
 		per_side_weight: boolean;
 		split_weight: boolean;
+		tracks_reps: boolean;
+		tracks_time: boolean;
+		tracks_weight: boolean;
 		settings: DraftSetting[];
 	};
 
@@ -88,18 +97,29 @@
 		return {
 			id: detail.template.id,
 			name: detail.template.name,
-			exercises: detail.exercises.map((exercise) => ({
-				localId: `exercise-${exercise.id}`,
-				exercise_type: exercise.exercise_type,
-				notes: exercise.notes ?? '',
-				per_side_weight: exercise.per_side_weight ?? false,
-				split_weight: exercise.split_weight ?? false,
-				settings: (exercise.settings ?? []).map((setting) => ({
-					localId: `setting-${setting.id}`,
-					key: setting.key,
-					value: setting.value
-				}))
-			}))
+			exercises: detail.exercises.map((exercise) => {
+				const tracking = decodeTrackingFields(
+					(exercise.settings ?? []).find((setting) => setting.key === TRACKING_FIELDS_SETTING_KEY)
+						?.value
+				);
+				return {
+					localId: `exercise-${exercise.id}`,
+					exercise_type: exercise.exercise_type,
+					notes: exercise.notes ?? '',
+					per_side_weight: exercise.per_side_weight ?? false,
+					split_weight: exercise.split_weight ?? false,
+					tracks_reps: tracking.reps,
+					tracks_time: tracking.time,
+					tracks_weight: tracking.weight,
+					settings: (exercise.settings ?? [])
+						.filter((setting) => !isTrackingFieldsSetting(setting))
+						.map((setting) => ({
+							localId: `setting-${setting.id}`,
+							key: setting.key,
+							value: setting.value
+						}))
+				};
+			})
 		};
 	}
 
@@ -112,12 +132,17 @@
 					notes: exercise.notes.trim() || null,
 					per_side_weight: exercise.per_side_weight,
 					split_weight: exercise.split_weight,
-					settings: exercise.settings
-						.map((setting) => ({
+					settings: [
+						...exercise.settings.map((setting) => ({
 							key: setting.key.trim(),
 							value: setting.value.trim()
-						}))
-						.filter((setting) => setting.key && setting.value)
+						})),
+						trackingFieldsSetting({
+							reps: exercise.tracks_reps,
+							time: exercise.tracks_time,
+							weight: exercise.tracks_weight
+						})
+					].filter((setting) => setting.key && setting.value)
 				})
 			)
 		};
@@ -183,6 +208,9 @@
 					notes: '',
 					per_side_weight: false,
 					split_weight: false,
+					tracks_reps: true,
+					tracks_time: false,
+					tracks_weight: true,
 					settings: []
 				}
 			]
@@ -524,7 +552,52 @@
 										<label class="inline-flex items-center gap-2">
 											<input
 												type="checkbox"
+												checked={exercise.tracks_reps}
+												disabled={!exercise.tracks_time && exercise.tracks_reps}
+												on:change={(event) =>
+													updateExercise(exercise.localId, {
+														tracks_reps: (event.currentTarget as HTMLInputElement).checked
+													})}
+											/>
+											<span>Track reps</span>
+										</label>
+										<label class="inline-flex items-center gap-2">
+											<input
+												type="checkbox"
+												checked={exercise.tracks_time}
+												disabled={!exercise.tracks_reps && exercise.tracks_time}
+												on:change={(event) =>
+													updateExercise(exercise.localId, {
+														tracks_time: (event.currentTarget as HTMLInputElement).checked
+													})}
+											/>
+											<span>Track time</span>
+										</label>
+										<label class="inline-flex items-center gap-2">
+											<input
+												type="checkbox"
+												checked={exercise.tracks_weight}
+												on:change={(event) =>
+													updateExercise(exercise.localId, {
+														tracks_weight: (event.currentTarget as HTMLInputElement).checked,
+														per_side_weight: (event.currentTarget as HTMLInputElement).checked
+															? exercise.per_side_weight
+															: false,
+														split_weight: (event.currentTarget as HTMLInputElement).checked
+															? exercise.split_weight
+															: false
+													})}
+											/>
+											<span>Track weight</span>
+										</label>
+									</div>
+
+									<div class="flex flex-wrap gap-4 text-sm">
+										<label class="inline-flex items-center gap-2">
+											<input
+												type="checkbox"
 												checked={exercise.per_side_weight}
+												disabled={!exercise.tracks_weight}
 												on:change={(event) =>
 													updateExercise(exercise.localId, {
 														per_side_weight: (event.currentTarget as HTMLInputElement).checked,
@@ -539,6 +612,7 @@
 											<input
 												type="checkbox"
 												checked={exercise.split_weight}
+												disabled={!exercise.tracks_weight}
 												on:change={(event) =>
 													updateExercise(exercise.localId, {
 														split_weight: (event.currentTarget as HTMLInputElement).checked,

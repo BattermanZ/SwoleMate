@@ -24,6 +24,7 @@ import type { TodayState } from '../state';
 import { getErrorMessage, isNetworkFailure, makeLocalNumericId } from '../utils';
 import type { ExerciseSeedOptions, SeedSet } from './types';
 import { resetLocalSessionUi } from './shared';
+import { trackingFieldsSetting } from '$lib/today/tracking';
 
 export type SessionActions = {
 	startSession: (mode: 'empty' | 'demo') => Promise<void>;
@@ -81,9 +82,18 @@ export function createSessionActions(args: {
 							notes: ex.notes,
 							perSideWeight: ex.perSideWeight,
 							splitWeight: ex.splitWeight,
+							tracksReps: ex.tracksReps,
+							tracksTime: ex.tracksTime,
+							tracksWeight: ex.tracksWeight,
 							settings: ex.settings.map((s) => ({ key: s.key, value: s.value }))
 						},
-						ex.sets.map((s) => ({ reps: s.reps, weight: s.weight }))
+						ex.sets.map((s) => ({
+							reps: s.reps,
+							weight: s.weight,
+							weightLeft: s.weightLeft,
+							weightRight: s.weightRight,
+							durationSeconds: s.durationSeconds
+						}))
 					);
 				}
 			}
@@ -105,9 +115,18 @@ export function createSessionActions(args: {
 								notes: ex.notes,
 								perSideWeight: ex.perSideWeight,
 								splitWeight: ex.splitWeight,
+								tracksReps: ex.tracksReps,
+								tracksTime: ex.tracksTime,
+								tracksWeight: ex.tracksWeight,
 								settings: ex.settings.map((s) => ({ key: s.key, value: s.value }))
 							},
-							ex.sets.map((s) => ({ reps: s.reps, weight: s.weight }))
+							ex.sets.map((s) => ({
+								reps: s.reps,
+								weight: s.weight,
+								weightLeft: s.weightLeft,
+								weightRight: s.weightRight,
+								durationSeconds: s.durationSeconds
+							}))
 						);
 					}
 				}
@@ -248,7 +267,14 @@ export function createSessionActions(args: {
 							notes: e.notes || undefined,
 							per_side_weight: e.perSideWeight,
 							split_weight: e.splitWeight,
-							settings: e.settings.map((s) => ({ key: s.key, value: s.value }))
+							settings: [
+								...e.settings.map((s) => ({ key: s.key, value: s.value })),
+								trackingFieldsSetting({
+									reps: e.tracksReps ?? true,
+									time: e.tracksTime ?? false,
+									weight: e.tracksWeight ?? true
+								})
+							]
 						})
 					)
 			);

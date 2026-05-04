@@ -75,12 +75,14 @@ export interface Set {
 	weight: number;
 	weight_left?: number;
 	weight_right?: number;
+	duration_seconds?: number;
 	notes?: string | null;
 }
 
 export interface CreateSetRequest {
 	reps: number;
 	weight: number;
+	duration_seconds?: number;
 	notes?: string | null;
 	weight_left?: number;
 	weight_right?: number;

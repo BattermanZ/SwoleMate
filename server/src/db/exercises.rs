@@ -226,10 +226,11 @@ impl Database {
     ) -> Result<i64, AppError> {
         debug!(
             target: "database",
-            "Creating set for exercise #{}: {}x{}kg",
+            "Creating set for exercise #{}: {}x{}kg duration={:?}",
             exercise_id,
             req.reps,
-            req.weight
+            req.weight,
+            req.duration_seconds
         );
 
         let pool = self.pool().await;
@@ -252,8 +253,8 @@ impl Database {
 
         let result = sqlx::query!(
             r#"
-            INSERT INTO sets (user_id, exercise_id, reps, weight, weight_left, weight_right, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO sets (user_id, exercise_id, reps, weight, weight_left, weight_right, duration_seconds, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING id as "id!: i64"
             "#,
             user_id,
@@ -262,6 +263,7 @@ impl Database {
             req.weight,
             req.weight_left,
             req.weight_right,
+            req.duration_seconds,
             req.notes,
         )
         .fetch_one(&mut *tx)
@@ -331,8 +333,8 @@ impl Database {
         for req in sets {
             let result = sqlx::query!(
                 r#"
-                INSERT INTO sets (user_id, exercise_id, reps, weight, weight_left, weight_right, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO sets (user_id, exercise_id, reps, weight, weight_left, weight_right, duration_seconds, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 RETURNING id as "id!: i64"
                 "#,
                 user_id,
@@ -341,6 +343,7 @@ impl Database {
                 req.weight,
                 req.weight_left,
                 req.weight_right,
+                req.duration_seconds,
                 req.notes,
             )
             .fetch_one(&mut *tx)
@@ -357,6 +360,7 @@ impl Database {
                 weight: req.weight,
                 weight_left: req.weight_left,
                 weight_right: req.weight_right,
+                duration_seconds: req.duration_seconds,
                 notes: req.notes.clone(),
             });
         }
@@ -441,7 +445,7 @@ impl Database {
         let sets = sqlx::query_as!(
             Set,
             r#"
-            SELECT id as "id?", exercise_id, reps, weight, weight_left, weight_right, notes
+            SELECT id as "id?", exercise_id, reps, weight, weight_left, weight_right, duration_seconds, notes
             FROM sets
             WHERE exercise_id = ? AND user_id = ?
             "#,

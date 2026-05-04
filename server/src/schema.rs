@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS sets (
     exercise_id INTEGER NOT NULL,
     reps INTEGER NOT NULL,
     weight REAL NOT NULL,
+    duration_seconds INTEGER,
     notes TEXT,
     FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
 );
@@ -141,6 +142,12 @@ pub const SCHEMA_UPDATES: &[(i64, &str)] = &[
         -- Add workout templates tables.
         -- Applied via Rust migration logic in `setup_schema` (kept as a placeholder for versioning).
         SELECT 1;
+        "#,
+    ),
+    (
+        13,
+        r#"
+        ALTER TABLE sets ADD COLUMN duration_seconds INTEGER;
         "#,
     ),
 ];
@@ -296,6 +303,24 @@ pub async fn setup_schema(pool: &sqlx::Pool<sqlx::Sqlite>) -> Result<(), sqlx::E
 
             if *version == 12 {
                 migrate_workout_templates(pool).await?;
+                sqlx::query("INSERT INTO schema_version (version) VALUES (?)")
+                    .bind(*version)
+                    .execute(pool)
+                    .await?;
+                continue;
+            }
+
+            if *version == 13 {
+                let column_exists: i64 = sqlx::query_scalar(
+                    "SELECT COUNT(*) FROM pragma_table_info('sets') WHERE name = 'duration_seconds'",
+                )
+                .fetch_one(pool)
+                .await?;
+
+                if column_exists == 0 {
+                    sqlx::query(update_sql).execute(pool).await?;
+                }
+
                 sqlx::query("INSERT INTO schema_version (version) VALUES (?)")
                     .bind(*version)
                     .execute(pool)

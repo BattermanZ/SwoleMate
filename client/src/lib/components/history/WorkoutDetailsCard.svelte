@@ -43,6 +43,16 @@
 		return w.exercises.reduce((count, { sets }) => count + sets.length, 0);
 	}
 
+	function toUiSets(sets: Set[]) {
+		return sets.map((s) => ({
+			reps: s.reps,
+			weight: s.weight,
+			weightLeft: s.weight_left,
+			weightRight: s.weight_right,
+			durationSeconds: s.duration_seconds
+		}));
+	}
+
 	function avgExerciseDurationMinutes(w: WorkoutWithExercises): number | null {
 		const duration = durationMinutes(w.start_time, w.end_time);
 		if (duration === null) return null;
@@ -165,7 +175,7 @@
 							{#if sets.length}
 								<div class="mt-3">
 									<SetPillsHybrid
-										{sets}
+										sets={toUiSets(sets)}
 										perSideWeight={exercise.per_side_weight ?? false}
 										splitWeight={exercise.split_weight ?? false}
 										size="xs"

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
+	import { createEventDispatcher, onDestroy } from 'svelte';
 	import type { UiExercise } from '$lib/today/types';
 	import SetPillsHybrid from '$lib/components/ui/SetPillsHybrid.svelte';
 	import { formatDateShort } from '$lib/utils/date';
@@ -11,7 +11,13 @@
 		| {
 				startedAt: string;
 				notes: string;
-				sets: Array<{ reps: number; weight: number; weightLeft?: number; weightRight?: number }>;
+				sets: Array<{
+					reps: number;
+					weight: number;
+					weightLeft?: number;
+					weightRight?: number;
+					durationSeconds?: number;
+				}>;
 				perSideWeight: boolean;
 				splitWeight: boolean;
 		  }
@@ -21,30 +27,46 @@
 		toggle: undefined;
 		delete: undefined;
 		markDone: undefined;
-		addSet: { reps: number; weight: number; weightLeft?: number; weightRight?: number };
+		addSet: {
+			reps: number;
+			weight: number;
+			weightLeft?: number;
+			weightRight?: number;
+			durationSeconds?: number;
+		};
 		updateNotes: { notes: string };
 		addSetting: { key: string; value: string };
 		removeSetting: { id: string };
 		updateSetting: { id: string; key: string; value: string };
 		togglePerSideWeight: { enabled: boolean };
 		toggleSplitWeight: { enabled: boolean };
+		updateTracking: { reps: boolean; time: boolean; weight: boolean };
 	}>();
 
 	let setReps = 12;
 	let setWeight = 0;
 	let setWeightLeft = 0;
 	let setWeightRight = 0;
+	let setDurationSeconds = 60;
 	let notesDraft = '';
 	let newSettingKey = '';
 	let newSettingValue = '';
 	let editing = false;
 	let locked = false;
 	let didPrefillFromLast = false;
+	let timerRunning = false;
+	let timerStartedAt = 0;
+	let timerBaseSeconds = 0;
+	let timerElapsedSeconds = 0;
+	let timerInterval: number | undefined;
 
 	$: notesDraft = exercise.notes;
 	$: locked = disabled || (exercise.status === 'done' && !editing);
 	$: if (exercise.status !== 'done') editing = false;
 	$: if (exercise.sets.length > 0) didPrefillFromLast = true;
+	$: tracksReps = exercise.tracksReps ?? true;
+	$: tracksTime = exercise.tracksTime ?? false;
+	$: tracksWeight = exercise.tracksWeight ?? true;
 
 	$: if (
 		isOpen &&
@@ -56,6 +78,7 @@
 		const first = lastTime.sets[0];
 		if (first) {
 			setReps = first.reps;
+			if (first.durationSeconds) setDurationSeconds = first.durationSeconds;
 			if (!exercise.perSideWeight) {
 				setWeight = first.weight;
 			} else if (!exercise.splitWeight) {
@@ -99,10 +122,25 @@
 		);
 	}
 
+	function durationForSets(sets: Array<{ durationSeconds?: number }>) {
+		return sets.reduce((total, s) => total + (s.durationSeconds ?? 0), 0);
+	}
+
+	function setSummaryLabel() {
+		const totalVolume = Math.round(
+			volumeForSets(exercise.sets, exercise.perSideWeight, exercise.splitWeight)
+		);
+		if (totalVolume > 0) return `${totalVolume} kg`;
+		const totalDuration = durationForSets(exercise.sets);
+		if (totalDuration > 0) return formatDuration(totalDuration);
+		return '0 kg';
+	}
+
 	function useLastSet() {
 		const last = exercise.sets[exercise.sets.length - 1];
 		if (!last) return;
 		setReps = last.reps;
+		if (last.durationSeconds) setDurationSeconds = last.durationSeconds;
 		if (!exercise.perSideWeight) {
 			setWeight = last.weight;
 			return;
@@ -117,25 +155,98 @@
 
 	function addSet() {
 		if (locked) return;
-		if (setReps <= 0) return;
+		const reps = tracksReps ? setReps : 0;
+		const durationSeconds = tracksTime ? Math.round(setDurationSeconds) : undefined;
+		if (reps <= 0 && !durationSeconds) return;
+		if (durationSeconds !== undefined && durationSeconds <= 0) return;
+		if (!tracksWeight) {
+			dispatch('addSet', { reps, weight: 0, durationSeconds });
+			return;
+		}
 		if (!exercise.perSideWeight) {
 			if (setWeight < 0) return;
-			dispatch('addSet', { reps: setReps, weight: setWeight });
+			dispatch('addSet', { reps, weight: setWeight, durationSeconds });
 			return;
 		}
 		if (!exercise.splitWeight) {
 			if (setWeight < 0) return;
-			dispatch('addSet', { reps: setReps, weight: setWeight });
+			dispatch('addSet', { reps, weight: setWeight, durationSeconds });
 			return;
 		}
 		if (setWeightLeft < 0 || setWeightRight < 0) return;
 		dispatch('addSet', {
-			reps: setReps,
+			reps,
 			weight: (setWeightLeft + setWeightRight) / 2,
 			weightLeft: setWeightLeft,
-			weightRight: setWeightRight
+			weightRight: setWeightRight,
+			durationSeconds
 		});
 	}
+
+	function formatDuration(seconds: number): string {
+		const value = Math.max(0, Math.round(seconds));
+		const minutes = Math.floor(value / 60);
+		const remaining = value % 60;
+		return `${minutes}:${String(remaining).padStart(2, '0')}`;
+	}
+
+	function stopTimerInterval() {
+		if (timerInterval !== undefined && typeof window !== 'undefined') {
+			window.clearInterval(timerInterval);
+		}
+		timerInterval = undefined;
+	}
+
+	function tickTimer() {
+		timerElapsedSeconds =
+			timerBaseSeconds + Math.floor(Math.max(0, Date.now() - timerStartedAt) / 1000);
+		setDurationSeconds = Math.max(1, timerElapsedSeconds);
+	}
+
+	function startTimer() {
+		if (locked || !tracksTime || timerRunning || typeof window === 'undefined') return;
+		timerRunning = true;
+		timerStartedAt = Date.now();
+		timerBaseSeconds = timerElapsedSeconds;
+		tickTimer();
+		timerInterval = window.setInterval(tickTimer, 250);
+	}
+
+	function pauseTimer() {
+		if (!timerRunning) return;
+		tickTimer();
+		timerBaseSeconds = timerElapsedSeconds;
+		timerRunning = false;
+		stopTimerInterval();
+	}
+
+	function resetTimer() {
+		timerRunning = false;
+		timerBaseSeconds = 0;
+		timerElapsedSeconds = 0;
+		stopTimerInterval();
+		setDurationSeconds = 60;
+	}
+
+	function saveTimedSet() {
+		if (timerRunning) pauseTimer();
+		if (timerElapsedSeconds > 0) setDurationSeconds = timerElapsedSeconds;
+		addSet();
+		resetTimer();
+	}
+
+	function updateTracking(patch: Partial<{ reps: boolean; time: boolean; weight: boolean }>) {
+		if (locked) return;
+		const next = {
+			reps: patch.reps ?? tracksReps,
+			time: patch.time ?? tracksTime,
+			weight: patch.weight ?? tracksWeight
+		};
+		if (!next.reps && !next.time) next.reps = true;
+		dispatch('updateTracking', next);
+	}
+
+	onDestroy(stopTimerInterval);
 
 	function saveNotes() {
 		if (locked) return;
@@ -207,9 +318,7 @@
 			<div class="mt-1 flex flex-wrap gap-2 text-sm opacity-80">
 				<span>{exercise.sets.length} set{exercise.sets.length === 1 ? '' : 's'}</span>
 				<span class="opacity-50">•</span>
-				<span
-					>{Math.round(volumeForSets(exercise.sets, exercise.perSideWeight, exercise.splitWeight))} kg</span
-				>
+				<span>{setSummaryLabel()}</span>
 			</div>
 		</button>
 
@@ -347,13 +456,45 @@
 							<input
 								type="checkbox"
 								class="checkbox"
-								checked={exercise.perSideWeight}
-								disabled={locked}
-								on:change={(e) => togglePerSideWeight(e.currentTarget.checked)}
+								checked={tracksReps}
+								disabled={locked || (!tracksTime && tracksReps)}
+								on:change={(e) => updateTracking({ reps: e.currentTarget.checked })}
 							/>
-							Per-side weights
+							Track reps
 						</label>
-						{#if exercise.perSideWeight}
+						<label class="flex items-center gap-2 text-xs opacity-80 select-none">
+							<input
+								type="checkbox"
+								class="checkbox"
+								checked={tracksTime}
+								disabled={locked || (!tracksReps && tracksTime)}
+								on:change={(e) => updateTracking({ time: e.currentTarget.checked })}
+							/>
+							Track time
+						</label>
+						<label class="flex items-center gap-2 text-xs opacity-80 select-none">
+							<input
+								type="checkbox"
+								class="checkbox"
+								checked={tracksWeight}
+								disabled={locked}
+								on:change={(e) => updateTracking({ weight: e.currentTarget.checked })}
+							/>
+							Track weight
+						</label>
+						{#if tracksWeight}
+							<label class="flex items-center gap-2 text-xs opacity-80 select-none">
+								<input
+									type="checkbox"
+									class="checkbox"
+									checked={exercise.perSideWeight}
+									disabled={locked}
+									on:change={(e) => togglePerSideWeight(e.currentTarget.checked)}
+								/>
+								Per-side weights
+							</label>
+						{/if}
+						{#if tracksWeight && exercise.perSideWeight}
 							<label class="flex items-center gap-2 text-xs opacity-80 select-none">
 								<input
 									type="checkbox"
@@ -390,19 +531,64 @@
 				{/if}
 
 				<div class="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 items-end">
-					<label class="block">
-						<span class="text-xs font-semibold opacity-70">Reps</span>
-						<input
-							type="number"
-							min="0"
-							inputmode="numeric"
-							pattern="[0-9]*"
-							class="input w-full min-w-0"
-							bind:value={setReps}
-							disabled={locked}
-						/>
-					</label>
-					{#if !exercise.perSideWeight}
+					{#if tracksReps}
+						<label class="block">
+							<span class="text-xs font-semibold opacity-70">Reps</span>
+							<input
+								type="number"
+								min="0"
+								inputmode="numeric"
+								pattern="[0-9]*"
+								class="input w-full min-w-0"
+								bind:value={setReps}
+								disabled={locked}
+							/>
+						</label>
+					{/if}
+					{#if tracksTime}
+						<div class="block">
+							<label class="block">
+								<span class="text-xs font-semibold opacity-70">Duration (sec)</span>
+								<input
+									type="number"
+									min="1"
+									inputmode="numeric"
+									pattern="[0-9]*"
+									class="input w-full min-w-0"
+									bind:value={setDurationSeconds}
+									disabled={locked || timerRunning}
+								/>
+							</label>
+							<div class="mt-2 flex flex-wrap items-center gap-2">
+								<span class="text-sm font-bold tabular-nums"
+									>{formatDuration(timerElapsedSeconds)}</span
+								>
+								{#if timerRunning}
+									<button type="button" class="btn btn-xs variant-soft" on:click={pauseTimer}>
+										Pause
+									</button>
+								{:else}
+									<button
+										type="button"
+										class="btn btn-xs variant-soft"
+										on:click={startTimer}
+										disabled={locked}
+									>
+										Start
+									</button>
+								{/if}
+								<button
+									type="button"
+									class="btn btn-xs variant-ghost"
+									on:click={resetTimer}
+									disabled={locked || (!timerElapsedSeconds && !timerRunning)}
+								>
+									Reset
+								</button>
+							</div>
+						</div>
+					{/if}
+					{#if tracksWeight && !exercise.perSideWeight}
 						<label class="block">
 							<span class="text-xs font-semibold opacity-70">Weight (kg)</span>
 							<input
@@ -415,7 +601,7 @@
 								disabled={locked}
 							/>
 						</label>
-					{:else if !exercise.splitWeight}
+					{:else if tracksWeight && !exercise.splitWeight}
 						<label class="block">
 							<span class="text-xs font-semibold opacity-70">Per side (kg)</span>
 							<input
@@ -428,7 +614,7 @@
 								disabled={locked}
 							/>
 						</label>
-					{:else}
+					{:else if tracksWeight}
 						<div class="grid grid-cols-2 gap-2 min-w-0">
 							<label class="block">
 								<span class="text-xs font-semibold opacity-70">Left (kg)</span>
@@ -459,7 +645,7 @@
 					<button
 						type="button"
 						class="btn variant-filled-primary w-full sm:w-auto"
-						on:click={addSet}
+						on:click={timerElapsedSeconds > 0 ? saveTimedSet : addSet}
 						disabled={locked}
 					>
 						Add set

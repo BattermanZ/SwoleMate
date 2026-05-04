@@ -49,7 +49,8 @@
 		totalSets,
 		totalVolumeKg,
 		updateExerciseNotes,
-		updateExerciseSetting
+		updateExerciseSetting,
+		updateExerciseTracking
 	} = controller;
 
 	let showDemoAction = false;
@@ -298,7 +299,8 @@
 										e.detail.reps,
 										e.detail.weight,
 										e.detail.weightLeft,
-										e.detail.weightRight
+										e.detail.weightRight,
+										e.detail.durationSeconds
 									)}
 								on:updateNotes={(e) => updateExerciseNotes(ex.id, e.detail.notes)}
 								on:addSetting={(e) => addExerciseSetting(ex.id, e.detail.key, e.detail.value)}
@@ -307,6 +309,7 @@
 									updateExerciseSetting(ex.id, e.detail.id, e.detail.key, e.detail.value)}
 								on:togglePerSideWeight={(e) => toggleExercisePerSideWeight(ex.id, e.detail.enabled)}
 								on:toggleSplitWeight={(e) => toggleExerciseSplitWeight(ex.id, e.detail.enabled)}
+								on:updateTracking={(e) => updateExerciseTracking(ex.id, e.detail)}
 							/>
 						{/each}
 					</div>

@@ -12,6 +12,7 @@ const MAX_SETTINGS_PER_EXERCISE: usize = 24;
 const MAX_TEMPLATE_EXERCISES: usize = 64;
 const MAX_REPS: i64 = 500;
 const MAX_WEIGHT_KG: f64 = 2000.0;
+const MAX_DURATION_SECONDS: i64 = 24 * 60 * 60;
 const MAX_TIMEZONE_OFFSET_MINUTES: i64 = 14 * 60;
 const ALLOWED_FEEDBACK: [&str; 3] = ["😊", "😐", "😞"];
 
@@ -179,6 +180,8 @@ pub struct Set {
     pub weight_left: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub weight_right: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_seconds: Option<i64>,
     pub notes: Option<String>,
 }
 
@@ -433,6 +436,8 @@ impl StartWorkoutFromTemplateRequest {
 pub struct CreateSetRequest {
     pub reps: i64,
     pub weight: f64,
+    #[serde(default)]
+    pub duration_seconds: Option<i64>,
     pub notes: Option<String>,
     #[serde(default)]
     pub weight_left: Option<f64>,
@@ -446,6 +451,16 @@ impl CreateSetRequest {
             return Err(format!("reps must be between 0 and {MAX_REPS}"));
         }
         validate_f64("weight", self.weight, 0.0, MAX_WEIGHT_KG)?;
+        if let Some(duration) = self.duration_seconds {
+            if duration <= 0 || duration > MAX_DURATION_SECONDS {
+                return Err(format!(
+                    "duration_seconds must be between 1 and {MAX_DURATION_SECONDS}"
+                ));
+            }
+        }
+        if self.reps == 0 && self.duration_seconds.is_none() {
+            return Err("sets must include reps or duration_seconds".to_string());
+        }
         validate_opt_len("notes", &self.notes, MAX_NOTES_LEN)?;
 
         let left = self.weight_left;

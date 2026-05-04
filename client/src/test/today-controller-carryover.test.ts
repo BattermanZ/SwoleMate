@@ -64,10 +64,11 @@ describe('today controller carry-over', () => {
 				exercise_type: 'Bench Press',
 				per_side_weight: true,
 				split_weight: false,
-				settings: [
+				settings: expect.arrayContaining([
 					{ key: 'Bench', value: 'Flat' },
-					{ key: 'Rack height', value: '6' }
-				]
+					{ key: 'Rack height', value: '6' },
+					{ key: '_tracking_fields', value: 'reps,weight' }
+				])
 			})
 		);
 
@@ -75,6 +76,9 @@ describe('today controller carry-over', () => {
 		expect(updated?.exercises).toHaveLength(1);
 		expect(updated?.exercises[0]?.perSideWeight).toBe(true);
 		expect(updated?.exercises[0]?.splitWeight).toBe(false);
+		expect(updated?.exercises[0]?.tracksReps).toBe(true);
+		expect(updated?.exercises[0]?.tracksTime).toBe(false);
+		expect(updated?.exercises[0]?.tracksWeight).toBe(true);
 		expect(updated?.exercises[0]?.settings.map((s) => `${s.key}:${s.value}`)).toEqual([
 			'Bench:Flat',
 			'Rack height:6'

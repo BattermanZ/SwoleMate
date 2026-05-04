@@ -1939,7 +1939,7 @@ async fn replace_sets_endpoint_replaces_existing_sets_and_validates_payload() {
         .uri(&format!("/api/exercises/{exercise_id}/sets"))
         .set_json(json!([
             { "reps": 3, "weight": 90.0, "notes": "heavy" },
-            { "reps": 8, "weight": 70.0 }
+            { "reps": 0, "weight": 20.0, "duration_seconds": 75 }
         ]))
         .to_request();
     let resp = test::call_service(&app, req).await;
@@ -1955,12 +1955,21 @@ async fn replace_sets_endpoint_replaces_existing_sets_and_validates_payload() {
     assert_eq!(sets.len(), 2);
     assert_eq!(sets[0]["reps"], 3);
     assert_eq!(sets[0]["weight"], 90.0);
+    assert_eq!(sets[1]["reps"], 0);
+    assert_eq!(sets[1]["duration_seconds"], 75);
 
     let req = with_cookie(test::TestRequest::put(), &cookie)
         .uri(&format!("/api/exercises/{exercise_id}/sets"))
         .set_json(json!([
             { "reps": 10, "weight": 20.0, "weight_left": 10.0 }
         ]))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/exercises/{exercise_id}/sets"))
+        .set_json(json!({ "reps": 0, "weight": 0.0 }))
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 400);
