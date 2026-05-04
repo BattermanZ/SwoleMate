@@ -74,6 +74,30 @@ fn redact_database_url(database_url: &str) -> String {
     }
 }
 
+fn next_backup_after(now: chrono::DateTime<Local>) -> chrono::DateTime<Local> {
+    let days_until_monday = (7 + Weekday::Mon.num_days_from_monday() as i64
+        - now.weekday().num_days_from_monday() as i64)
+        % 7;
+    let mut monday_date = now.date_naive() + chrono::Duration::days(days_until_monday);
+    let mut next_backup = local_datetime_at(monday_date, 1);
+
+    if next_backup <= now {
+        monday_date += chrono::Duration::days(7);
+        next_backup = local_datetime_at(monday_date, 1);
+    }
+
+    next_backup
+}
+
+fn sleep_duration_until(
+    now: chrono::DateTime<Local>,
+    next_backup: chrono::DateTime<Local>,
+) -> Duration {
+    (next_backup - now)
+        .to_std()
+        .unwrap_or_else(|_| Duration::from_secs(0))
+}
+
 async fn schedule_backups(mut shutdown: watch::Receiver<bool>) {
     info!("Starting automatic backup scheduler");
     loop {
@@ -83,20 +107,10 @@ async fn schedule_backups(mut shutdown: watch::Receiver<bool>) {
         }
 
         let now = Local::now();
-        let days_until_monday = (7 + Weekday::Mon.num_days_from_monday() as i64
-            - now.weekday().num_days_from_monday() as i64)
-            % 7;
-        let mut monday_date = now.date_naive() + chrono::Duration::days(days_until_monday);
-        let mut next_backup = local_datetime_at(monday_date, 1);
-
-        if next_backup <= now {
-            monday_date += chrono::Duration::days(7);
-            next_backup = local_datetime_at(monday_date, 1);
-        }
-
-        let seconds = (next_backup - now).num_seconds().max(0) as u64;
+        let next_backup = next_backup_after(now);
+        let sleep_duration = sleep_duration_until(now, next_backup);
         tokio::select! {
-            _ = sleep(Duration::from_secs(seconds)) => {},
+            _ = sleep(sleep_duration) => {},
             _ = shutdown.changed() => {
                 info!("Backup scheduler stopping (shutdown requested)");
                 break;
@@ -113,6 +127,44 @@ async fn schedule_backups(mut shutdown: watch::Receiver<bool>) {
             Ok(backup_info) => info!("Automatic backup created: {}", backup_info.filename),
             Err(e) => error!("Failed to create automatic backup: {}", e),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Duration as ChronoDuration;
+
+    #[test]
+    fn backup_sleep_preserves_subsecond_wait_before_target() {
+        let now = local_datetime_at(
+            NaiveDate::from_ymd_opt(2026, 5, 4).expect("valid test date"),
+            0,
+        ) + ChronoDuration::minutes(59)
+            + ChronoDuration::seconds(59)
+            + ChronoDuration::milliseconds(500);
+
+        let next_backup = next_backup_after(now);
+        let sleep_duration = sleep_duration_until(now, next_backup);
+
+        assert_eq!(next_backup, local_datetime_at(now.date_naive(), 1));
+        assert!(sleep_duration > Duration::from_millis(0));
+        assert!(sleep_duration < Duration::from_secs(1));
+    }
+
+    #[test]
+    fn next_backup_moves_to_following_week_at_target_time() {
+        let now = local_datetime_at(
+            NaiveDate::from_ymd_opt(2026, 5, 4).expect("valid test date"),
+            1,
+        );
+
+        let next_backup = next_backup_after(now);
+
+        assert_eq!(
+            next_backup.date_naive(),
+            now.date_naive() + ChronoDuration::days(7)
+        );
     }
 }
 
