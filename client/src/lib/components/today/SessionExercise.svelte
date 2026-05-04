@@ -235,6 +235,14 @@
 		resetTimer();
 	}
 
+	function updateDurationSeconds(value: string) {
+		setDurationSeconds = Number(value);
+		if (!timerRunning && timerElapsedSeconds > 0) {
+			timerElapsedSeconds = 0;
+			timerBaseSeconds = 0;
+		}
+	}
+
 	function updateTracking(patch: Partial<{ reps: boolean; time: boolean; weight: boolean }>) {
 		if (locked) return;
 		const next = {
@@ -555,7 +563,8 @@
 									inputmode="numeric"
 									pattern="[0-9]*"
 									class="input w-full min-w-0"
-									bind:value={setDurationSeconds}
+									value={setDurationSeconds}
+									on:input={(e) => updateDurationSeconds(e.currentTarget.value)}
 									disabled={locked || timerRunning}
 								/>
 							</label>

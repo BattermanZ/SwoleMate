@@ -175,6 +175,7 @@ vi.mock('$lib/today/controller', () => {
 			toggleExerciseSplitWeight: vi.fn(async () => undefined),
 			totalSets: writable(0),
 			totalVolumeKg: writable(0),
+			totalDurationSeconds: writable(0),
 			updateExerciseNotes: vi.fn(),
 			updateExerciseSetting: vi.fn()
 		})

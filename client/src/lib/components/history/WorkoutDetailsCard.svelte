@@ -43,6 +43,23 @@
 		return w.exercises.reduce((count, { sets }) => count + sets.length, 0);
 	}
 
+	function totalDurationSeconds(w: WorkoutWithExercises): number {
+		return w.exercises.reduce(
+			(total, { sets }) => total + sets.reduce((sum, set) => sum + (set.duration_seconds ?? 0), 0),
+			0
+		);
+	}
+
+	function formatSetDuration(seconds: number): string {
+		const value = Math.max(0, Math.round(seconds));
+		const minutes = Math.floor(value / 60);
+		const remaining = value % 60;
+		if (minutes < 60) return `${minutes}:${String(remaining).padStart(2, '0')}`;
+		const hours = Math.floor(minutes / 60);
+		const remMinutes = minutes % 60;
+		return remMinutes ? `${hours}h ${remMinutes}m` : `${hours}h`;
+	}
+
 	function toUiSets(sets: Set[]) {
 		return sets.map((s) => ({
 			reps: s.reps,
@@ -115,8 +132,23 @@
 					<div class="text-sm font-bold">{totalSets(workout)}</div>
 				</div>
 				<div class="card variant-glass-surface p-3 border-l-4 border-success-500/70">
-					<div class="text-xs font-semibold opacity-70">Volume</div>
-					<div class="text-sm font-bold">{Math.round(totalVolumeKg(workout))} kg</div>
+					<div class="text-xs font-semibold opacity-70">
+						{totalVolumeKg(workout) > 0
+							? 'Volume'
+							: totalDurationSeconds(workout) > 0
+								? 'Time'
+								: 'Volume'}
+					</div>
+					<div class="text-sm font-bold">
+						{totalVolumeKg(workout) > 0
+							? `${Math.round(totalVolumeKg(workout))} kg`
+							: totalDurationSeconds(workout) > 0
+								? formatSetDuration(totalDurationSeconds(workout))
+								: '0 kg'}
+					</div>
+					{#if totalVolumeKg(workout) > 0 && totalDurationSeconds(workout) > 0}
+						<div class="text-xs opacity-65">{formatSetDuration(totalDurationSeconds(workout))}</div>
+					{/if}
 				</div>
 			</div>
 

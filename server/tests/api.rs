@@ -1205,6 +1205,62 @@ async fn workout_and_exercise_flow_works_for_normal_user() {
 }
 
 #[actix_web::test]
+async fn hidden_tracking_setting_does_not_consume_visible_settings_limit() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(
+        &app,
+        &admin_cookie,
+        "settings-limit-user",
+        "passwordpassword",
+    )
+    .await;
+    let cookie = login_cookie_active(&app, "settings-limit-user", "passwordpassword").await;
+    let now = chrono::Utc::now();
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri("/api/workouts")
+        .set_json(json!({ "date": now, "start_time": now, "notes": "settings limit" }))
+        .to_request();
+    let workout_id = json_body(test::call_service(&app, req).await).await["id"]
+        .as_i64()
+        .expect("workout id");
+
+    let mut settings: Vec<_> = (0..24)
+        .map(|i| json!({ "key": format!("setting_{i}"), "value": "1" }))
+        .collect();
+    settings.push(json!({ "key": "_tracking_fields", "value": "reps,time,weight" }));
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}/exercises"))
+        .set_json(json!({
+            "exercise_type": "Plank",
+            "start_time": now,
+            "settings": settings
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 201);
+
+    let mut too_many_settings: Vec<_> = (0..25)
+        .map(|i| json!({ "key": format!("visible_{i}"), "value": "1" }))
+        .collect();
+    too_many_settings.push(json!({ "key": "_tracking_fields", "value": "reps,time,weight" }));
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}/exercises"))
+        .set_json(json!({
+            "exercise_type": "Side plank",
+            "start_time": now,
+            "settings": too_many_settings
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+}
+
+#[actix_web::test]
 async fn data_is_scoped_per_user() {
     let _env = TestEnv::new();
     let (_db, admin_cookie, app) = setup_test_app().await;

@@ -47,6 +47,7 @@
 		toggleExercisePerSideWeight,
 		toggleExerciseSplitWeight,
 		totalSets,
+		totalDurationSeconds,
 		totalVolumeKg,
 		updateExerciseNotes,
 		updateExerciseSetting,
@@ -81,6 +82,16 @@
 	async function handleStartFromTemplate(templateId: number) {
 		await startSessionFromTemplate(templateId);
 		if (!$error) templatePickerOpen = false;
+	}
+
+	function formatSetDuration(seconds: number): string {
+		const value = Math.max(0, Math.round(seconds));
+		const minutes = Math.floor(value / 60);
+		const remaining = value % 60;
+		if (minutes < 60) return `${minutes}:${String(remaining).padStart(2, '0')}`;
+		const hours = Math.floor(minutes / 60);
+		const remMinutes = minutes % 60;
+		return remMinutes ? `${hours}h ${remMinutes}m` : `${hours}h`;
 	}
 </script>
 
@@ -206,8 +217,19 @@
 					<div class="text-lg font-bold">{$totalSets}</div>
 				</div>
 				<div class="card variant-glass-surface p-3">
-					<div class="text-xs font-semibold opacity-70">Volume</div>
-					<div class="text-lg font-bold">{Math.round($totalVolumeKg)} kg</div>
+					<div class="text-xs font-semibold opacity-70">
+						{$totalVolumeKg > 0 ? 'Volume' : $totalDurationSeconds > 0 ? 'Time' : 'Volume'}
+					</div>
+					<div class="text-lg font-bold">
+						{$totalVolumeKg > 0
+							? `${Math.round($totalVolumeKg)} kg`
+							: $totalDurationSeconds > 0
+								? formatSetDuration($totalDurationSeconds)
+								: '0 kg'}
+					</div>
+					{#if $totalVolumeKg > 0 && $totalDurationSeconds > 0}
+						<div class="text-xs opacity-65">{formatSetDuration($totalDurationSeconds)} timed</div>
+					{/if}
 				</div>
 			</div>
 		{/if}

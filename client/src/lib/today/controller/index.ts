@@ -25,6 +25,7 @@ export function createTodayController() {
 		suggestions: state.suggestions,
 		totalSets: state.totalSets,
 		totalVolumeKg: state.totalVolumeKg,
+		totalDurationSeconds: state.totalDurationSeconds,
 
 		// actions
 		...actions

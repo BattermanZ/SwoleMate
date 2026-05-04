@@ -9,6 +9,7 @@ const MAX_TEMPLATE_NAME_LEN: usize = 120;
 const MAX_SETTING_KEY_LEN: usize = 64;
 const MAX_SETTING_VALUE_LEN: usize = 128;
 const MAX_SETTINGS_PER_EXERCISE: usize = 24;
+const TRACKING_FIELDS_SETTING_KEY: &str = "_tracking_fields";
 const MAX_TEMPLATE_EXERCISES: usize = 64;
 const MAX_REPS: i64 = 500;
 const MAX_WEIGHT_KG: f64 = 2000.0;
@@ -95,19 +96,32 @@ fn validate_template_exercises(exercises: &[WorkoutTemplateExerciseRequest]) -> 
             MAX_EXERCISE_TYPE_LEN,
         )?;
         validate_opt_len("notes", &exercise.notes, MAX_NOTES_LEN)?;
-        if let Some(settings) = exercise.settings.as_ref() {
-            if settings.len() > MAX_SETTINGS_PER_EXERCISE {
-                return Err(format!(
-                    "settings must have at most {MAX_SETTINGS_PER_EXERCISE} items"
-                ));
-            }
-            for s in settings {
-                validate_nonempty_len("settings.key", &s.key, MAX_SETTING_KEY_LEN)?;
-                validate_nonempty_len("settings.value", &s.value, MAX_SETTING_VALUE_LEN)?;
-            }
-        }
+        validate_exercise_settings(&exercise.settings)?;
     }
 
+    Ok(())
+}
+
+fn validate_exercise_settings(
+    settings: &Option<Vec<ExerciseSettingRequest>>,
+) -> Result<(), String> {
+    let Some(settings) = settings.as_ref() else {
+        return Ok(());
+    };
+
+    let visible_settings = settings
+        .iter()
+        .filter(|s| s.key != TRACKING_FIELDS_SETTING_KEY)
+        .count();
+    if visible_settings > MAX_SETTINGS_PER_EXERCISE {
+        return Err(format!(
+            "settings must have at most {MAX_SETTINGS_PER_EXERCISE} items"
+        ));
+    }
+    for s in settings {
+        validate_nonempty_len("settings.key", &s.key, MAX_SETTING_KEY_LEN)?;
+        validate_nonempty_len("settings.value", &s.value, MAX_SETTING_VALUE_LEN)?;
+    }
     Ok(())
 }
 
@@ -298,17 +312,7 @@ impl CreateExerciseRequest {
     pub fn validate(&self) -> Result<(), String> {
         validate_nonempty_len("exercise_type", &self.exercise_type, MAX_EXERCISE_TYPE_LEN)?;
         validate_opt_len("notes", &self.notes, MAX_NOTES_LEN)?;
-        if let Some(settings) = self.settings.as_ref() {
-            if settings.len() > MAX_SETTINGS_PER_EXERCISE {
-                return Err(format!(
-                    "settings must have at most {MAX_SETTINGS_PER_EXERCISE} items"
-                ));
-            }
-            for s in settings {
-                validate_nonempty_len("settings.key", &s.key, MAX_SETTING_KEY_LEN)?;
-                validate_nonempty_len("settings.value", &s.value, MAX_SETTING_VALUE_LEN)?;
-            }
-        }
+        validate_exercise_settings(&self.settings)?;
         Ok(())
     }
 }
@@ -328,17 +332,7 @@ pub struct UpdateExerciseRequest {
 impl UpdateExerciseRequest {
     pub fn validate(&self) -> Result<(), String> {
         validate_opt_len("notes", &self.notes, MAX_NOTES_LEN)?;
-        if let Some(settings) = self.settings.as_ref() {
-            if settings.len() > MAX_SETTINGS_PER_EXERCISE {
-                return Err(format!(
-                    "settings must have at most {MAX_SETTINGS_PER_EXERCISE} items"
-                ));
-            }
-            for s in settings {
-                validate_nonempty_len("settings.key", &s.key, MAX_SETTING_KEY_LEN)?;
-                validate_nonempty_len("settings.value", &s.value, MAX_SETTING_VALUE_LEN)?;
-            }
-        }
+        validate_exercise_settings(&self.settings)?;
         Ok(())
     }
 }
