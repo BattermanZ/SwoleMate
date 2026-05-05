@@ -76,6 +76,8 @@
 			? Math.max(0, Math.min(1, timerRemainingSeconds / timerTargetSeconds))
 			: 1;
 	$: timerProgressPct = `${Math.round(timerProgress * 100)}%`;
+	$: timerTone =
+		timerComplete || timerProgress <= 0.15 ? 'danger' : timerProgress <= 0.4 ? 'warning' : 'steady';
 
 	$: if (
 		isOpen &&
@@ -722,6 +724,7 @@
 
 			<div
 				class="timer-dial {!timerRunning ? 'timer-dial--paused' : ''}"
+				data-tone={timerTone}
 				style={`--timer-progress:${timerProgressPct}`}
 			>
 				<div class="timer-dial__inner">
@@ -807,11 +810,13 @@
 		display: grid;
 		place-items: center;
 		padding: 0.9rem;
+		--timer-ring-color: var(--color-success-400);
+		--timer-track-color: rgb(51 65 85);
 		background:
 			conic-gradient(
-				from -90deg,
-				var(--color-primary-400) 0 var(--timer-progress),
-				rgb(51 65 85) var(--timer-progress) 100%
+				from 0deg,
+				var(--timer-ring-color) 0 var(--timer-progress),
+				var(--timer-track-color) var(--timer-progress) 100%
 			),
 			rgb(15 23 42 / 0.92);
 		box-shadow:
@@ -823,12 +828,20 @@
 	.timer-dial--paused {
 		background:
 			conic-gradient(
-				from -90deg,
-				rgb(148 163 184) 0 var(--timer-progress),
-				rgb(51 65 85) var(--timer-progress) 100%
+				from 0deg,
+				var(--timer-ring-color) 0 var(--timer-progress),
+				var(--timer-track-color) var(--timer-progress) 100%
 			),
 			rgb(15 23 42 / 0.92);
 		animation: none;
+	}
+
+	.timer-dial[data-tone='warning'] {
+		--timer-ring-color: var(--color-warning-400);
+	}
+
+	.timer-dial[data-tone='danger'] {
+		--timer-ring-color: var(--color-error-400);
 	}
 
 	.timer-dial__inner {
