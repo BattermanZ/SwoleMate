@@ -63,7 +63,6 @@
 	$: notesDraft = exercise.notes;
 	$: locked = disabled || (exercise.status === 'done' && !editing);
 	$: if (exercise.status !== 'done') editing = false;
-	$: if (exercise.sets.length > 0) didPrefillFromLast = true;
 	$: tracksReps = exercise.tracksReps ?? true;
 	$: tracksTime = exercise.tracksTime ?? false;
 	$: tracksWeight = exercise.tracksWeight ?? true;
@@ -71,6 +70,11 @@
 	$: timerOverlayOpen = tracksTime && timerTargetSeconds > 0;
 	$: timerComplete = timerTargetSeconds > 0 && timerRemainingSeconds <= 0 && !timerRunning;
 	$: timerDisplaySeconds = timerTargetSeconds > 0 ? timerRemainingSeconds : setDurationSeconds;
+	$: timerElapsedSeconds =
+		timerTargetSeconds > 0
+			? Math.max(0, timerTargetSeconds - Math.max(0, timerRemainingSeconds))
+			: 0;
+	$: timerCanSave = timerComplete || (!timerRunning && timerElapsedSeconds > 0);
 	$: timerProgress =
 		timerTargetSeconds > 0
 			? Math.max(0, Math.min(1, timerRemainingSeconds / timerTargetSeconds))
@@ -84,12 +88,13 @@
 		!didPrefillFromLast &&
 		!locked &&
 		exercise.status === 'active' &&
-		lastTime?.sets?.length
+		(exercise.sets.length > 0 || lastTime?.sets?.length)
 	) {
-		const first = lastTime.sets[0];
+		const sourceSets = exercise.sets.length > 0 ? exercise.sets : lastTime?.sets;
+		const first = sourceSets?.[exercise.sets.length > 0 ? sourceSets.length - 1 : 0];
 		if (first) {
 			setReps = first.reps;
-			if (first.durationSeconds) setDurationSeconds = first.durationSeconds;
+			setDurationSeconds = lastUsedDuration(sourceSets ?? []) ?? setDurationSeconds;
 			if (!exercise.perSideWeight) {
 				setWeight = first.weight;
 			} else if (!exercise.splitWeight) {
@@ -162,6 +167,14 @@
 		}
 		setWeightLeft = last.weightLeft ?? last.weight;
 		setWeightRight = last.weightRight ?? last.weight;
+	}
+
+	function lastUsedDuration(sets: Array<{ durationSeconds?: number }>) {
+		for (let index = sets.length - 1; index >= 0; index -= 1) {
+			const durationSeconds = sets[index]?.durationSeconds;
+			if (durationSeconds && durationSeconds > 0) return durationSeconds;
+		}
+		return undefined;
 	}
 
 	function addSet() {
@@ -246,8 +259,8 @@
 
 	function saveTimedSet() {
 		if (timerRunning) pauseTimer();
-		if (!timerComplete) return;
-		setDurationSeconds = timerTargetSeconds;
+		if (!timerCanSave) return;
+		setDurationSeconds = timerComplete ? timerTargetSeconds : timerElapsedSeconds;
 		addSet();
 		resetTimer();
 	}
@@ -751,7 +764,7 @@
 					type="button"
 					class="btn variant-filled-primary"
 					on:click={saveTimedSet}
-					disabled={!timerComplete}
+					disabled={!timerCanSave}
 				>
 					Add set
 				</button>

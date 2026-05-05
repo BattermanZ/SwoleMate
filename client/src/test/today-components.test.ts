@@ -130,4 +130,54 @@ describe('today components', () => {
 			vi.useRealTimers();
 		}
 	});
+
+	it('adds elapsed time when saving a paused timer', async () => {
+		vi.useFakeTimers();
+		const onAddSet = vi.fn();
+		try {
+			const { getByLabelText, getByRole } = render(SessionExercise, {
+				props: {
+					exercise: {
+						id: 1,
+						name: 'Plank',
+						notes: '',
+						startedAt: '2026-01-01T10:00:00.000Z',
+						endedAt: '2026-01-01T10:00:00.000Z',
+						sets: [],
+						settings: [],
+						tracksReps: false,
+						tracksTime: true,
+						tracksWeight: false,
+						perSideWeight: false,
+						splitWeight: false,
+						status: 'active'
+					},
+					isOpen: true,
+					disabled: false,
+					lastTime: undefined
+				},
+				events: { addSet: onAddSet }
+			});
+
+			await fireEvent.input(getByLabelText('Target duration (sec)'), { target: { value: '10' } });
+			await fireEvent.click(getByRole('button', { name: 'Start timer' }));
+			const dialog = getByRole('dialog', { name: 'Plank timer' });
+
+			await vi.advanceTimersByTimeAsync(3000);
+			await tick();
+			await fireEvent.click(within(dialog).getByRole('button', { name: 'Pause' }));
+
+			const addSet = within(dialog).getByRole('button', { name: 'Add set' });
+			expect(addSet).toBeEnabled();
+			await fireEvent.click(addSet);
+
+			expect(onAddSet).toHaveBeenCalledWith(
+				expect.objectContaining({
+					detail: expect.objectContaining({ reps: 0, weight: 0, durationSeconds: 3 })
+				})
+			);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
 });
