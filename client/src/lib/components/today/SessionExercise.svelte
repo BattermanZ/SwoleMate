@@ -464,7 +464,7 @@
 						/>
 						<button
 							type="button"
-							class="btn variant-filled-primary justify-self-end sm:justify-self-auto"
+							class="btn variant-filled-primary w-full sm:w-auto sm:justify-self-auto"
 							on:click={addSetting}
 							disabled={locked || !newSettingKey.trim() || !newSettingValue.trim()}
 						>
@@ -495,69 +495,76 @@
 			{/if}
 
 			<section class="space-y-2">
-				<div class="flex items-center justify-between">
+				<div>
 					<h4 class="text-sm font-semibold opacity-80">Current sets</h4>
-					<div class="flex flex-wrap items-center gap-2">
+					<div
+						class="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2"
+					>
 						{#if !tracksTime}
-							<label class="flex items-center gap-2 text-xs opacity-80 select-none">
+							<div class="flex items-center gap-2 text-xs opacity-80 select-none">
 								<input
 									type="checkbox"
 									class="checkbox"
+									aria-label="Track reps"
 									checked={tracksReps}
 									disabled={locked || tracksReps}
 									on:change={(e) => updateTracking({ reps: e.currentTarget.checked })}
 								/>
-								Track reps
-							</label>
+								<span aria-hidden="true">Reps</span>
+							</div>
 						{/if}
-						<label class="flex items-center gap-2 text-xs opacity-80 select-none">
+						<div class="flex items-center gap-2 text-xs opacity-80 select-none">
 							<input
 								type="checkbox"
 								class="checkbox"
+								aria-label="Track time"
 								checked={tracksTime}
 								disabled={locked}
 								on:change={(e) => updateTracking({ time: e.currentTarget.checked })}
 							/>
-							Track time
-						</label>
-						<label class="flex items-center gap-2 text-xs opacity-80 select-none">
+							<span aria-hidden="true">Time</span>
+						</div>
+						<div class="flex items-center gap-2 text-xs opacity-80 select-none">
 							<input
 								type="checkbox"
 								class="checkbox"
+								aria-label="Track weight"
 								checked={tracksWeight}
 								disabled={locked}
 								on:change={(e) => updateTracking({ weight: e.currentTarget.checked })}
 							/>
-							Track weight
-						</label>
+							<span aria-hidden="true">Weight</span>
+						</div>
 						{#if tracksWeight}
-							<label class="flex items-center gap-2 text-xs opacity-80 select-none">
+							<div class="flex items-center gap-2 text-xs opacity-80 select-none">
 								<input
 									type="checkbox"
 									class="checkbox"
+									aria-label="Per-side weights"
 									checked={exercise.perSideWeight}
 									disabled={locked}
 									on:change={(e) => togglePerSideWeight(e.currentTarget.checked)}
 								/>
-								Per-side weights
-							</label>
+								<span aria-hidden="true">Per-side</span>
+							</div>
 						{/if}
 						{#if tracksWeight && exercise.perSideWeight}
-							<label class="flex items-center gap-2 text-xs opacity-80 select-none">
+							<div class="flex items-center gap-2 text-xs opacity-80 select-none">
 								<input
 									type="checkbox"
 									class="checkbox"
+									aria-label="Split left and right weights"
 									checked={exercise.splitWeight}
 									disabled={locked}
 									on:change={(e) => toggleSplitWeight(e.currentTarget.checked)}
 								/>
-								Different L/R
-							</label>
+								<span aria-hidden="true">Split L/R</span>
+							</div>
 						{/if}
 						{#if exercise.sets.length > 0}
 							<button
 								type="button"
-								class="btn btn-xs variant-ghost-primary"
+								class="btn btn-xs variant-ghost-primary justify-self-start"
 								on:click={useLastSet}
 								disabled={locked}
 							>
