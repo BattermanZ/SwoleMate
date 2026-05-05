@@ -51,7 +51,7 @@ describe('today components', () => {
 
 		expect(getByText('Template plan')).toBeInTheDocument();
 		expect(getByText('1 left')).toBeInTheDocument();
-		await fireEvent.click(getByRole('button', { name: 'Incline Press' }));
+		await fireEvent.click(getByRole('button', { name: '+ Incline Press' }));
 
 		expect(onAddTemplateExercise).toHaveBeenCalledWith(
 			expect.objectContaining({ detail: { id: 42 } })
