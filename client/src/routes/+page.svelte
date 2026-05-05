@@ -301,9 +301,15 @@
 
 				{#if $currentSession.exercises.length === 0}
 					<div class="card variant-ghost p-6 text-center space-y-2">
-						<div class="text-lg font-semibold">Add your first exercise</div>
+						<div class="text-lg font-semibold">
+							{$plannedTemplateExercises.length > 0
+								? 'Start your template plan'
+								: 'Add your first exercise'}
+						</div>
 						<p class="opacity-70 text-sm max-w-prose mx-auto">
-							Use the search below or tap a quick pick from your recent sessions.
+							{$plannedTemplateExercises.length > 0
+								? 'Start an exercise from your template plan below.'
+								: 'Use the search below or tap a quick pick from your recent sessions.'}
 						</p>
 					</div>
 				{:else}

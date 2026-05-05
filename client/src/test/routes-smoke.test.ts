@@ -1,5 +1,5 @@
 import { fireEvent, render } from '@testing-library/svelte';
-import type { UiSession } from '$lib/today/types';
+import type { PlannedTemplateExercise, UiSession } from '$lib/today/types';
 import { readable, writable } from 'svelte/store';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -26,7 +26,7 @@ const todayControllerMocks = vi.hoisted(() => ({
 
 const todayCurrentSessionStore = writable<UiSession | null>(null);
 const todayOpenExerciseIdStore = writable<number | null>(null);
-const todayPlannedTemplateExercisesStore = writable([]);
+const todayPlannedTemplateExercisesStore = writable<PlannedTemplateExercise[]>([]);
 
 vi.mock('$lib/auth', () => ({
 	auth: {
@@ -268,6 +268,24 @@ describe('route smoke', () => {
 		expect(queryAllByText('Add your first set for this exercise.')).toHaveLength(1);
 		expect(queryAllByText('Mark done')).toHaveLength(1);
 		expect(queryAllByText('Collapse')).toHaveLength(1);
+	});
+
+	it('points empty template sessions to the template plan', async () => {
+		todayCurrentSessionStore.set({
+			id: 12,
+			startedAt: '2026-01-01T10:00:00.000Z',
+			notes: '',
+			exercises: []
+		});
+		todayPlannedTemplateExercisesStore.set([{ id: 77, name: 'Bench Press' }]);
+
+		const TodayPage = await importComponent('../routes/+page.svelte');
+		const { getByText } = render(TodayPage as never);
+
+		expect(getByText('Start your template plan')).toBeInTheDocument();
+		expect(getByText('Start an exercise from your template plan below.')).toBeInTheDocument();
+		expect(getByText('Template plan')).toBeInTheDocument();
+		expect(getByText('1 left')).toBeInTheDocument();
 	});
 
 	it('renders workouts page with basic data', async () => {

@@ -38,7 +38,7 @@ describe('today components', () => {
 
 	it('adds a planned template exercise from the exercise composer', async () => {
 		const onAddTemplateExercise = vi.fn();
-		const { getByRole } = render(ExerciseComposer, {
+		const { getByRole, getByText } = render(ExerciseComposer, {
 			props: {
 				query: '',
 				suggestions: [],
@@ -49,6 +49,8 @@ describe('today components', () => {
 			events: { addTemplateExercise: onAddTemplateExercise }
 		});
 
+		expect(getByText('Template plan')).toBeInTheDocument();
+		expect(getByText('1 left')).toBeInTheDocument();
 		await fireEvent.click(getByRole('button', { name: 'Incline Press' }));
 
 		expect(onAddTemplateExercise).toHaveBeenCalledWith(

@@ -73,6 +73,29 @@
 		</button>
 	</div>
 
+	{#if templatePicks.length > 0}
+		<div class="rounded-lg border border-primary-500/20 bg-primary-500/5 p-3 space-y-2">
+			<div class="flex items-center justify-between gap-3">
+				<span class="text-xs font-semibold opacity-80">Template plan</span>
+				<span class="badge variant-soft-primary text-xs">
+					{templatePicks.length} left
+				</span>
+			</div>
+			<div class="flex flex-wrap gap-2">
+				{#each templatePicks as pick (pick.id)}
+					<button
+						type="button"
+						class="chip variant-soft-primary text-sm"
+						on:click={() => dispatch('addTemplateExercise', { id: pick.id })}
+						{disabled}
+					>
+						{pick.name}
+					</button>
+				{/each}
+			</div>
+		</div>
+	{/if}
+
 	{#if quickPicks.length > 0}
 		<div class="flex flex-wrap gap-2 items-center">
 			<span class="text-xs font-semibold opacity-70 mr-1">Quick picks</span>
@@ -84,22 +107,6 @@
 					{disabled}
 				>
 					{pick}
-				</button>
-			{/each}
-		</div>
-	{/if}
-
-	{#if templatePicks.length > 0}
-		<div class="flex flex-wrap gap-2 items-center">
-			<span class="text-xs font-semibold opacity-70 mr-1">From template</span>
-			{#each templatePicks as pick (pick.id)}
-				<button
-					type="button"
-					class="chip variant-soft-primary text-sm"
-					on:click={() => dispatch('addTemplateExercise', { id: pick.id })}
-					{disabled}
-				>
-					{pick.name}
 				</button>
 			{/each}
 		</div>
