@@ -113,12 +113,12 @@ describe('today components', () => {
 			const dialog = getByRole('dialog', { name: 'Plank timer' });
 			expect(dialog).toBeInTheDocument();
 			expect(within(dialog).getByRole('button', { name: 'Add set' })).toBeDisabled();
-			expect(dialog.querySelector('[data-tone="steady"]')).toBeInTheDocument();
+			expect(dialog.querySelector('[data-tone="danger"]')).toBeInTheDocument();
 
 			await vi.advanceTimersByTimeAsync(1000);
 			await tick();
 			expect(within(dialog).getByText('Complete')).toBeInTheDocument();
-			expect(dialog.querySelector('[data-tone="danger"]')).toBeInTheDocument();
+			expect(dialog.querySelector('[data-tone="steady"]')).toBeInTheDocument();
 
 			await fireEvent.click(within(dialog).getByRole('button', { name: 'Add set' }));
 			expect(onAddSet).toHaveBeenCalledWith(

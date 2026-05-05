@@ -77,7 +77,7 @@
 			: 1;
 	$: timerProgressPct = `${Math.round(timerProgress * 100)}%`;
 	$: timerTone =
-		timerComplete || timerProgress <= 0.15 ? 'danger' : timerProgress <= 0.4 ? 'warning' : 'steady';
+		timerComplete || timerProgress <= 0.15 ? 'steady' : timerProgress <= 0.4 ? 'warning' : 'danger';
 
 	$: if (
 		isOpen &&
