@@ -396,26 +396,6 @@
 
 	{#if isOpen}
 		<div class="mt-4 space-y-4">
-			{#if lastTime}
-				<div
-					class="rounded-xl border border-surface-200/50 bg-surface-50/70 p-3 text-sm dark:border-surface-700/50 dark:bg-surface-950/30"
-				>
-					<div class="flex flex-wrap items-center gap-2">
-						<span class="font-semibold opacity-80">Last time</span>
-						<span class="opacity-60">({formatDateShort(lastTime.startedAt)})</span>
-						<SetPillsHybrid
-							sets={lastTime.sets}
-							perSideWeight={lastTime.perSideWeight}
-							splitWeight={lastTime.splitWeight}
-							size="xs"
-						/>
-					</div>
-					{#if lastTime.notes}
-						<p class="mt-2 opacity-80">Notes: {lastTime.notes}</p>
-					{/if}
-				</div>
-			{/if}
-
 			<section class="space-y-2">
 				<div class="flex items-center justify-between">
 					<h4 class="text-sm font-semibold opacity-80">Settings</h4>
@@ -494,9 +474,29 @@
 				</div>
 			</section>
 
+			{#if lastTime}
+				<div
+					class="rounded-xl border border-surface-200/50 bg-surface-50/70 p-3 text-sm dark:border-surface-700/50 dark:bg-surface-950/30"
+				>
+					<div class="flex flex-wrap items-center gap-2">
+						<span class="font-semibold opacity-80">Last time</span>
+						<span class="opacity-60">({formatDateShort(lastTime.startedAt)})</span>
+						<SetPillsHybrid
+							sets={lastTime.sets}
+							perSideWeight={lastTime.perSideWeight}
+							splitWeight={lastTime.splitWeight}
+							size="xs"
+						/>
+					</div>
+					{#if lastTime.notes}
+						<p class="mt-2 opacity-80">Notes: {lastTime.notes}</p>
+					{/if}
+				</div>
+			{/if}
+
 			<section class="space-y-2">
 				<div class="flex items-center justify-between">
-					<h4 class="text-sm font-semibold opacity-80">Sets</h4>
+					<h4 class="text-sm font-semibold opacity-80">Current sets</h4>
 					<div class="flex flex-wrap items-center gap-2">
 						{#if !tracksTime}
 							<label class="flex items-center gap-2 text-xs opacity-80 select-none">

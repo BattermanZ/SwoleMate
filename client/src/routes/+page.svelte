@@ -309,7 +309,7 @@
 						{#each $currentSession.exercises as ex (ex.id)}
 							<SessionExercise
 								exercise={ex}
-								isOpen={ex.status !== 'done' || $openExerciseId === ex.id}
+								isOpen={$openExerciseId === ex.id}
 								disabled={$loading}
 								lastTime={getLastTimeForExercise(ex.name)}
 								on:toggle={() => toggleExercise(ex.id)}

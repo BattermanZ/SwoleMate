@@ -78,6 +78,39 @@ describe('today components', () => {
 		expect(getByLabelText('Reps')).toHaveValue(12);
 	});
 
+	it('shows the last time summary above current sets', () => {
+		const { getByText } = render(SessionExercise, {
+			props: {
+				exercise: {
+					id: 1,
+					name: 'Bench Press',
+					notes: '',
+					startedAt: '2026-01-01T10:00:00.000Z',
+					endedAt: '2026-01-01T10:00:00.000Z',
+					sets: [{ id: 1, reps: 10, weight: 70 }],
+					settings: [],
+					perSideWeight: false,
+					splitWeight: false,
+					status: 'active'
+				},
+				isOpen: true,
+				disabled: false,
+				lastTime: {
+					startedAt: '2025-12-20T10:00:00.000Z',
+					notes: '',
+					sets: [{ reps: 8, weight: 60 }],
+					perSideWeight: false,
+					splitWeight: false
+				}
+			}
+		});
+
+		expect(
+			getByText('Last time').compareDocumentPosition(getByText('Current sets')) &
+				Node.DOCUMENT_POSITION_FOLLOWING
+		).toBeTruthy();
+	});
+
 	it('uses circular overlay timer for time-only sets without reps', async () => {
 		vi.useFakeTimers();
 		const onAddSet = vi.fn();

@@ -222,7 +222,8 @@ describe('route smoke', () => {
 		expect(todayControllerMocks.startSessionFromTemplate).toHaveBeenCalledWith(5);
 	});
 
-	it('keeps active exercises open while leaving done exercises collapsed', async () => {
+	it('renders only the selected exercise open', async () => {
+		todayOpenExerciseIdStore.set(101);
 		todayCurrentSessionStore.set({
 			id: 12,
 			startedAt: '2026-01-01T10:00:00.000Z',
