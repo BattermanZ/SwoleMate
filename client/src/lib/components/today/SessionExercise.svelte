@@ -67,6 +67,8 @@
 	$: tracksReps = exercise.tracksReps ?? true;
 	$: tracksTime = exercise.tracksTime ?? false;
 	$: tracksWeight = exercise.tracksWeight ?? true;
+	$: tracksRepsForSet = tracksTime ? false : tracksReps;
+	$: timerOverlayOpen = tracksTime && (timerRunning || timerElapsedSeconds > 0);
 
 	$: if (
 		isOpen &&
@@ -155,7 +157,7 @@
 
 	function addSet() {
 		if (locked) return;
-		const reps = tracksReps ? setReps : 0;
+		const reps = tracksRepsForSet ? setReps : 0;
 		const durationSeconds = tracksTime ? Math.round(setDurationSeconds) : undefined;
 		if (reps <= 0 && !durationSeconds) return;
 		if (durationSeconds !== undefined && durationSeconds <= 0) return;
@@ -205,6 +207,7 @@
 
 	function startTimer() {
 		if (locked || !tracksTime || timerRunning || typeof window === 'undefined') return;
+		if (timerElapsedSeconds === 0) setDurationSeconds = 1;
 		timerRunning = true;
 		timerStartedAt = Date.now();
 		timerBaseSeconds = timerElapsedSeconds;
@@ -250,6 +253,7 @@
 			time: patch.time ?? tracksTime,
 			weight: patch.weight ?? tracksWeight
 		};
+		if (next.time) next.reps = false;
 		if (!next.reps && !next.time) next.reps = true;
 		dispatch('updateTracking', next);
 	}
@@ -460,22 +464,24 @@
 				<div class="flex items-center justify-between">
 					<h4 class="text-sm font-semibold opacity-80">Sets</h4>
 					<div class="flex flex-wrap items-center gap-2">
-						<label class="flex items-center gap-2 text-xs opacity-80 select-none">
-							<input
-								type="checkbox"
-								class="checkbox"
-								checked={tracksReps}
-								disabled={locked || (!tracksTime && tracksReps)}
-								on:change={(e) => updateTracking({ reps: e.currentTarget.checked })}
-							/>
-							Track reps
-						</label>
+						{#if !tracksTime}
+							<label class="flex items-center gap-2 text-xs opacity-80 select-none">
+								<input
+									type="checkbox"
+									class="checkbox"
+									checked={tracksReps}
+									disabled={locked || tracksReps}
+									on:change={(e) => updateTracking({ reps: e.currentTarget.checked })}
+								/>
+								Track reps
+							</label>
+						{/if}
 						<label class="flex items-center gap-2 text-xs opacity-80 select-none">
 							<input
 								type="checkbox"
 								class="checkbox"
 								checked={tracksTime}
-								disabled={locked || (!tracksReps && tracksTime)}
+								disabled={locked}
 								on:change={(e) => updateTracking({ time: e.currentTarget.checked })}
 							/>
 							Track time
@@ -539,7 +545,7 @@
 				{/if}
 
 				<div class="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 items-end">
-					{#if tracksReps}
+					{#if tracksRepsForSet}
 						<label class="block">
 							<span class="text-xs font-semibold opacity-70">Reps</span>
 							<input
@@ -569,23 +575,14 @@
 								/>
 							</label>
 							<div class="mt-2 flex flex-wrap items-center gap-2">
-								<span class="text-sm font-bold tabular-nums"
-									>{formatDuration(timerElapsedSeconds)}</span
+								<button
+									type="button"
+									class="btn btn-xs variant-soft"
+									on:click={startTimer}
+									disabled={locked || timerRunning}
 								>
-								{#if timerRunning}
-									<button type="button" class="btn btn-xs variant-soft" on:click={pauseTimer}>
-										Pause
-									</button>
-								{:else}
-									<button
-										type="button"
-										class="btn btn-xs variant-soft"
-										on:click={startTimer}
-										disabled={locked}
-									>
-										Start
-									</button>
-								{/if}
+									{timerElapsedSeconds > 0 ? 'Resume timer' : 'Start timer'}
+								</button>
 								<button
 									type="button"
 									class="btn btn-xs variant-ghost"
@@ -695,3 +692,155 @@
 		</div>
 	{/if}
 </article>
+
+{#if timerOverlayOpen}
+	<div class="timer-overlay" role="dialog" aria-modal="true" aria-label={`${exercise.name} timer`}>
+		<div class="timer-panel">
+			<div class="timer-heading">
+				<div class="timer-kicker">Timed set</div>
+				<div class="timer-title">{exercise.name}</div>
+			</div>
+
+			<div class="timer-dial {!timerRunning ? 'timer-dial--paused' : ''}">
+				<div class="timer-dial__inner">
+					<div class="timer-state">{timerRunning ? 'Running' : 'Paused'}</div>
+					<div class="timer-value">{formatDuration(timerElapsedSeconds)}</div>
+					<div class="timer-caption">
+						Set {exercise.sets.length + 1}{tracksWeight ? ' • weight preserved' : ''}
+					</div>
+				</div>
+			</div>
+
+			<div class="timer-actions">
+				{#if timerRunning}
+					<button type="button" class="btn variant-soft" on:click={pauseTimer}>Pause</button>
+				{:else}
+					<button type="button" class="btn variant-soft" on:click={startTimer}>Resume</button>
+				{/if}
+				<button
+					type="button"
+					class="btn variant-filled-primary"
+					on:click={saveTimedSet}
+					disabled={timerElapsedSeconds <= 0}
+				>
+					Add set
+				</button>
+				<button type="button" class="btn variant-ghost" on:click={resetTimer}>Close</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<style>
+	.timer-overlay {
+		position: fixed;
+		inset: 0;
+		z-index: 80;
+		display: grid;
+		place-items: center;
+		padding: 1.25rem;
+		background:
+			radial-gradient(circle at center, rgb(255 255 255 / 0.08), transparent 18rem),
+			rgb(2 6 23 / 0.62);
+		backdrop-filter: blur(10px);
+	}
+
+	.timer-panel {
+		width: min(100%, 24rem);
+		display: grid;
+		justify-items: center;
+		gap: 1rem;
+		color: white;
+		text-align: center;
+	}
+
+	.timer-heading {
+		display: grid;
+		gap: 0.25rem;
+	}
+
+	.timer-kicker {
+		font-size: 0.72rem;
+		font-weight: 800;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		opacity: 0.72;
+	}
+
+	.timer-title {
+		font-size: 1rem;
+		font-weight: 800;
+	}
+
+	.timer-dial {
+		width: min(76vw, 18rem);
+		aspect-ratio: 1;
+		border-radius: 9999px;
+		display: grid;
+		place-items: center;
+		padding: 0.9rem;
+		background:
+			conic-gradient(
+				from -90deg,
+				var(--color-primary-400),
+				var(--color-tertiary-400),
+				var(--color-primary-400)
+			),
+			rgb(15 23 42 / 0.92);
+		box-shadow:
+			0 1.5rem 5rem rgb(0 0 0 / 0.42),
+			0 0 0 1px rgb(255 255 255 / 0.14);
+		animation: timer-breathe 1.8s ease-in-out infinite;
+	}
+
+	.timer-dial--paused {
+		background:
+			conic-gradient(from -90deg, rgb(148 163 184), rgb(226 232 240), rgb(148 163 184)),
+			rgb(15 23 42 / 0.92);
+		animation: none;
+	}
+
+	.timer-dial__inner {
+		width: 100%;
+		height: 100%;
+		border-radius: inherit;
+		display: grid;
+		place-items: center;
+		align-content: center;
+		gap: 0.5rem;
+		background: rgb(15 23 42 / 0.94);
+		box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+	}
+
+	.timer-state,
+	.timer-caption {
+		font-size: 0.78rem;
+		font-weight: 800;
+		opacity: 0.68;
+	}
+
+	.timer-value {
+		font-size: clamp(3rem, 16vw, 5.25rem);
+		font-weight: 900;
+		line-height: 1;
+		font-variant-numeric: tabular-nums;
+		letter-spacing: 0;
+	}
+
+	.timer-actions {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 0.65rem;
+	}
+
+	@keyframes timer-breathe {
+		0%,
+		100% {
+			transform: scale(1);
+		}
+		50% {
+			transform: scale(1.025);
+		}
+	}
+</style>

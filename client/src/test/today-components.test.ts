@@ -1,4 +1,4 @@
-import { fireEvent, render } from '@testing-library/svelte';
+import { fireEvent, render, within } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 import ExerciseComposer from '$lib/components/today/ExerciseComposer.svelte';
 import EndSessionModal from '$lib/components/today/EndSessionModal.svelte';
@@ -75,5 +75,45 @@ describe('today components', () => {
 		});
 
 		expect(getByLabelText('Reps')).toHaveValue(12);
+	});
+
+	it('uses circular overlay timer for time-only sets without reps', async () => {
+		const onAddSet = vi.fn();
+		const { getByRole, queryByLabelText } = render(SessionExercise, {
+			props: {
+				exercise: {
+					id: 1,
+					name: 'Plank',
+					notes: '',
+					startedAt: '2026-01-01T10:00:00.000Z',
+					endedAt: '2026-01-01T10:00:00.000Z',
+					sets: [],
+					settings: [],
+					tracksReps: false,
+					tracksTime: true,
+					tracksWeight: false,
+					perSideWeight: false,
+					splitWeight: false,
+					status: 'active'
+				},
+				isOpen: true,
+				disabled: false,
+				lastTime: undefined
+			},
+			events: { addSet: onAddSet }
+		});
+
+		expect(queryByLabelText('Reps')).not.toBeInTheDocument();
+
+		await fireEvent.click(getByRole('button', { name: 'Start timer' }));
+		const dialog = getByRole('dialog', { name: 'Plank timer' });
+		expect(dialog).toBeInTheDocument();
+
+		await fireEvent.click(within(dialog).getByRole('button', { name: 'Add set' }));
+		expect(onAddSet).toHaveBeenCalledWith(
+			expect.objectContaining({
+				detail: expect.objectContaining({ reps: 0, weight: 0, durationSeconds: 1 })
+			})
+		);
 	});
 });

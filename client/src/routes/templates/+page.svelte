@@ -220,9 +220,14 @@
 	function updateExercise(localId: string, patch: Partial<DraftExercise>) {
 		draft = {
 			...draft,
-			exercises: draft.exercises.map((exercise) =>
-				exercise.localId === localId ? { ...exercise, ...patch } : exercise
-			)
+			exercises: draft.exercises.map((exercise) => {
+				if (exercise.localId !== localId) return exercise;
+				const next = { ...exercise, ...patch };
+				if (patch.tracks_time === true) next.tracks_reps = false;
+				if (patch.tracks_time === false && !next.tracks_reps) next.tracks_reps = true;
+				if (!next.tracks_reps && !next.tracks_time) next.tracks_reps = true;
+				return next;
+			})
 		};
 	}
 
@@ -549,23 +554,24 @@
 									</label>
 
 									<div class="flex flex-wrap gap-4 text-sm">
-										<label class="inline-flex items-center gap-2">
-											<input
-												type="checkbox"
-												checked={exercise.tracks_reps}
-												disabled={!exercise.tracks_time && exercise.tracks_reps}
-												on:change={(event) =>
-													updateExercise(exercise.localId, {
-														tracks_reps: (event.currentTarget as HTMLInputElement).checked
-													})}
-											/>
-											<span>Track reps</span>
-										</label>
+										{#if !exercise.tracks_time}
+											<label class="inline-flex items-center gap-2">
+												<input
+													type="checkbox"
+													checked={exercise.tracks_reps}
+													disabled={exercise.tracks_reps}
+													on:change={(event) =>
+														updateExercise(exercise.localId, {
+															tracks_reps: (event.currentTarget as HTMLInputElement).checked
+														})}
+												/>
+												<span>Track reps</span>
+											</label>
+										{/if}
 										<label class="inline-flex items-center gap-2">
 											<input
 												type="checkbox"
 												checked={exercise.tracks_time}
-												disabled={!exercise.tracks_reps && exercise.tracks_time}
 												on:change={(event) =>
 													updateExercise(exercise.localId, {
 														tracks_time: (event.currentTarget as HTMLInputElement).checked
