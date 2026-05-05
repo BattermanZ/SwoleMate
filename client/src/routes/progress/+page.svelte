@@ -1,19 +1,28 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { getExerciseProgress, getExerciseTypes, getVolumeStats, getWorkoutStats } from '$lib/api';
-	import type { ExerciseProgress, VolumeStats, WorkoutStats } from '$lib/types';
+	import {
+		getExerciseProgress,
+		getExerciseTypes,
+		getProgressOverview,
+		getVolumeStats,
+		getWorkoutStats
+	} from '$lib/api';
+	import type { ExerciseProgress, ProgressOverview, VolumeStats, WorkoutStats } from '$lib/types';
 	import { logger } from '$lib/logger';
 	import ProgressHeader from '$lib/components/progress/ProgressHeader.svelte';
+	import ProgressOverviewPanel from '$lib/components/progress/ProgressOverview.svelte';
 	import ExerciseFocusPanel from '$lib/components/progress/ExerciseFocusPanel.svelte';
 	import ExerciseCharts from '$lib/components/progress/ExerciseCharts.svelte';
 	import RecentExerciseSessions from '$lib/components/progress/RecentExerciseSessions.svelte';
 	import OverallCharts from '$lib/components/progress/OverallCharts.svelte';
+	import RecentPrFeed from '$lib/components/progress/RecentPrFeed.svelte';
 
 	let selectedExercise = '';
 	let loadedExercise = '';
 	let requestedExercise = '';
 	let exerciseTypes: string[] = [];
 	let workoutStats: WorkoutStats | null = null;
+	let progressOverview: ProgressOverview | null = null;
 	let volumeStats: VolumeStats | null = null;
 	let exerciseProgress: ExerciseProgress[] | null = null;
 
@@ -33,9 +42,15 @@
 		loadingOverall = true;
 		errorOverall = null;
 		try {
-			workoutStats = await getWorkoutStats();
+			const [nextWorkoutStats, nextProgressOverview] = await Promise.all([
+				getWorkoutStats(),
+				getProgressOverview()
+			]);
+			workoutStats = nextWorkoutStats;
+			progressOverview = nextProgressOverview;
 		} catch (e) {
 			errorOverall = getErrorMessage(e);
+			progressOverview = null;
 			logger.error('progress', 'Error loading workout stats', { error: e });
 		} finally {
 			loadingOverall = false;
@@ -140,8 +155,16 @@
 		on:refresh={refreshAll}
 	/>
 
+	<ProgressOverviewPanel
+		overview={progressOverview}
+		loading={loadingOverall}
+		error={errorOverall}
+	/>
+
 	<div class="grid gap-6 md:grid-cols-12">
 		<section class="md:col-span-7 lg:col-span-8 space-y-4 min-w-0">
+			<RecentPrFeed prs={progressOverview?.recent_prs ?? []} />
+
 			<ExerciseFocusPanel
 				bind:selectedExercise
 				{exerciseTypes}

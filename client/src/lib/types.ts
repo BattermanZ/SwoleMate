@@ -223,9 +223,72 @@ export interface VolumeStats {
 			weight: number;
 		}>;
 	};
+	timed_records?: TimedRecords | null;
 }
 
 export interface ExerciseProgress {
 	exercise: Exercise;
 	sets: Set[];
+}
+
+export interface TimedRecords {
+	longest_set_seconds: number;
+	best_session_duration_seconds: number;
+	lifetime_duration_seconds: number;
+	average_set_duration_seconds: number;
+}
+
+export interface ProgressPeriodComparison {
+	workouts_delta: number;
+	total_training_minutes_delta: number;
+	exercises_delta: number;
+	sets_delta: number;
+	reps_delta: number;
+	total_volume_delta: number;
+	timed_sets_delta: number;
+	total_timed_duration_seconds_delta: number;
+	pr_count_delta: number;
+}
+
+export interface ProgressPeriodSummary {
+	label: string;
+	start_date: string;
+	end_date: string;
+	workouts: number;
+	total_training_minutes: number;
+	exercises: number;
+	sets: number;
+	reps: number;
+	total_volume: number;
+	timed_sets: number;
+	total_timed_duration_seconds: number;
+	pr_count: number;
+	comparison: ProgressPeriodComparison;
+}
+
+export type ProgressPrType =
+	| 'max_weight'
+	| 'estimated_1rm'
+	| 'rep_pr'
+	| 'timed_duration'
+	| 'single_set_volume';
+
+export interface RecentPr {
+	exercise_type: string;
+	pr_type: ProgressPrType;
+	new_value: number;
+	previous_value: number;
+	date: string;
+	set_id: number;
+	set_details: {
+		reps: number;
+		weight: number;
+		duration_seconds?: number | null;
+	};
+}
+
+export interface ProgressOverview {
+	current_week: ProgressPeriodSummary;
+	last_30_days: ProgressPeriodSummary;
+	recent_prs: RecentPr[];
 }

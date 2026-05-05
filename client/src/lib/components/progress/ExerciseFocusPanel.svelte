@@ -2,6 +2,7 @@
 	import { createEventDispatcher } from 'svelte';
 	import type { VolumeStats } from '$lib/types';
 	import RepPrs from '$lib/components/progress/RepPrs.svelte';
+	import TimedRecords from '$lib/components/progress/TimedRecords.svelte';
 
 	export let selectedExercise = '';
 	export let exerciseTypes: string[] = [];
@@ -59,6 +60,10 @@
 		{#key selectedExercise}
 			<RepPrs repPrs={volumeStats.personal_records.rep_prs ?? []} />
 		{/key}
+
+		{#if volumeStats.timed_records}
+			<TimedRecords records={volumeStats.timed_records} />
+		{/if}
 	{:else if loadingExercise}
 		<div class="card variant-glass-surface p-4 animate-pulse">
 			<div class="h-4 w-36 bg-surface-200/60 dark:bg-surface-700/50 rounded"></div>

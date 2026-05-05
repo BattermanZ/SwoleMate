@@ -73,7 +73,8 @@ describe('api client behavior', () => {
 	});
 
 	it('encodes exercise type params and maps tuple response for getLastExerciseData', async () => {
-		const { getLastExerciseData, getVolumeStats, getExerciseProgress } = await import('$lib/api');
+		const { getLastExerciseData, getVolumeStats, getExerciseProgress, getProgressOverview } =
+			await import('$lib/api');
 		const seenUrls: string[] = [];
 
 		const fetcher = vi.fn(async (input: URL | RequestInfo) => {
@@ -115,6 +116,13 @@ describe('api client behavior', () => {
 		});
 		await getExerciseProgress(exerciseType, progressFetcher as unknown as typeof fetch);
 		expect(seenUrls[2]).toContain(`/api/progress/exercise/${encoded}`);
+
+		const overviewFetcher = vi.fn(async (input: URL | RequestInfo) => {
+			seenUrls.push(String(input));
+			return jsonResponse({ current_week: {}, last_30_days: {}, recent_prs: [] });
+		});
+		await getProgressOverview(overviewFetcher as unknown as typeof fetch);
+		expect(seenUrls[3]).toContain('/api/progress/overview?timezone_offset_minutes=');
 	});
 
 	it('creates, lists, rotates, and revokes MCP personal tokens through the API client', async () => {

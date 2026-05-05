@@ -1,9 +1,230 @@
 use super::Database;
 use crate::{errors::AppError, models::*};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Datelike, Duration, NaiveTime, Utc};
 use log::{debug, error};
 use serde_json::json;
 use sqlx::Row;
+
+const MAX_TIMEZONE_OFFSET_MINUTES: i64 = 14 * 60;
+const RECENT_PR_LIMIT: usize = 20;
+
+#[derive(Debug, Clone)]
+struct SetFact {
+    exercise_type: String,
+    exercise_start_time: DateTime<Utc>,
+    set_id: i64,
+    reps: i64,
+    effective_weight: f64,
+    duration_seconds: Option<i64>,
+}
+
+impl SetFact {
+    fn set_volume(&self) -> f64 {
+        self.reps as f64 * self.effective_weight
+    }
+
+    fn estimated_1rm(&self) -> Option<f64> {
+        if !(1..=12).contains(&self.reps) || self.effective_weight <= 0.0 {
+            return None;
+        }
+        Some((self.effective_weight * (36.0 / (37.0 - self.reps as f64)) * 100.0).round() / 100.0)
+    }
+}
+
+#[derive(Debug, Clone)]
+struct PrEvent {
+    exercise_type: String,
+    pr_type: &'static str,
+    occurred_at: DateTime<Utc>,
+    set_id: i64,
+    new_value: f64,
+    previous_value: f64,
+    reps: i64,
+    weight: f64,
+    duration_seconds: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+struct PeriodSummaryBase {
+    workouts: i64,
+    total_training_minutes: i64,
+    exercises: i64,
+    sets: i64,
+    reps: i64,
+    total_volume: f64,
+    timed_sets: i64,
+    total_timed_duration_seconds: i64,
+}
+
+fn local_period_start_utc(now: DateTime<Utc>, timezone_offset_minutes: i64) -> DateTime<Utc> {
+    let local_now = now - Duration::minutes(timezone_offset_minutes);
+    let days_since_monday = local_now.weekday().num_days_from_monday() as i64;
+    let monday = local_now.date_naive() - Duration::days(days_since_monday);
+    let local_start = monday.and_time(NaiveTime::MIN).and_utc();
+    local_start + Duration::minutes(timezone_offset_minutes)
+}
+
+fn validate_progress_offset(offset: i64) -> Result<(), AppError> {
+    if !(-MAX_TIMEZONE_OFFSET_MINUTES..=MAX_TIMEZONE_OFFSET_MINUTES).contains(&offset) {
+        return Err(AppError::BadRequest(
+            "timezone_offset_minutes is out of range".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn count_prs_in_period(events: &[PrEvent], start: DateTime<Utc>, end: DateTime<Utc>) -> i64 {
+    events
+        .iter()
+        .filter(|event| event.occurred_at >= start && event.occurred_at < end)
+        .count() as i64
+}
+
+fn detect_pr_events(facts: &[SetFact]) -> Vec<PrEvent> {
+    use std::collections::HashMap;
+
+    let mut max_weight_by_exercise: HashMap<String, f64> = HashMap::new();
+    let mut one_rm_by_exercise: HashMap<String, f64> = HashMap::new();
+    let mut volume_by_exercise: HashMap<String, f64> = HashMap::new();
+    let mut duration_by_exercise: HashMap<String, f64> = HashMap::new();
+    let mut rep_by_exercise_and_reps: HashMap<(String, i64), f64> = HashMap::new();
+    let mut events = Vec::new();
+
+    for fact in facts {
+        let mut set_events = Vec::new();
+
+        maybe_record_pr(
+            &mut max_weight_by_exercise,
+            fact.exercise_type.clone(),
+            fact.effective_weight,
+            fact,
+            "max_weight",
+            &mut set_events,
+        );
+
+        if let Some(estimated_1rm) = fact.estimated_1rm() {
+            maybe_record_pr(
+                &mut one_rm_by_exercise,
+                fact.exercise_type.clone(),
+                estimated_1rm,
+                fact,
+                "estimated_1rm",
+                &mut set_events,
+            );
+        }
+
+        if fact.reps > 0 && fact.effective_weight > 0.0 {
+            let key = (fact.exercise_type.clone(), fact.reps);
+            let previous = rep_by_exercise_and_reps.insert(
+                key.clone(),
+                rep_by_exercise_and_reps
+                    .get(&key)
+                    .copied()
+                    .map_or(fact.effective_weight, |current| {
+                        current.max(fact.effective_weight)
+                    }),
+            );
+            if let Some(previous_value) = previous {
+                if fact.effective_weight > previous_value {
+                    set_events.push(pr_event(
+                        fact,
+                        "rep_pr",
+                        fact.effective_weight,
+                        previous_value,
+                    ));
+                }
+            }
+        }
+
+        maybe_record_pr(
+            &mut volume_by_exercise,
+            fact.exercise_type.clone(),
+            fact.set_volume(),
+            fact,
+            "single_set_volume",
+            &mut set_events,
+        );
+
+        if let Some(duration) = fact.duration_seconds.filter(|d| *d > 0) {
+            maybe_record_pr(
+                &mut duration_by_exercise,
+                fact.exercise_type.clone(),
+                duration as f64,
+                fact,
+                "timed_duration",
+                &mut set_events,
+            );
+        }
+
+        if let Some(best_event) = set_events.into_iter().min_by_key(pr_priority) {
+            events.push(best_event);
+        }
+    }
+
+    events.sort_by(|a, b| {
+        a.occurred_at
+            .cmp(&b.occurred_at)
+            .then_with(|| a.set_id.cmp(&b.set_id))
+    });
+    events
+}
+
+fn maybe_record_pr(
+    bests: &mut std::collections::HashMap<String, f64>,
+    key: String,
+    value: f64,
+    fact: &SetFact,
+    pr_type: &'static str,
+    events: &mut Vec<PrEvent>,
+) {
+    if !value.is_finite() || value <= 0.0 {
+        return;
+    }
+
+    match bests.get_mut(&key) {
+        Some(best) if value > *best => {
+            let previous = *best;
+            *best = value;
+            events.push(pr_event(fact, pr_type, value, previous));
+        }
+        Some(_) => {}
+        None => {
+            bests.insert(key, value);
+        }
+    }
+}
+
+fn pr_event(fact: &SetFact, pr_type: &'static str, new_value: f64, previous_value: f64) -> PrEvent {
+    PrEvent {
+        exercise_type: fact.exercise_type.clone(),
+        pr_type,
+        occurred_at: fact.exercise_start_time,
+        set_id: fact.set_id,
+        new_value,
+        previous_value,
+        reps: fact.reps,
+        weight: fact.effective_weight,
+        duration_seconds: fact.duration_seconds,
+    }
+}
+
+fn pr_priority(event: &PrEvent) -> i32 {
+    if event.duration_seconds.filter(|d| *d > 0).is_some() && event.reps == 0 {
+        return match event.pr_type {
+            "timed_duration" => 0,
+            _ => 10,
+        };
+    }
+
+    match event.pr_type {
+        "estimated_1rm" => 0,
+        "max_weight" => 1,
+        "rep_pr" => 2,
+        "single_set_volume" => 3,
+        "timed_duration" => 4,
+        _ => 10,
+    }
+}
 
 impl Database {
     pub async fn get_exercise_progress(
@@ -402,6 +623,263 @@ impl Database {
         }))
     }
 
+    pub async fn get_progress_overview(
+        &self,
+        user_id: i64,
+        timezone_offset_minutes: i64,
+    ) -> Result<serde_json::Value, AppError> {
+        validate_progress_offset(timezone_offset_minutes)?;
+
+        let now = Utc::now();
+        let week_start = local_period_start_utc(now, timezone_offset_minutes);
+        let week_end = week_start + Duration::days(7);
+        let previous_week_start = week_start - Duration::days(7);
+        let last_30_end = now;
+        let last_30_start = now - Duration::days(30);
+        let previous_30_start = last_30_start - Duration::days(30);
+
+        let facts = self.get_progress_set_facts(user_id).await?;
+        let pr_events = detect_pr_events(&facts);
+
+        let current_week_pr_count = count_prs_in_period(&pr_events, week_start, week_end);
+        let previous_week_pr_count =
+            count_prs_in_period(&pr_events, previous_week_start, week_start);
+        let last_30_pr_count = count_prs_in_period(&pr_events, last_30_start, last_30_end);
+        let previous_30_pr_count =
+            count_prs_in_period(&pr_events, previous_30_start, last_30_start);
+
+        let current_week = self
+            .get_period_summary(
+                user_id,
+                "Current week",
+                week_start,
+                week_end,
+                previous_week_start,
+                week_start,
+                current_week_pr_count,
+                previous_week_pr_count,
+            )
+            .await?;
+        let last_30_days = self
+            .get_period_summary(
+                user_id,
+                "Last 30 days",
+                last_30_start,
+                last_30_end,
+                previous_30_start,
+                last_30_start,
+                last_30_pr_count,
+                previous_30_pr_count,
+            )
+            .await?;
+
+        let recent_prs = pr_events
+            .iter()
+            .rev()
+            .take(RECENT_PR_LIMIT)
+            .map(|event| {
+                json!({
+                    "exercise_type": event.exercise_type,
+                    "pr_type": event.pr_type,
+                    "new_value": event.new_value,
+                    "previous_value": event.previous_value,
+                    "date": event.occurred_at,
+                    "set_id": event.set_id,
+                    "set_details": {
+                        "reps": event.reps,
+                        "weight": event.weight,
+                        "duration_seconds": event.duration_seconds
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+
+        Ok(json!({
+            "current_week": current_week,
+            "last_30_days": last_30_days,
+            "recent_prs": recent_prs
+        }))
+    }
+
+    async fn get_period_summary(
+        &self,
+        user_id: i64,
+        label: &str,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+        comparison_start: DateTime<Utc>,
+        comparison_end: DateTime<Utc>,
+        pr_count: i64,
+        comparison_pr_count: i64,
+    ) -> Result<serde_json::Value, AppError> {
+        let current = self.get_period_summary_base(user_id, start, end).await?;
+        let previous = self
+            .get_period_summary_base(user_id, comparison_start, comparison_end)
+            .await?;
+
+        Ok(json!({
+            "label": label,
+            "start_date": start,
+            "end_date": end,
+            "workouts": current.workouts,
+            "total_training_minutes": current.total_training_minutes,
+            "exercises": current.exercises,
+            "sets": current.sets,
+            "reps": current.reps,
+            "total_volume": current.total_volume,
+            "timed_sets": current.timed_sets,
+            "total_timed_duration_seconds": current.total_timed_duration_seconds,
+            "pr_count": pr_count,
+            "comparison": {
+                "workouts_delta": current.workouts - previous.workouts,
+                "total_training_minutes_delta": current.total_training_minutes - previous.total_training_minutes,
+                "exercises_delta": current.exercises - previous.exercises,
+                "sets_delta": current.sets - previous.sets,
+                "reps_delta": current.reps - previous.reps,
+                "total_volume_delta": current.total_volume - previous.total_volume,
+                "timed_sets_delta": current.timed_sets - previous.timed_sets,
+                "total_timed_duration_seconds_delta": current.total_timed_duration_seconds - previous.total_timed_duration_seconds,
+                "pr_count_delta": pr_count - comparison_pr_count
+            }
+        }))
+    }
+
+    async fn get_period_summary_base(
+        &self,
+        user_id: i64,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+    ) -> Result<PeriodSummaryBase, AppError> {
+        let pool = self.pool().await;
+        let row = sqlx::query(
+            r#"
+            WITH period_workouts AS (
+                SELECT id, start_time, end_time
+                FROM workouts
+                WHERE user_id = ?
+                  AND start_time >= ?
+                  AND start_time < ?
+            ),
+            period_exercises AS (
+                SELECT e.id, e.per_side_weight, e.split_weight
+                FROM exercises e
+                JOIN period_workouts w ON w.id = e.workout_id
+                WHERE e.user_id = ?
+            ),
+            period_sets AS (
+                SELECT
+                    s.reps,
+                    s.duration_seconds,
+                    s.reps * (
+                        CASE
+                            WHEN e.per_side_weight = 1 THEN
+                                CASE
+                                    WHEN e.split_weight = 1 AND s.weight_left IS NOT NULL AND s.weight_right IS NOT NULL
+                                        THEN (s.weight_left + s.weight_right)
+                                    ELSE (s.weight * 2)
+                                END
+                            ELSE s.weight
+                        END
+                    ) as volume
+                FROM sets s
+                JOIN period_exercises e ON e.id = s.exercise_id
+                WHERE s.user_id = ?
+            )
+            SELECT
+                (SELECT COUNT(*) FROM period_workouts) as workouts,
+                COALESCE((
+                    SELECT CAST(ROUND(SUM((julianday(end_time) - julianday(start_time)) * 24 * 60)) AS INTEGER)
+                    FROM period_workouts
+                    WHERE end_time > start_time
+                ), 0) as total_training_minutes,
+                (SELECT COUNT(*) FROM period_exercises) as exercises,
+                (SELECT COUNT(*) FROM period_sets) as sets,
+                COALESCE((SELECT SUM(reps) FROM period_sets), 0) as reps,
+                COALESCE((SELECT SUM(volume) FROM period_sets), 0.0) as total_volume,
+                COALESCE((SELECT COUNT(*) FROM period_sets WHERE duration_seconds IS NOT NULL AND duration_seconds > 0), 0) as timed_sets,
+                COALESCE((SELECT SUM(duration_seconds) FROM period_sets WHERE duration_seconds IS NOT NULL AND duration_seconds > 0), 0) as total_timed_duration_seconds
+            "#,
+        )
+        .bind(user_id)
+        .bind(start)
+        .bind(end)
+        .bind(user_id)
+        .bind(user_id)
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| {
+            error!(target: "database", "Failed to fetch period summary: {}", e);
+            AppError::DatabaseError(e)
+        })?;
+
+        Ok(PeriodSummaryBase {
+            workouts: row.try_get("workouts").unwrap_or(0),
+            total_training_minutes: row.try_get("total_training_minutes").unwrap_or(0),
+            exercises: row.try_get("exercises").unwrap_or(0),
+            sets: row.try_get("sets").unwrap_or(0),
+            reps: row.try_get("reps").unwrap_or(0),
+            total_volume: row.try_get("total_volume").unwrap_or(0.0),
+            timed_sets: row.try_get("timed_sets").unwrap_or(0),
+            total_timed_duration_seconds: row.try_get("total_timed_duration_seconds").unwrap_or(0),
+        })
+    }
+
+    async fn get_progress_set_facts(&self, user_id: i64) -> Result<Vec<SetFact>, AppError> {
+        let pool = self.pool().await;
+        let rows = sqlx::query(
+            r#"
+            SELECT
+                e.exercise_type,
+                e.start_time as exercise_start_time,
+                s.id as set_id,
+                s.reps,
+                CASE
+                    WHEN e.per_side_weight = 1 THEN
+                        CASE
+                            WHEN e.split_weight = 1 AND s.weight_left IS NOT NULL AND s.weight_right IS NOT NULL
+                                THEN (s.weight_left + s.weight_right)
+                            ELSE (s.weight * 2)
+                        END
+                    ELSE s.weight
+                END as effective_weight,
+                s.duration_seconds
+            FROM sets s
+            JOIN exercises e ON e.id = s.exercise_id
+            JOIN workouts w ON w.id = e.workout_id
+            WHERE s.user_id = ?
+              AND e.user_id = ?
+              AND w.user_id = ?
+            ORDER BY e.start_time ASC, s.id ASC
+            "#,
+        )
+        .bind(user_id)
+        .bind(user_id)
+        .bind(user_id)
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| {
+            error!(target: "database", "Failed to fetch progress set facts: {}", e);
+            AppError::DatabaseError(e)
+        })?;
+
+        rows.into_iter()
+            .map(|row| {
+                Ok(SetFact {
+                    exercise_type: row.try_get("exercise_type")?,
+                    exercise_start_time: row.try_get("exercise_start_time")?,
+                    set_id: row.try_get("set_id")?,
+                    reps: row.try_get("reps")?,
+                    effective_weight: row.try_get("effective_weight")?,
+                    duration_seconds: row.try_get("duration_seconds")?,
+                })
+            })
+            .collect::<Result<Vec<_>, sqlx::Error>>()
+            .map_err(|e| {
+                error!(target: "database", "Failed to map progress set facts: {}", e);
+                AppError::DatabaseError(e)
+            })
+    }
+
     pub async fn get_volume_stats(
         &self,
         user_id: i64,
@@ -596,6 +1074,58 @@ impl Database {
             AppError::DatabaseError(e)
         })?;
 
+        let timed_records = sqlx::query(
+            r#"
+            WITH timed_sets AS (
+                SELECT
+                    e.id as exercise_id,
+                    s.duration_seconds
+                FROM exercises e
+                JOIN sets s ON e.id = s.exercise_id
+                WHERE e.user_id = ?
+                  AND s.user_id = ?
+                  AND LOWER(e.exercise_type) = LOWER(?)
+                  AND s.duration_seconds IS NOT NULL
+                  AND s.duration_seconds > 0
+            ),
+            session_totals AS (
+                SELECT exercise_id, SUM(duration_seconds) as session_duration_seconds
+                FROM timed_sets
+                GROUP BY exercise_id
+            )
+            SELECT
+                COALESCE(MAX(duration_seconds), 0) as longest_set_seconds,
+                COALESCE((SELECT MAX(session_duration_seconds) FROM session_totals), 0) as best_session_duration_seconds,
+                COALESCE(SUM(duration_seconds), 0) as lifetime_duration_seconds,
+                COALESCE(CAST(ROUND(AVG(duration_seconds)) AS INTEGER), 0) as average_set_duration_seconds,
+                COUNT(*) as timed_set_count
+            FROM timed_sets
+            "#,
+        )
+        .bind(user_id)
+        .bind(user_id)
+        .bind(exercise_type)
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| {
+            error!(target: "database", "Failed to fetch timed records: {}", e);
+            AppError::DatabaseError(e)
+        })?;
+
+        let timed_set_count = timed_records
+            .try_get::<i64, _>("timed_set_count")
+            .unwrap_or(0);
+        let timed_records_json = if timed_set_count > 0 {
+            Some(json!({
+                "longest_set_seconds": timed_records.try_get::<i64, _>("longest_set_seconds").unwrap_or(0),
+                "best_session_duration_seconds": timed_records.try_get::<i64, _>("best_session_duration_seconds").unwrap_or(0),
+                "lifetime_duration_seconds": timed_records.try_get::<i64, _>("lifetime_duration_seconds").unwrap_or(0),
+                "average_set_duration_seconds": timed_records.try_get::<i64, _>("average_set_duration_seconds").unwrap_or(0)
+            }))
+        } else {
+            None
+        };
+
         Ok(json!({
             "weekly_volume": weekly_volume.iter().map(|row| {
                 json!({
@@ -642,7 +1172,8 @@ impl Database {
                         })
                         .collect::<Vec<_>>())
                 }
-            }
+            },
+            "timed_records": timed_records_json
         }))
     }
 }

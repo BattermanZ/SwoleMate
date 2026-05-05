@@ -37,6 +37,15 @@ pub async fn get_workout_stats(db: &Database, user_id: i64) -> Result<Value, App
     Ok(stats)
 }
 
+pub async fn get_progress_overview(
+    db: &Database,
+    user_id: i64,
+    timezone_offset_minutes: i64,
+) -> Result<Value, AppError> {
+    db.get_progress_overview(user_id, timezone_offset_minutes)
+        .await
+}
+
 pub async fn get_volume_stats(
     db: &Database,
     user_id: i64,

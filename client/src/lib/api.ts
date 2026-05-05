@@ -16,6 +16,7 @@ import type {
 	StartWorkoutFromTemplateRequest,
 	UpdateWorkoutTemplateRequest,
 	VolumeStats,
+	ProgressOverview,
 	WorkoutTemplate,
 	WorkoutTemplateDetail
 } from './types';
@@ -503,6 +504,17 @@ export async function deleteBackup(filename: string, fetcher: Fetcher = fetch): 
 export async function getWorkoutStats(fetcher: Fetcher = fetch): Promise<WorkoutStats> {
 	const response = await fetcher(
 		`${API_BASE}/api/progress/workout-stats`,
+		withCredentials(undefined)
+	);
+	return handleResponse(response);
+}
+
+export async function getProgressOverview(fetcher: Fetcher = fetch): Promise<ProgressOverview> {
+	const timezoneOffsetMinutes = new Date().getTimezoneOffset();
+	const response = await fetcher(
+		`${API_BASE}/api/progress/overview?timezone_offset_minutes=${encodeURIComponent(
+			timezoneOffsetMinutes
+		)}`,
 		withCredentials(undefined)
 	);
 	return handleResponse(response);
