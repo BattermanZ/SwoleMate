@@ -85,7 +85,7 @@
 				{#each templatePicks as pick (pick.id)}
 					<button
 						type="button"
-						class="btn btn-sm variant-soft-primary justify-start border border-primary-500/20 hover:border-primary-500/50 hover:bg-primary-500/10"
+						class="btn btn-sm justify-start border border-primary-500/30 bg-primary-500/10 text-primary-700 hover:border-primary-500/60 hover:bg-primary-500/15 dark:text-primary-200"
 						on:click={() => dispatch('addTemplateExercise', { id: pick.id })}
 						{disabled}
 					>
