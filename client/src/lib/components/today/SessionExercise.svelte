@@ -55,9 +55,9 @@
 	let locked = false;
 	let didPrefillFromLast = false;
 	let timerRunning = false;
-	let timerStartedAt = 0;
-	let timerBaseSeconds = 0;
-	let timerElapsedSeconds = 0;
+	let timerTargetSeconds = 0;
+	let timerRemainingSeconds = 0;
+	let timerEndsAt = 0;
 	let timerInterval: number | undefined;
 
 	$: notesDraft = exercise.notes;
@@ -68,7 +68,14 @@
 	$: tracksTime = exercise.tracksTime ?? false;
 	$: tracksWeight = exercise.tracksWeight ?? true;
 	$: tracksRepsForSet = tracksTime ? false : tracksReps;
-	$: timerOverlayOpen = tracksTime && (timerRunning || timerElapsedSeconds > 0);
+	$: timerOverlayOpen = tracksTime && timerTargetSeconds > 0;
+	$: timerComplete = timerTargetSeconds > 0 && timerRemainingSeconds <= 0 && !timerRunning;
+	$: timerDisplaySeconds = timerTargetSeconds > 0 ? timerRemainingSeconds : setDurationSeconds;
+	$: timerProgress =
+		timerTargetSeconds > 0
+			? Math.max(0, Math.min(1, timerRemainingSeconds / timerTargetSeconds))
+			: 1;
+	$: timerProgressPct = `${Math.round(timerProgress * 100)}%`;
 
 	$: if (
 		isOpen &&
@@ -200,17 +207,22 @@
 	}
 
 	function tickTimer() {
-		timerElapsedSeconds =
-			timerBaseSeconds + Math.floor(Math.max(0, Date.now() - timerStartedAt) / 1000);
-		setDurationSeconds = Math.max(1, timerElapsedSeconds);
+		timerRemainingSeconds = Math.max(0, Math.ceil((timerEndsAt - Date.now()) / 1000));
+		if (timerRemainingSeconds > 0) return;
+		timerRunning = false;
+		stopTimerInterval();
+		setDurationSeconds = timerTargetSeconds;
 	}
 
 	function startTimer() {
 		if (locked || !tracksTime || timerRunning || typeof window === 'undefined') return;
-		if (timerElapsedSeconds === 0) setDurationSeconds = 1;
+		const target = timerTargetSeconds || Math.max(1, Math.round(setDurationSeconds));
+		const remaining = timerRemainingSeconds > 0 ? timerRemainingSeconds : target;
+		timerTargetSeconds = target;
+		timerRemainingSeconds = remaining;
+		setDurationSeconds = target;
 		timerRunning = true;
-		timerStartedAt = Date.now();
-		timerBaseSeconds = timerElapsedSeconds;
+		timerEndsAt = Date.now() + remaining * 1000;
 		tickTimer();
 		timerInterval = window.setInterval(tickTimer, 250);
 	}
@@ -218,32 +230,39 @@
 	function pauseTimer() {
 		if (!timerRunning) return;
 		tickTimer();
-		timerBaseSeconds = timerElapsedSeconds;
 		timerRunning = false;
 		stopTimerInterval();
 	}
 
 	function resetTimer() {
 		timerRunning = false;
-		timerBaseSeconds = 0;
-		timerElapsedSeconds = 0;
+		timerTargetSeconds = 0;
+		timerRemainingSeconds = 0;
+		timerEndsAt = 0;
 		stopTimerInterval();
-		setDurationSeconds = 60;
 	}
 
 	function saveTimedSet() {
 		if (timerRunning) pauseTimer();
-		if (timerElapsedSeconds > 0) setDurationSeconds = timerElapsedSeconds;
+		if (!timerComplete) return;
+		setDurationSeconds = timerTargetSeconds;
 		addSet();
 		resetTimer();
 	}
 
+	function resetCountdown() {
+		const target = timerTargetSeconds || Math.max(1, Math.round(setDurationSeconds));
+		timerRunning = false;
+		timerTargetSeconds = target;
+		timerRemainingSeconds = target;
+		timerEndsAt = 0;
+		stopTimerInterval();
+		setDurationSeconds = target;
+	}
+
 	function updateDurationSeconds(value: string) {
 		setDurationSeconds = Number(value);
-		if (!timerRunning && timerElapsedSeconds > 0) {
-			timerElapsedSeconds = 0;
-			timerBaseSeconds = 0;
-		}
+		if (!timerRunning) resetTimer();
 	}
 
 	function updateTracking(patch: Partial<{ reps: boolean; time: boolean; weight: boolean }>) {
@@ -562,7 +581,7 @@
 					{#if tracksTime}
 						<div class="block">
 							<label class="block">
-								<span class="text-xs font-semibold opacity-70">Duration (sec)</span>
+								<span class="text-xs font-semibold opacity-70">Target duration (sec)</span>
 								<input
 									type="number"
 									min="1"
@@ -581,13 +600,13 @@
 									on:click={startTimer}
 									disabled={locked || timerRunning}
 								>
-									{timerElapsedSeconds > 0 ? 'Resume timer' : 'Start timer'}
+									Start timer
 								</button>
 								<button
 									type="button"
 									class="btn btn-xs variant-ghost"
 									on:click={resetTimer}
-									disabled={locked || (!timerElapsedSeconds && !timerRunning)}
+									disabled={locked || !timerOverlayOpen}
 								>
 									Reset
 								</button>
@@ -651,7 +670,7 @@
 					<button
 						type="button"
 						class="btn variant-filled-primary w-full sm:w-auto"
-						on:click={timerElapsedSeconds > 0 ? saveTimedSet : addSet}
+						on:click={addSet}
 						disabled={locked}
 					>
 						Add set
@@ -697,16 +716,22 @@
 	<div class="timer-overlay" role="dialog" aria-modal="true" aria-label={`${exercise.name} timer`}>
 		<div class="timer-panel">
 			<div class="timer-heading">
-				<div class="timer-kicker">Timed set</div>
+				<div class="timer-kicker">{timerComplete ? 'Timer complete' : 'Timed set'}</div>
 				<div class="timer-title">{exercise.name}</div>
 			</div>
 
-			<div class="timer-dial {!timerRunning ? 'timer-dial--paused' : ''}">
+			<div
+				class="timer-dial {!timerRunning ? 'timer-dial--paused' : ''}"
+				style={`--timer-progress:${timerProgressPct}`}
+			>
 				<div class="timer-dial__inner">
-					<div class="timer-state">{timerRunning ? 'Running' : 'Paused'}</div>
-					<div class="timer-value">{formatDuration(timerElapsedSeconds)}</div>
+					<div class="timer-state">
+						{timerComplete ? 'Complete' : timerRunning ? 'Running' : 'Paused'}
+					</div>
+					<div class="timer-value">{formatDuration(timerDisplaySeconds)}</div>
 					<div class="timer-caption">
-						Set {exercise.sets.length + 1}{tracksWeight ? ' • weight preserved' : ''}
+						Target {formatDuration(timerTargetSeconds)} • Set {exercise.sets.length +
+							1}{tracksWeight ? ' • weight preserved' : ''}
 					</div>
 				</div>
 			</div>
@@ -714,6 +739,8 @@
 			<div class="timer-actions">
 				{#if timerRunning}
 					<button type="button" class="btn variant-soft" on:click={pauseTimer}>Pause</button>
+				{:else if timerComplete}
+					<button type="button" class="btn variant-soft" on:click={resetCountdown}>Repeat</button>
 				{:else}
 					<button type="button" class="btn variant-soft" on:click={startTimer}>Resume</button>
 				{/if}
@@ -721,10 +748,11 @@
 					type="button"
 					class="btn variant-filled-primary"
 					on:click={saveTimedSet}
-					disabled={timerElapsedSeconds <= 0}
+					disabled={!timerComplete}
 				>
 					Add set
 				</button>
+				<button type="button" class="btn variant-ghost" on:click={resetCountdown}>Reset</button>
 				<button type="button" class="btn variant-ghost" on:click={resetTimer}>Close</button>
 			</div>
 		</div>
@@ -782,9 +810,8 @@
 		background:
 			conic-gradient(
 				from -90deg,
-				var(--color-primary-400),
-				var(--color-tertiary-400),
-				var(--color-primary-400)
+				var(--color-primary-400) 0 var(--timer-progress),
+				rgb(51 65 85) var(--timer-progress) 100%
 			),
 			rgb(15 23 42 / 0.92);
 		box-shadow:
@@ -795,7 +822,11 @@
 
 	.timer-dial--paused {
 		background:
-			conic-gradient(from -90deg, rgb(148 163 184), rgb(226 232 240), rgb(148 163 184)),
+			conic-gradient(
+				from -90deg,
+				rgb(148 163 184) 0 var(--timer-progress),
+				rgb(51 65 85) var(--timer-progress) 100%
+			),
 			rgb(15 23 42 / 0.92);
 		animation: none;
 	}
