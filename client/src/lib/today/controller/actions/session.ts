@@ -3,7 +3,7 @@ import {
 	createWorkout,
 	endExercise,
 	endWorkout,
-	startWorkoutFromTemplate
+	getWorkoutTemplate
 } from '$lib/api';
 import { createDemoSession } from '$lib/mocks/today';
 import {
@@ -12,7 +12,7 @@ import {
 	saveOfflineSession,
 	sessionKeyForId
 } from '$lib/offline/todaySessions';
-import type { UiSession } from '$lib/today/types';
+import type { PlannedTemplateExercise, UiSession } from '$lib/today/types';
 import { get } from 'svelte/store';
 import {
 	hydrateOfflineState,
@@ -24,7 +24,12 @@ import type { TodayState } from '../state';
 import { getErrorMessage, isNetworkFailure, makeLocalNumericId } from '../utils';
 import type { ExerciseSeedOptions, SeedSet } from './types';
 import { resetLocalSessionUi } from './shared';
-import { trackingFieldsSetting } from '$lib/today/tracking';
+import {
+	decodeTrackingFields,
+	isTrackingFieldsSetting,
+	TRACKING_FIELDS_SETTING_KEY,
+	trackingFieldsSetting
+} from '$lib/today/tracking';
 
 export type SessionActions = {
 	startSession: (mode: 'empty' | 'demo') => Promise<void>;
@@ -52,7 +57,36 @@ export function createSessionActions(args: {
 		});
 		state.sessionNotes.set(notes);
 		state.openExerciseId.set(null);
+		state.plannedTemplateExercises.set([]);
 		resetLocalSessionUi(state);
+	}
+
+	function toPlannedTemplateExercises(
+		exercises: Awaited<ReturnType<typeof getWorkoutTemplate>>['exercises']
+	) {
+		return exercises
+			.slice()
+			.sort((a, b) => a.position - b.position)
+			.map((exercise): PlannedTemplateExercise => {
+				const settings = exercise.settings ?? [];
+				const tracking = decodeTrackingFields(
+					settings.find((setting) => setting.key === TRACKING_FIELDS_SETTING_KEY)?.value
+				);
+
+				return {
+					id: exercise.id,
+					name: exercise.exercise_type,
+					notes: exercise.notes ?? undefined,
+					perSideWeight: exercise.per_side_weight ?? false,
+					splitWeight: exercise.split_weight ?? false,
+					tracksReps: tracking.reps,
+					tracksTime: tracking.time,
+					tracksWeight: tracking.weight,
+					settings: settings
+						.filter((setting) => !isTrackingFieldsSetting(setting))
+						.map((setting) => ({ key: setting.key, value: setting.value }))
+				};
+			});
 	}
 
 	async function startSession(mode: 'empty' | 'demo') {
@@ -147,14 +181,16 @@ export function createSessionActions(args: {
 		state.loading.set(true);
 
 		try {
+			const template = await getWorkoutTemplate(templateId);
 			const startIso = new Date().toISOString();
 			const timezoneOffsetMinutes = new Date(startIso).getTimezoneOffset();
-			const created = await startWorkoutFromTemplate(templateId, {
+			const created = await createWorkout({
 				date: startIso,
 				start_time: startIso,
 				timezone_offset_minutes: timezoneOffsetMinutes
 			});
 			beginLocalSession(created.id, startIso, '');
+			state.plannedTemplateExercises.set(toPlannedTemplateExercises(template.exercises));
 			await refreshFromBackend();
 		} catch (e) {
 			state.error.set(getErrorMessage(e));
@@ -185,6 +221,7 @@ export function createSessionActions(args: {
 				state.currentSession.set(null);
 				state.sessionNotes.set('');
 				state.openExerciseId.set(null);
+				state.plannedTemplateExercises.set([]);
 				resetLocalSessionUi(state);
 				await refreshPendingSyncCount(state);
 				state.notice.set('Session canceled locally.');
@@ -196,6 +233,7 @@ export function createSessionActions(args: {
 			state.currentSession.set(null);
 			state.sessionNotes.set('');
 			state.openExerciseId.set(null);
+			state.plannedTemplateExercises.set([]);
 			resetLocalSessionUi(state);
 			await refreshFromBackend();
 		} catch (e) {
@@ -236,6 +274,7 @@ export function createSessionActions(args: {
 				state.currentSession.set(null);
 				state.sessionNotes.set('');
 				state.openExerciseId.set(null);
+				state.plannedTemplateExercises.set([]);
 				resetLocalSessionUi(state);
 
 				const key = sessionKeyForId(session.id);
@@ -288,6 +327,7 @@ export function createSessionActions(args: {
 			state.currentSession.set(null);
 			state.sessionNotes.set('');
 			state.openExerciseId.set(null);
+			state.plannedTemplateExercises.set([]);
 			resetLocalSessionUi(state);
 			await refreshFromBackend();
 		} catch (e) {

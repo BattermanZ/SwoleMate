@@ -31,6 +31,7 @@
 		markExerciseDone,
 		openEndModal,
 		openExerciseId,
+		plannedTemplateExercises,
 		pendingSyncCount,
 		quickPicks,
 		recentSessions,
@@ -40,6 +41,7 @@
 		start,
 		startSession,
 		startSessionFromTemplate,
+		startPlannedTemplateExercise,
 		submitEndSession,
 		syncPendingSessions,
 		suggestions,
@@ -341,8 +343,10 @@
 					bind:query={$exerciseQuery}
 					disabled={$loading || !$currentSession}
 					suggestions={$suggestions}
+					templatePicks={$plannedTemplateExercises}
 					quickPicks={$quickPicks}
 					on:add={(e) => addExercise(e.detail.name)}
+					on:addTemplateExercise={(e) => startPlannedTemplateExercise(e.detail.id)}
 				/>
 			{:else}
 				<!-- no extra landing card -->

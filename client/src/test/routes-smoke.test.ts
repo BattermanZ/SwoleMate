@@ -26,6 +26,7 @@ const todayControllerMocks = vi.hoisted(() => ({
 
 const todayCurrentSessionStore = writable<UiSession | null>(null);
 const todayOpenExerciseIdStore = writable<number | null>(null);
+const todayPlannedTemplateExercisesStore = writable([]);
 
 vi.mock('$lib/auth', () => ({
 	auth: {
@@ -158,6 +159,7 @@ vi.mock('$lib/today/controller', () => {
 			markExerciseDone: vi.fn(async () => undefined),
 			openEndModal: vi.fn(),
 			openExerciseId: todayOpenExerciseIdStore,
+			plannedTemplateExercises: todayPlannedTemplateExercisesStore,
 			pendingSyncCount: writable(0),
 			quickPicks: writable<string[]>([]),
 			recentSessions: writable([]),
@@ -167,6 +169,7 @@ vi.mock('$lib/today/controller', () => {
 			start: vi.fn(() => () => undefined),
 			startSession: todayControllerMocks.startSession,
 			startSessionFromTemplate: todayControllerMocks.startSessionFromTemplate,
+			startPlannedTemplateExercise: vi.fn(async () => undefined),
 			submitEndSession: vi.fn(async () => undefined),
 			syncPendingSessions: vi.fn(async () => undefined),
 			suggestions: writable<string[]>([]),
@@ -192,6 +195,7 @@ beforeEach(() => {
 	vi.clearAllMocks();
 	todayCurrentSessionStore.set(null);
 	todayOpenExerciseIdStore.set(null);
+	todayPlannedTemplateExercisesStore.set([]);
 });
 
 describe('route smoke', () => {

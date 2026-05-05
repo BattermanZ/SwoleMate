@@ -1,13 +1,16 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
+	import type { PlannedTemplateExercise } from '$lib/today/types';
 
 	export let query = '';
 	export let suggestions: string[] = [];
+	export let templatePicks: PlannedTemplateExercise[] = [];
 	export let quickPicks: string[] = [];
 	export let disabled = false;
 
 	const dispatch = createEventDispatcher<{
 		add: { name: string };
+		addTemplateExercise: { id: number };
 	}>();
 
 	function add(name: string) {
@@ -81,6 +84,22 @@
 					{disabled}
 				>
 					{pick}
+				</button>
+			{/each}
+		</div>
+	{/if}
+
+	{#if templatePicks.length > 0}
+		<div class="flex flex-wrap gap-2 items-center">
+			<span class="text-xs font-semibold opacity-70 mr-1">From template</span>
+			{#each templatePicks as pick (pick.id)}
+				<button
+					type="button"
+					class="chip variant-soft-primary text-sm"
+					on:click={() => dispatch('addTemplateExercise', { id: pick.id })}
+					{disabled}
+				>
+					{pick.name}
 				</button>
 			{/each}
 		</div>

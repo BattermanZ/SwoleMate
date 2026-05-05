@@ -84,4 +84,44 @@ describe('today controller carry-over', () => {
 			'Rack height:6'
 		]);
 	});
+
+	it('starts a planned template exercise and removes it from the plan', async () => {
+		const controller = createTodayController();
+
+		controller.currentSession.set({
+			id: 99,
+			startedAt: '2026-01-02T10:00:00.000Z',
+			notes: '',
+			exercises: []
+		});
+		controller.plannedTemplateExercises.set([
+			{
+				id: 7,
+				name: 'Incline Press',
+				notes: 'controlled eccentric',
+				perSideWeight: false,
+				splitWeight: false,
+				tracksReps: true,
+				tracksTime: false,
+				tracksWeight: true,
+				settings: [{ key: 'Bench angle', value: '30' }]
+			}
+		]);
+
+		await controller.startPlannedTemplateExercise(7);
+
+		expect(createExercise).toHaveBeenCalledWith(
+			99,
+			expect.objectContaining({
+				exercise_type: 'Incline Press',
+				notes: 'controlled eccentric',
+				settings: expect.arrayContaining([
+					{ key: 'Bench angle', value: '30' },
+					{ key: '_tracking_fields', value: 'reps,weight' }
+				])
+			})
+		);
+		expect(get(controller.currentSession)?.exercises[0]?.name).toBe('Incline Press');
+		expect(get(controller.plannedTemplateExercises)).toEqual([]);
+	});
 });

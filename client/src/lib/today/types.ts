@@ -40,3 +40,15 @@ export type UiSession = {
 	mood?: UiMood;
 	exercises: UiExercise[];
 };
+
+export type PlannedTemplateExercise = {
+	id: number;
+	name: string;
+	notes?: string;
+	perSideWeight?: boolean;
+	splitWeight?: boolean;
+	tracksReps?: boolean;
+	tracksTime?: boolean;
+	tracksWeight?: boolean;
+	settings?: Array<{ key: string; value: string }>;
+};

@@ -1,5 +1,5 @@
 import { EXERCISE_LIBRARY } from '$lib/mocks/today';
-import type { UiMood, UiSession } from '$lib/today/types';
+import type { PlannedTemplateExercise, UiMood, UiSession } from '$lib/today/types';
 import { derived, writable } from 'svelte/store';
 import {
 	calculateElapsedLabel,
@@ -15,6 +15,7 @@ export function createTodayState() {
 	const currentSession = writable<UiSession | null>(null);
 	const recentSessions = writable<UiSession[]>([]);
 	const openExerciseId = writable<number | null>(null);
+	const plannedTemplateExercises = writable<PlannedTemplateExercise[]>([]);
 
 	const exerciseQuery = writable('');
 	const sessionNotes = writable('');
@@ -61,6 +62,7 @@ export function createTodayState() {
 		currentSession,
 		recentSessions,
 		openExerciseId,
+		plannedTemplateExercises,
 		exerciseQuery,
 		sessionNotes,
 		endMood,

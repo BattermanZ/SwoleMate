@@ -36,6 +36,26 @@ describe('today components', () => {
 		);
 	});
 
+	it('adds a planned template exercise from the exercise composer', async () => {
+		const onAddTemplateExercise = vi.fn();
+		const { getByRole } = render(ExerciseComposer, {
+			props: {
+				query: '',
+				suggestions: [],
+				templatePicks: [{ id: 42, name: 'Incline Press' }],
+				quickPicks: [],
+				disabled: false
+			},
+			events: { addTemplateExercise: onAddTemplateExercise }
+		});
+
+		await fireEvent.click(getByRole('button', { name: 'Incline Press' }));
+
+		expect(onAddTemplateExercise).toHaveBeenCalledWith(
+			expect.objectContaining({ detail: { id: 42 } })
+		);
+	});
+
 	it('requires mood before submit in end session modal', async () => {
 		const onSubmit = vi.fn();
 		const { getByText } = render(EndSessionModal, {
