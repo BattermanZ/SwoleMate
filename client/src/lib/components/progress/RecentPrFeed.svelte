@@ -43,9 +43,28 @@
 	$: visibleRecords = activeRecords.slice(0, visibleLimit);
 	$: emptyMessage = selectedFeed === 'prs' ? 'No all-time PRs yet.' : 'No recent bests yet.';
 	$: badgeLabel = selectedFeed === 'prs' ? 'All-time PR' : 'Recent best';
+
+	const selectedButtonClass =
+		'bg-primary-500 text-white shadow-[0_8px_18px_-12px_rgba(37,99,235,0.75)]';
+	const quietButtonClass =
+		'text-surface-700 hover:bg-surface-100 dark:text-surface-200 dark:hover:bg-surface-800/70';
+	const recordRowClass =
+		'relative overflow-hidden rounded-xl border bg-surface-50/80 p-3 shadow-[0_10px_28px_-24px_rgba(15,23,42,0.6)] dark:bg-surface-950/35';
+
+	$: activeBadgeClass =
+		selectedFeed === 'prs'
+			? 'border-warning-500/30 bg-warning-500/15 text-warning-700 dark:text-warning-300'
+			: 'border-success-500/30 bg-success-500/15 text-success-700 dark:text-success-300';
+	$: activeRailClass = selectedFeed === 'prs' ? 'bg-warning-500/80' : 'bg-success-500/80';
+	$: rowBorderClass =
+		selectedFeed === 'prs'
+			? 'border-warning-500/25 dark:border-warning-500/25'
+			: 'border-success-500/25 dark:border-success-500/25';
 </script>
 
-<section class="card variant-glass-surface p-4">
+<section
+	class="card variant-glass-surface overflow-hidden p-4 shadow-[0_18px_50px_-36px_rgba(15,23,42,0.55)]"
+>
 	<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 		<div>
 			<h2 class="text-lg font-semibold tracking-tight">Records</h2>
@@ -53,7 +72,7 @@
 		</div>
 
 		<div
-			class="grid grid-cols-2 rounded-lg border border-surface-200/70 bg-surface-50/70 p-1 dark:border-surface-700/70 dark:bg-surface-950/40"
+			class="grid grid-cols-2 rounded-xl border border-surface-200/70 bg-surface-100/70 p-1 shadow-inner dark:border-surface-700/70 dark:bg-surface-950/45"
 			role="tablist"
 			aria-label="Record type"
 		>
@@ -61,10 +80,9 @@
 				type="button"
 				role="tab"
 				aria-selected={selectedFeed === 'prs'}
-				class="rounded-md px-3 py-1.5 text-xs font-semibold transition-colors {selectedFeed ===
-				'prs'
-					? 'bg-primary-500 text-white shadow-sm'
-					: 'text-surface-700 hover:bg-surface-100 dark:text-surface-200 dark:hover:bg-surface-800/70'}"
+				class="rounded-lg px-3 py-1.5 text-xs font-semibold transition {selectedFeed === 'prs'
+					? selectedButtonClass
+					: quietButtonClass}"
 				on:click={() => (selectedFeed = 'prs')}
 			>
 				All-time PRs
@@ -73,10 +91,10 @@
 				type="button"
 				role="tab"
 				aria-selected={selectedFeed === 'recent-bests'}
-				class="rounded-md px-3 py-1.5 text-xs font-semibold transition-colors {selectedFeed ===
+				class="rounded-lg px-3 py-1.5 text-xs font-semibold transition {selectedFeed ===
 				'recent-bests'
-					? 'bg-primary-500 text-white shadow-sm'
-					: 'text-surface-700 hover:bg-surface-100 dark:text-surface-200 dark:hover:bg-surface-800/70'}"
+					? selectedButtonClass
+					: quietButtonClass}"
 				on:click={() => (selectedFeed = 'recent-bests')}
 			>
 				Recent bests
@@ -87,21 +105,33 @@
 	{#if visibleRecords.length}
 		<div class="mt-3 space-y-2">
 			{#each visibleRecords as pr (`${selectedFeed}-${pr.set_id}-${pr.pr_type}`)}
-				<div
-					class="rounded-xl border border-surface-200/50 bg-surface-50/60 p-3 dark:border-surface-700/50 dark:bg-surface-950/30"
-				>
+				<div class="{recordRowClass} {rowBorderClass}">
+					<div class="absolute inset-y-3 left-0 w-1 rounded-r-full {activeRailClass}"></div>
 					<div class="flex flex-wrap items-start justify-between gap-2">
 						<div class="min-w-0">
 							<div class="font-semibold">{pr.exercise_type}</div>
-							<div class="text-sm opacity-75">
-								<span class="badge variant-soft-primary mr-1">{badgeLabel}</span>
-								{labels[pr.pr_type]} · {formatValue(pr, pr.new_value)}
+							<div class="mt-1 text-sm text-surface-700 dark:text-surface-200">
+								<span
+									class="mr-1 inline-flex rounded-full border px-2 py-0.5 text-[0.7rem] font-bold leading-none {activeBadgeClass}"
+								>
+									{badgeLabel}
+								</span>
+								<span class="font-semibold">{labels[pr.pr_type]}</span>
+								<span
+									class="text-base font-extrabold tracking-tight text-surface-950 dark:text-surface-50"
+								>
+									{formatValue(pr, pr.new_value)}
+								</span>
 								<span class="opacity-60">from {formatValue(pr, pr.previous_value)}</span>
 							</div>
 						</div>
-						<div class="text-xs font-semibold opacity-60">{formatDateShort(pr.date)}</div>
+						<div
+							class="rounded-full border border-surface-200/70 bg-surface-50/70 px-2 py-1 text-xs font-semibold text-surface-600 dark:border-surface-700/70 dark:bg-surface-900/60 dark:text-surface-300"
+						>
+							{formatDateShort(pr.date)}
+						</div>
 					</div>
-					<div class="mt-2 text-xs opacity-70">{details(pr)}</div>
+					<div class="mt-2 text-xs font-medium opacity-70">{details(pr)}</div>
 				</div>
 			{/each}
 		</div>
