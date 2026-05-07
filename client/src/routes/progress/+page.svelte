@@ -10,13 +10,12 @@
 	import type { ExerciseProgress, ProgressOverview, VolumeStats, WorkoutStats } from '$lib/types';
 	import { logger } from '$lib/logger';
 	import ProgressHeader from '$lib/components/progress/ProgressHeader.svelte';
-	import ProgressOverviewPanel from '$lib/components/progress/ProgressOverview.svelte';
-	import ExerciseFocusPanel from '$lib/components/progress/ExerciseFocusPanel.svelte';
-	import ExerciseCharts from '$lib/components/progress/ExerciseCharts.svelte';
-	import RecentExerciseSessions from '$lib/components/progress/RecentExerciseSessions.svelte';
-	import OverallCharts from '$lib/components/progress/OverallCharts.svelte';
-	import RecentPrFeed from '$lib/components/progress/RecentPrFeed.svelte';
+	import ProgressTabs, { type ProgressTab } from '$lib/components/progress/ProgressTabs.svelte';
+	import OverviewTab from '$lib/components/progress/OverviewTab.svelte';
+	import ExerciseTab from '$lib/components/progress/ExerciseTab.svelte';
+	import TrendsTab from '$lib/components/progress/TrendsTab.svelte';
 
+	let selectedTab: ProgressTab = 'overview';
 	let selectedExercise = '';
 	let loadedExercise = '';
 	let requestedExercise = '';
@@ -32,6 +31,11 @@
 	let errorExercise: string | null = null;
 
 	let exerciseRequestId = 0;
+	let exerciseTypesLoaded = false;
+
+	function isProgressTab(value: string | null): value is ProgressTab {
+		return value === 'overview' || value === 'exercise' || value === 'trends';
+	}
 
 	function getErrorMessage(e: unknown): string {
 		if (e instanceof Error) return e.message;
@@ -60,6 +64,7 @@
 	async function loadExerciseTypes(): Promise<string> {
 		try {
 			exerciseTypes = await getExerciseTypes();
+			exerciseTypesLoaded = true;
 			const stored = localStorage.getItem('progress.selectedExercise');
 			selectedExercise =
 				stored && exerciseTypes.includes(stored) ? stored : (exerciseTypes[0] ?? '');
@@ -71,6 +76,7 @@
 			requestedExercise = '';
 			volumeStats = null;
 			exerciseProgress = null;
+			exerciseTypesLoaded = true;
 			errorExercise = getErrorMessage(e);
 			logger.error('progress', 'Error loading exercise types', { error: e });
 			return '';
@@ -128,7 +134,7 @@
 
 	async function refreshAll() {
 		const [, exercise] = await Promise.all([loadOverall(), loadExerciseTypes()]);
-		if (exercise) await loadExercise(exercise);
+		if (selectedTab === 'exercise' && exercise) await loadExercise(exercise);
 	}
 
 	function selectExercise(event: CustomEvent<string>) {
@@ -139,8 +145,25 @@
 		}
 	}
 
+	async function ensureExerciseTabLoaded() {
+		const exercise = exerciseTypesLoaded ? selectedExercise : await loadExerciseTypes();
+		if (exercise && exercise !== loadedExercise && exercise !== requestedExercise) {
+			await loadExercise(exercise);
+		}
+	}
+
+	function selectTab(event: CustomEvent<ProgressTab>) {
+		const tab = event.detail;
+		selectedTab = tab;
+		localStorage.setItem('progress.selectedTab', tab);
+		if (tab === 'exercise') void ensureExerciseTabLoaded();
+	}
+
 	onMount(async () => {
+		const storedTab = localStorage.getItem('progress.selectedTab');
+		if (isProgressTab(storedTab)) selectedTab = storedTab;
 		await refreshAll();
+		if (selectedTab === 'exercise') await ensureExerciseTabLoaded();
 	});
 </script>
 
@@ -155,33 +178,22 @@
 		on:refresh={refreshAll}
 	/>
 
-	<ProgressOverviewPanel
-		overview={progressOverview}
-		loading={loadingOverall}
-		error={errorOverall}
-	/>
+	<ProgressTabs {selectedTab} on:select={selectTab} />
 
-	<div class="grid gap-6 md:grid-cols-12">
-		<section class="md:col-span-7 lg:col-span-8 space-y-4 min-w-0">
-			<RecentPrFeed prs={progressOverview?.recent_prs ?? []} />
-
-			<ExerciseFocusPanel
-				bind:selectedExercise
-				{exerciseTypes}
-				{volumeStats}
-				{loadingExercise}
-				{errorExercise}
-				on:select={selectExercise}
-			/>
-
-			{#if volumeStats && loadedExercise === selectedExercise}
-				<ExerciseCharts {volumeStats} {exerciseProgress} />
-				<RecentExerciseSessions {exerciseProgress} />
-			{/if}
-		</section>
-
-		<aside class="md:col-span-5 lg:col-span-4 min-w-0">
-			<OverallCharts {workoutStats} />
-		</aside>
-	</div>
+	{#if selectedTab === 'overview'}
+		<OverviewTab {progressOverview} {loadingOverall} {errorOverall} />
+	{:else if selectedTab === 'exercise'}
+		<ExerciseTab
+			bind:selectedExercise
+			{loadedExercise}
+			{exerciseTypes}
+			{volumeStats}
+			{exerciseProgress}
+			{loadingExercise}
+			{errorExercise}
+			on:select={selectExercise}
+		/>
+	{:else}
+		<TrendsTab {workoutStats} />
+	{/if}
 </div>

@@ -139,7 +139,7 @@ describe('progress route page', () => {
 		apiMocks.getExerciseProgress.mockResolvedValue([]);
 	});
 
-	it('loads overall and exercise data on mount', async () => {
+	it('loads overview data on mount without loading exercise details', async () => {
 		const { default: ProgressPage } = await import('../routes/progress/+page.svelte');
 		render(ProgressPage as never);
 
@@ -147,26 +147,40 @@ describe('progress route page', () => {
 			expect(apiMocks.getWorkoutStats).toHaveBeenCalledTimes(1);
 			expect(apiMocks.getProgressOverview).toHaveBeenCalledTimes(1);
 			expect(apiMocks.getExerciseTypes).toHaveBeenCalledTimes(1);
-			expect(apiMocks.getVolumeStats).toHaveBeenCalledWith('Bench Press');
-			expect(apiMocks.getExerciseProgress).toHaveBeenCalledWith('Bench Press');
 		});
+		expect(apiMocks.getVolumeStats).not.toHaveBeenCalled();
+		expect(apiMocks.getExerciseProgress).not.toHaveBeenCalled();
 	}, 15_000);
 
-	it('renders overview, recent PRs, and timed records', async () => {
+	it('renders overview and recent PRs by default', async () => {
 		const { default: ProgressPage } = await import('../routes/progress/+page.svelte');
-		const { findByText } = render(ProgressPage as never);
+		const { findByText, queryByText } = render(ProgressPage as never);
 
 		expect(await findByText('Current progress')).toBeInTheDocument();
 		expect(await findByText('Recent PRs')).toBeInTheDocument();
 		expect(await findByText(/Estimated 1RM/)).toBeInTheDocument();
+		expect(queryByText('Longest timed set')).not.toBeInTheDocument();
+	});
+
+	it('loads and renders exercise details when the Exercise tab opens', async () => {
+		const { default: ProgressPage } = await import('../routes/progress/+page.svelte');
+		const { findByRole, findByText } = render(ProgressPage as never);
+
+		await fireEvent.click(await findByRole('tab', { name: 'Exercise' }));
+
+		await waitFor(() => {
+			expect(apiMocks.getVolumeStats).toHaveBeenCalledWith('Bench Press');
+			expect(apiMocks.getExerciseProgress).toHaveBeenCalledWith('Bench Press');
+		});
 		expect(await findByText('Longest timed set')).toBeInTheDocument();
 		expect(await findByText('1m 15s')).toBeInTheDocument();
 	});
 
 	it('reloads exercise-specific data when selection changes', async () => {
 		const { default: ProgressPage } = await import('../routes/progress/+page.svelte');
-		const { getByRole } = render(ProgressPage as never);
+		const { findByRole, getByRole } = render(ProgressPage as never);
 
+		await fireEvent.click(await findByRole('tab', { name: 'Exercise' }));
 		await waitFor(() => expect(apiMocks.getVolumeStats).toHaveBeenCalledWith('Bench Press'));
 
 		const targetSelect = getByRole('combobox', { name: 'Exercise' });
@@ -177,6 +191,29 @@ describe('progress route page', () => {
 			expect(apiMocks.getExerciseProgress).toHaveBeenCalledWith('Squat');
 		});
 		expect(localStorage.getItem('progress.selectedExercise')).toBe('Squat');
+	});
+
+	it('persists selected tab and shows trends tab content', async () => {
+		const { default: ProgressPage } = await import('../routes/progress/+page.svelte');
+		const { findByRole, findByText, queryByText } = render(ProgressPage as never);
+
+		await fireEvent.click(await findByRole('tab', { name: 'Trends' }));
+
+		expect(localStorage.getItem('progress.selectedTab')).toBe('trends');
+		expect(await findByText('Sessions per month')).toBeInTheDocument();
+		expect(queryByText('Recent PRs')).not.toBeInTheDocument();
+	});
+
+	it('restores the Exercise tab and loads exercise details', async () => {
+		localStorage.setItem('progress.selectedTab', 'exercise');
+		const { default: ProgressPage } = await import('../routes/progress/+page.svelte');
+		const { findByRole } = render(ProgressPage as never);
+
+		expect(await findByRole('tab', { name: 'Exercise', selected: true })).toBeInTheDocument();
+		await waitFor(() => {
+			expect(apiMocks.getVolumeStats).toHaveBeenCalledWith('Bench Press');
+			expect(apiMocks.getExerciseProgress).toHaveBeenCalledWith('Bench Press');
+		});
 	});
 
 	it('shows error when overall load fails', async () => {
@@ -190,7 +227,9 @@ describe('progress route page', () => {
 	it('shows exercise error when progress load fails', async () => {
 		apiMocks.getVolumeStats.mockRejectedValue(new Error('progress down'));
 		const { default: ProgressPage } = await import('../routes/progress/+page.svelte');
-		const { findAllByText } = render(ProgressPage as never);
+		const { findAllByText, findByRole } = render(ProgressPage as never);
+
+		await fireEvent.click(await findByRole('tab', { name: 'Exercise' }));
 
 		expect((await findAllByText('progress down')).length).toBeGreaterThan(0);
 	});
