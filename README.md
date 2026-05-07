@@ -1,10 +1,12 @@
-# SwoleMate (v2.2.0)
+# SwoleMate (v2.4.0)
 
 SwoleMate is a self-hosted workout logging web app designed for fast, phone-first session tracking:
 
 - Log a workout as you train (exercises, sets, notes, equipment settings).
+- Track timed exercises with countdown timers and duration-based set history.
+- Build workout templates and start template sessions one exercise at a time.
 - Review recent sessions in History (including details) to quickly remember what you did.
-- Use Progress charts to see trends (strength, volume, time-of-day patterns).
+- Use Progress to review summaries, records, recent bests, exercise charts, and trends.
 - Keep your data local in a SQLite database and export/restore backups.
 - Create personal MCP tokens in Settings to connect compatible AI tools.
 
@@ -22,9 +24,11 @@ It runs as:
 
 ## Key features
 
-- Phone-first session logging (sets, notes, optional equipment settings, per-side weights).
+- Phone-first session logging (sets, timed sets, notes, optional equipment settings, per-side weights).
+- Mobile bottom navigation for the primary Today, History, Progress, and Templates flows.
+- Workout templates for reusable training plans and template-based session starts.
 - History and session details (including the ability to edit start/end times, notes, and rating).
-- Progress charts (exercise focus and overall trends).
+- Progress overview, recent PRs, recent bests, timed records, exercise focus, and overall trends.
 - Admin-only user management and admin-only backups.
 - Automatic backups and a retention policy designed to keep a useful set of restore points.
 - Optional offline logging on the Today page (local-first queue + later sync).

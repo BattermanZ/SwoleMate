@@ -1,6 +1,8 @@
 <script lang="ts">
+	import { createEventDispatcher } from 'svelte';
 	import type { VolumeStats } from '$lib/types';
 	import RepPrs from '$lib/components/progress/RepPrs.svelte';
+	import TimedRecords from '$lib/components/progress/TimedRecords.svelte';
 
 	export let selectedExercise = '';
 	export let exerciseTypes: string[] = [];
@@ -8,6 +10,8 @@
 
 	export let loadingExercise = false;
 	export let errorExercise: string | null = null;
+
+	const dispatch = createEventDispatcher<{ select: string }>();
 </script>
 
 <div class="card variant-glass-surface p-4 space-y-3 min-w-0">
@@ -22,6 +26,7 @@
 				class="select w-full sm:w-72 min-w-0"
 				bind:value={selectedExercise}
 				disabled={loadingExercise}
+				on:change={() => dispatch('select', selectedExercise)}
 			>
 				{#if exerciseTypes.length === 0}
 					<option value="">No exercises yet</option>
@@ -34,7 +39,9 @@
 		</label>
 	</div>
 
-	{#if volumeStats}
+	{#if errorExercise}
+		<div class="alert variant-filled-error">{errorExercise}</div>
+	{:else if volumeStats}
 		<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
 			<div class="card variant-glass-surface p-3 border-l-4 border-primary-500/60">
 				<div class="text-xs font-semibold opacity-70">All‑time max</div>
@@ -53,13 +60,15 @@
 		{#key selectedExercise}
 			<RepPrs repPrs={volumeStats.personal_records.rep_prs ?? []} />
 		{/key}
+
+		{#if volumeStats.timed_records}
+			<TimedRecords records={volumeStats.timed_records} />
+		{/if}
 	{:else if loadingExercise}
 		<div class="card variant-glass-surface p-4 animate-pulse">
 			<div class="h-4 w-36 bg-surface-200/60 dark:bg-surface-700/50 rounded"></div>
 			<div class="mt-3 h-8 w-48 bg-surface-200/60 dark:bg-surface-700/50 rounded"></div>
 		</div>
-	{:else if errorExercise}
-		<div class="alert variant-filled-error">{errorExercise}</div>
 	{:else if selectedExercise}
 		<div class="card variant-ghost p-4 text-center opacity-80">
 			No progress data yet for <span class="font-semibold">{selectedExercise}</span>.

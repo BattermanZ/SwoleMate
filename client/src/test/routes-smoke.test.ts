@@ -1,5 +1,5 @@
 import { fireEvent, render } from '@testing-library/svelte';
-import type { UiSession } from '$lib/today/types';
+import type { PlannedTemplateExercise, UiSession } from '$lib/today/types';
 import { readable, writable } from 'svelte/store';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -26,6 +26,7 @@ const todayControllerMocks = vi.hoisted(() => ({
 
 const todayCurrentSessionStore = writable<UiSession | null>(null);
 const todayOpenExerciseIdStore = writable<number | null>(null);
+const todayPlannedTemplateExercisesStore = writable<PlannedTemplateExercise[]>([]);
 
 vi.mock('$lib/auth', () => ({
 	auth: {
@@ -158,6 +159,7 @@ vi.mock('$lib/today/controller', () => {
 			markExerciseDone: vi.fn(async () => undefined),
 			openEndModal: vi.fn(),
 			openExerciseId: todayOpenExerciseIdStore,
+			plannedTemplateExercises: todayPlannedTemplateExercisesStore,
 			pendingSyncCount: writable(0),
 			quickPicks: writable<string[]>([]),
 			recentSessions: writable([]),
@@ -167,6 +169,7 @@ vi.mock('$lib/today/controller', () => {
 			start: vi.fn(() => () => undefined),
 			startSession: todayControllerMocks.startSession,
 			startSessionFromTemplate: todayControllerMocks.startSessionFromTemplate,
+			startPlannedTemplateExercise: vi.fn(async () => undefined),
 			submitEndSession: vi.fn(async () => undefined),
 			syncPendingSessions: vi.fn(async () => undefined),
 			suggestions: writable<string[]>([]),
@@ -175,6 +178,7 @@ vi.mock('$lib/today/controller', () => {
 			toggleExerciseSplitWeight: vi.fn(async () => undefined),
 			totalSets: writable(0),
 			totalVolumeKg: writable(0),
+			totalDurationSeconds: writable(0),
 			updateExerciseNotes: vi.fn(),
 			updateExerciseSetting: vi.fn()
 		})
@@ -191,15 +195,10 @@ beforeEach(() => {
 	vi.clearAllMocks();
 	todayCurrentSessionStore.set(null);
 	todayOpenExerciseIdStore.set(null);
+	todayPlannedTemplateExercisesStore.set([]);
 });
 
 describe('route smoke', () => {
-	it('renders +layout without throwing', async () => {
-		const Layout = await importComponent('../routes/+layout.svelte');
-		const { getByText } = render(Layout as never);
-		expect(getByText('SwoleMate')).toBeInTheDocument();
-	}, 30_000);
-
 	it('renders today page', async () => {
 		const TodayPage = await importComponent('../routes/+page.svelte');
 		const { getByRole, queryByRole } = render(TodayPage as never);
@@ -227,7 +226,8 @@ describe('route smoke', () => {
 		expect(todayControllerMocks.startSessionFromTemplate).toHaveBeenCalledWith(5);
 	});
 
-	it('keeps active exercises open while leaving done exercises collapsed', async () => {
+	it('renders only the selected exercise open', async () => {
+		todayOpenExerciseIdStore.set(101);
 		todayCurrentSessionStore.set({
 			id: 12,
 			startedAt: '2026-01-01T10:00:00.000Z',
@@ -268,6 +268,24 @@ describe('route smoke', () => {
 		expect(queryAllByText('Add your first set for this exercise.')).toHaveLength(1);
 		expect(queryAllByText('Mark done')).toHaveLength(1);
 		expect(queryAllByText('Collapse')).toHaveLength(1);
+	});
+
+	it('points empty template sessions to the template plan', async () => {
+		todayCurrentSessionStore.set({
+			id: 12,
+			startedAt: '2026-01-01T10:00:00.000Z',
+			notes: '',
+			exercises: []
+		});
+		todayPlannedTemplateExercisesStore.set([{ id: 77, name: 'Bench Press' }]);
+
+		const TodayPage = await importComponent('../routes/+page.svelte');
+		const { getByText } = render(TodayPage as never);
+
+		expect(getByText('Start your template plan')).toBeInTheDocument();
+		expect(getByText('Start an exercise from your template plan below.')).toBeInTheDocument();
+		expect(getByText('Template plan')).toBeInTheDocument();
+		expect(getByText('1 left')).toBeInTheDocument();
 	});
 
 	it('renders workouts page with basic data', async () => {

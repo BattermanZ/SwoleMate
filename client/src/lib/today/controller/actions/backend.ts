@@ -38,6 +38,7 @@ export async function refreshFromBackend(state: TodayState) {
 				state.currentSession.set(null);
 				state.sessionNotes.set('');
 				state.openExerciseId.set(null);
+				state.plannedTemplateExercises.set([]);
 			}
 		}
 

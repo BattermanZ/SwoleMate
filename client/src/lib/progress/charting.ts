@@ -136,6 +136,24 @@ export function formatMonthLabel(month: string): string {
 	return `${label} ${String(y).slice(-2)}`;
 }
 
+export function sqliteWeekKeyToTimestamp(weekKey: string): number | null {
+	const match = weekKey.match(/^(?<year>\d{4})-(?:W)?(?<week>\d{1,2})$/);
+	if (!match?.groups) return null;
+
+	const year = Number(match.groups.year);
+	const week = Number(match.groups.week);
+	if (!Number.isInteger(year) || !Number.isInteger(week) || week < 0 || week > 53) return null;
+
+	const janFirst = new Date(Date.UTC(year, 0, 1));
+	if (week === 0) return janFirst.getTime();
+
+	const janFirstDay = janFirst.getUTCDay();
+	const daysUntilFirstMonday = janFirstDay === 1 ? 0 : janFirstDay === 0 ? 1 : 8 - janFirstDay;
+	const weekStart = new Date(janFirst);
+	weekStart.setUTCDate(janFirst.getUTCDate() + daysUntilFirstMonday + (week - 1) * 7);
+	return weekStart.getTime();
+}
+
 export function observeTheme(onChange: () => void): MutationObserver {
 	const observer = new MutationObserver(() => onChange());
 	observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });

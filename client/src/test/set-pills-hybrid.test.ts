@@ -40,4 +40,19 @@ describe('SetPillsHybrid', () => {
 		expect(getByText('8×')).toBeInTheDocument();
 		expect(getByText('17.5/20kg')).toBeInTheDocument();
 	});
+
+	it('renders timed sets with optional weight', () => {
+		const { getAllByText, getByText } = render(SetPillsHybrid, {
+			props: {
+				sets: [
+					{ reps: 0, weight: 0, durationSeconds: 75 },
+					{ reps: 0, weight: 20, durationSeconds: 75 }
+				],
+				size: 'xs'
+			}
+		});
+
+		expect(getAllByText('1:15')).toHaveLength(2);
+		expect(getByText('20kg')).toBeInTheDocument();
+	});
 });

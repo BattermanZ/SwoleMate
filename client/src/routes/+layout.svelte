@@ -7,10 +7,11 @@
 	import { auth } from '$lib/auth';
 	import { logger } from '$lib/logger';
 
-	let drawerOpen = false;
+	let moreMenuOpen = false;
 	let darkMode = false;
 	const THEME_KEY = 'theme';
 	const authState = auth.state;
+	$: currentPath = $page.url.pathname;
 
 	// Navigation items
 	const navItems = [
@@ -24,8 +25,8 @@
 		{ href: '/backups', label: 'Backups', icon: '💾' }
 	];
 
-	$: isLogin = $page.url.pathname === '/login';
-	$: isSettings = $page.url.pathname === '/settings';
+	$: isLogin = currentPath === '/login';
+	$: isSettings = currentPath === '/settings';
 	$: mustChangePassword =
 		$authState.status === 'authenticated' && $authState.user?.must_change_password;
 	$: canSeeAdmin =
@@ -41,9 +42,21 @@
 		if (item.href === '/backups') return canSeeBackups;
 		return true;
 	});
+	$: primaryMobileNavItems = visibleNavItems.filter((item) =>
+		['/', '/templates', '/workouts', '/progress'].includes(item.href)
+	);
+	$: secondaryMobileNavItems = visibleNavItems.filter(
+		(item) => !primaryMobileNavItems.some((primary) => primary.href === item.href)
+	);
+	$: isMoreActive = secondaryMobileNavItems.some((item) => isNavItemActive(item.href, currentPath));
 
-	function toggleDrawer(): void {
-		drawerOpen = !drawerOpen;
+	function isNavItemActive(href: string, pathname: string): boolean {
+		if (href === '/') return pathname === '/';
+		return pathname === href || pathname.startsWith(`${href}/`);
+	}
+
+	function closeMoreMenu(): void {
+		moreMenuOpen = false;
 	}
 
 	function applyTheme(next: boolean) {
@@ -118,6 +131,10 @@
 		void goto('/settings');
 	}
 
+	$: if (isLogin || currentPath) {
+		moreMenuOpen = false;
+	}
+
 	$: {
 		const shouldEnableRemoteLogs =
 			!import.meta.env.DEV && $authState.status === 'authenticated' && !$authState.offline;
@@ -126,8 +143,37 @@
 </script>
 
 <div class="app-shell">
-	<AppBar class="app-shell-header bg-surface-100-800-token border-b-2 relative z-50">
-		<AppBar.Toolbar class="grid grid-cols-[1fr_auto] items-center gap-3">
+	<header class="mobile-shell-header md:hidden">
+		<div class="mobile-shell-header-row">
+			<a href="/" class="mobile-shell-brand">
+				<span class="mobile-shell-brand-icon">💪</span>
+				<span class="mobile-shell-brand-text">SwoleMate</span>
+			</a>
+			<div class="mobile-shell-actions">
+				<button
+					type="button"
+					class="mobile-shell-action"
+					aria-label="Toggle dark mode"
+					on:click={() => applyTheme(!darkMode)}
+				>
+					<span aria-hidden="true">{darkMode ? '🌙' : '☀️'}</span>
+				</button>
+				{#if !isLogin && $authState.status === 'authenticated'}
+					<button
+						type="button"
+						class="mobile-shell-action"
+						aria-label="Log out"
+						on:click={() => auth.logout()}
+					>
+						<span aria-hidden="true">⎋</span>
+					</button>
+				{/if}
+			</div>
+		</div>
+	</header>
+
+	<AppBar class="app-shell-header hidden bg-surface-100-800-token border-b relative z-50 md:block">
+		<AppBar.Toolbar class="grid grid-cols-[1fr_auto] items-center gap-3 py-3">
 			<AppBar.Lead>
 				<a href="/" class="flex items-center gap-2">
 					<span class="text-2xl">💪</span>
@@ -142,7 +188,7 @@
 								<li>
 									<a
 										href={item.href}
-										class="btn btn-sm {$page.url.pathname === item.href
+										class="btn btn-sm {isNavItemActive(item.href, currentPath)
 											? 'variant-filled-primary'
 											: 'variant-ghost-primary'}"
 									>
@@ -153,14 +199,6 @@
 							{/each}
 						</ul>
 					</nav>
-				{/if}
-
-				{#if !isLogin}
-					<div class="md:hidden">
-						<button class="btn btn-sm variant-ghost-primary" on:click={toggleDrawer}>
-							<span>☰</span>
-						</button>
-					</div>
 				{/if}
 
 				<button
@@ -190,25 +228,23 @@
 		</AppBar.Toolbar>
 	</AppBar>
 
-	{#if drawerOpen && !isLogin}
-		<div class="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
-			<button
-				class="absolute inset-0 bg-black/50"
-				aria-label="Close menu"
-				on:click={() => (drawerOpen = false)}
+	{#if moreMenuOpen && !isLogin}
+		<div class="fixed inset-0 z-40 md:hidden" role="dialog" aria-modal="true">
+			<button class="absolute inset-0 bg-black/50" aria-label="Close menu" on:click={closeMoreMenu}
 			></button>
 			<nav
-				class="absolute right-0 top-0 h-full w-72 bg-surface-50-900-token shadow-lg overflow-y-auto drawer-content p-4 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pr-[env(safe-area-inset-right)]"
+				id="mobile-more-menu"
+				class="absolute bottom-0 left-0 right-0 max-h-[75dvh] overflow-y-auto rounded-t-2xl border-t border-surface-200/70 bg-surface-50-900-token p-4 pb-[calc(env(safe-area-inset-bottom)+5.75rem)] shadow-xl dark:border-surface-700/70"
 			>
-				<ul class="list-nav flex flex-col space-y-4">
-					{#each visibleNavItems as item}
+				<ul class="list-nav flex flex-col gap-2">
+					{#each secondaryMobileNavItems as item}
 						<li>
 							<a
 								href={item.href}
-								class="btn w-full justify-start {$page.url.pathname === item.href
+								class="btn w-full justify-start {isNavItemActive(item.href, currentPath)
 									? 'variant-filled-primary'
 									: 'variant-ghost-primary'}"
-								on:click={() => (drawerOpen = false)}
+								on:click={closeMoreMenu}
 							>
 								<span class="text-xl">{item.icon}</span>
 								<span>{item.label}</span>
@@ -221,7 +257,7 @@
 								type="button"
 								class="btn w-full justify-start variant-soft-error"
 								on:click={() => {
-									drawerOpen = false;
+									closeMoreMenu();
 									void auth.logout();
 								}}
 							>
@@ -243,4 +279,38 @@
 		{/if}
 		<slot />
 	</main>
+
+	{#if !isLogin}
+		<nav class="mobile-bottom-nav" aria-label="Primary mobile navigation">
+			<ul class="list-nav grid grid-cols-5 gap-1">
+				{#each primaryMobileNavItems as item}
+					<li>
+						<a
+							href={item.href}
+							class="mobile-tab {isNavItemActive(item.href, currentPath)
+								? 'mobile-tab-active'
+								: ''}"
+							aria-current={isNavItemActive(item.href, currentPath) ? 'page' : undefined}
+						>
+							<span class="mobile-tab-icon">{item.icon}</span>
+							<span class="mobile-tab-label">{item.label}</span>
+						</a>
+					</li>
+				{/each}
+				<li>
+					<button
+						type="button"
+						class="mobile-tab {isMoreActive || moreMenuOpen ? 'mobile-tab-active' : ''}"
+						aria-label="Open more navigation"
+						aria-expanded={moreMenuOpen}
+						aria-controls="mobile-more-menu"
+						on:click={() => (moreMenuOpen = !moreMenuOpen)}
+					>
+						<span class="mobile-tab-icon" aria-hidden="true">•••</span>
+						<span class="mobile-tab-label">More</span>
+					</button>
+				</li>
+			</ul>
+		</nav>
+	{/if}
 </div>

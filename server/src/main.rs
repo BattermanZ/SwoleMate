@@ -2,7 +2,7 @@ use actix_cors::Cors;
 use actix_web::{middleware::DefaultHeaders, web, App, HttpServer};
 use chrono::{Datelike, Local, NaiveDate, TimeZone, Weekday};
 use log::{error, info, LevelFilter};
-use sqlx::sqlite::SqlitePoolOptions;
+use sqlx::{sqlite::SqlitePoolOptions, Pool, Sqlite};
 use std::env;
 use std::fs;
 use std::fs::File;
@@ -74,6 +74,38 @@ fn redact_database_url(database_url: &str) -> String {
     }
 }
 
+fn next_backup_after(now: chrono::DateTime<Local>) -> chrono::DateTime<Local> {
+    let days_until_monday = (7 + Weekday::Mon.num_days_from_monday() as i64
+        - now.weekday().num_days_from_monday() as i64)
+        % 7;
+    let mut monday_date = now.date_naive() + chrono::Duration::days(days_until_monday);
+    let mut next_backup = local_datetime_at(monday_date, 1);
+
+    if next_backup <= now {
+        monday_date += chrono::Duration::days(7);
+        next_backup = local_datetime_at(monday_date, 1);
+    }
+
+    next_backup
+}
+
+fn sleep_duration_until(
+    now: chrono::DateTime<Local>,
+    next_backup: chrono::DateTime<Local>,
+) -> Duration {
+    (next_backup - now)
+        .to_std()
+        .unwrap_or_else(|_| Duration::from_secs(0))
+}
+
+async fn checkpoint_and_close_sqlite_pool(pool: Pool<Sqlite>) -> Result<(), sqlx::Error> {
+    let checkpoint_result = sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
+        .execute(&pool)
+        .await;
+    pool.close().await;
+    checkpoint_result.map(|_| ())
+}
+
 async fn schedule_backups(mut shutdown: watch::Receiver<bool>) {
     info!("Starting automatic backup scheduler");
     loop {
@@ -83,20 +115,10 @@ async fn schedule_backups(mut shutdown: watch::Receiver<bool>) {
         }
 
         let now = Local::now();
-        let days_until_monday = (7 + Weekday::Mon.num_days_from_monday() as i64
-            - now.weekday().num_days_from_monday() as i64)
-            % 7;
-        let mut monday_date = now.date_naive() + chrono::Duration::days(days_until_monday);
-        let mut next_backup = local_datetime_at(monday_date, 1);
-
-        if next_backup <= now {
-            monday_date += chrono::Duration::days(7);
-            next_backup = local_datetime_at(monday_date, 1);
-        }
-
-        let seconds = (next_backup - now).num_seconds().max(0) as u64;
+        let next_backup = next_backup_after(now);
+        let sleep_duration = sleep_duration_until(now, next_backup);
         tokio::select! {
-            _ = sleep(Duration::from_secs(seconds)) => {},
+            _ = sleep(sleep_duration) => {},
             _ = shutdown.changed() => {
                 info!("Backup scheduler stopping (shutdown requested)");
                 break;
@@ -113,6 +135,87 @@ async fn schedule_backups(mut shutdown: watch::Receiver<bool>) {
             Ok(backup_info) => info!("Automatic backup created: {}", backup_info.filename),
             Err(e) => error!("Failed to create automatic backup: {}", e),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Duration as ChronoDuration;
+
+    #[tokio::test]
+    async fn checkpoint_and_close_sqlite_pool_removes_wal_sidecars() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let db_path = temp_dir.path().join("swolemate.db");
+        let options = sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&db_path)
+            .create_if_missing(true);
+
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await
+            .expect("connect sqlite");
+
+        for pragma in [
+            "PRAGMA journal_mode = WAL",
+            "PRAGMA wal_autocheckpoint = 0",
+            "CREATE TABLE entries (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+            "INSERT INTO entries (name) VALUES ('shutdown-cleanup')",
+        ] {
+            sqlx::query(pragma).execute(&pool).await.expect("query");
+        }
+
+        let wal_path = db_path.with_extension("db-wal");
+        let shm_path = db_path.with_extension("db-shm");
+
+        assert!(wal_path.exists(), "expected WAL file before cleanup");
+        assert!(shm_path.exists(), "expected SHM file before cleanup");
+
+        checkpoint_and_close_sqlite_pool(pool)
+            .await
+            .expect("checkpoint and close");
+
+        assert!(
+            !wal_path.exists() || wal_path.metadata().expect("wal metadata").len() == 0,
+            "expected WAL file to be removed or truncated after cleanup"
+        );
+        assert!(
+            !shm_path.exists() || shm_path.metadata().expect("shm metadata").len() == 0,
+            "expected SHM file to be removed or truncated after cleanup"
+        );
+    }
+
+    #[test]
+    fn backup_sleep_preserves_subsecond_wait_before_target() {
+        let now = local_datetime_at(
+            NaiveDate::from_ymd_opt(2026, 5, 4).expect("valid test date"),
+            0,
+        ) + ChronoDuration::minutes(59)
+            + ChronoDuration::seconds(59)
+            + ChronoDuration::milliseconds(500);
+
+        let next_backup = next_backup_after(now);
+        let sleep_duration = sleep_duration_until(now, next_backup);
+
+        assert_eq!(next_backup, local_datetime_at(now.date_naive(), 1));
+        assert!(sleep_duration > Duration::from_millis(0));
+        assert!(sleep_duration < Duration::from_secs(1));
+    }
+
+    #[test]
+    fn next_backup_moves_to_following_week_at_target_time() {
+        let now = local_datetime_at(
+            NaiveDate::from_ymd_opt(2026, 5, 4).expect("valid test date"),
+            1,
+        );
+
+        let next_backup = next_backup_after(now);
+
+        assert_eq!(
+            next_backup.date_naive(),
+            now.date_naive() + ChronoDuration::days(7)
+        );
     }
 }
 
@@ -282,8 +385,10 @@ async fn main() -> std::io::Result<()> {
     // Setup and update schema
     if let Err(e) = schema::setup_schema(&temp_pool).await {
         error!("Failed to setup/update database schema: {}", e);
+        temp_pool.close().await;
         return Err(std::io::Error::other("Database schema setup failed"));
     }
+    temp_pool.close().await;
 
     info!("Database schema is up to date");
 
@@ -461,5 +566,13 @@ async fn main() -> std::io::Result<()> {
         info!("Shutdown sequence completed");
     });
 
-    server.await
+    let server_result = server.await;
+    if let Err(e) = checkpoint_and_close_sqlite_pool(pool).await {
+        error!(
+            "Failed to checkpoint and close database during shutdown: {}",
+            e
+        );
+    }
+
+    server_result
 }

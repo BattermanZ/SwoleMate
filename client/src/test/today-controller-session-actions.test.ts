@@ -8,7 +8,7 @@ const apiMocks = vi.hoisted(() => ({
 	cancelWorkout: vi.fn(),
 	endExercise: vi.fn(),
 	endWorkout: vi.fn(),
-	startWorkoutFromTemplate: vi.fn()
+	getWorkoutTemplate: vi.fn()
 }));
 
 vi.mock('$lib/api', () => ({
@@ -16,7 +16,7 @@ vi.mock('$lib/api', () => ({
 	cancelWorkout: apiMocks.cancelWorkout,
 	endExercise: apiMocks.endExercise,
 	endWorkout: apiMocks.endWorkout,
-	startWorkoutFromTemplate: apiMocks.startWorkoutFromTemplate
+	getWorkoutTemplate: apiMocks.getWorkoutTemplate
 }));
 
 const demoMocks = vi.hoisted(() => ({
@@ -226,8 +226,42 @@ describe('today controller session actions', () => {
 		expect(refreshFromBackend).toHaveBeenCalledTimes(1);
 	});
 
-	it('starts a session from a template without offline fallback', async () => {
-		apiMocks.startWorkoutFromTemplate.mockResolvedValueOnce({ id: 77 });
+	it('starts an empty session from a template and queues planned exercises', async () => {
+		apiMocks.getWorkoutTemplate.mockResolvedValueOnce({
+			template: {
+				id: 12,
+				name: 'Push A',
+				exercise_count: 2,
+				created_at: '2026-01-01T00:00:00.000Z',
+				updated_at: '2026-01-01T00:00:00.000Z'
+			},
+			exercises: [
+				{
+					id: 31,
+					template_id: 12,
+					position: 2,
+					exercise_type: 'Overhead Press',
+					notes: null,
+					per_side_weight: false,
+					split_weight: false,
+					settings: []
+				},
+				{
+					id: 30,
+					template_id: 12,
+					position: 1,
+					exercise_type: 'Bench Press',
+					notes: 'pause reps',
+					per_side_weight: true,
+					split_weight: true,
+					settings: [
+						{ id: 1, template_exercise_id: 30, key: 'Bench angle', value: '30' },
+						{ id: 2, template_exercise_id: 30, key: '_tracking_fields', value: 'reps,weight' }
+					]
+				}
+			]
+		});
+		apiMocks.createWorkout.mockResolvedValueOnce({ id: 77 });
 
 		const state = createTodayState();
 		const refreshFromBackend = vi.fn(async () => undefined);
@@ -239,14 +273,29 @@ describe('today controller session actions', () => {
 
 		await actions.startSessionFromTemplate(12);
 
-		expect(apiMocks.startWorkoutFromTemplate).toHaveBeenCalledWith(
-			12,
+		expect(apiMocks.getWorkoutTemplate).toHaveBeenCalledWith(12);
+		expect(apiMocks.createWorkout).toHaveBeenCalledWith(
 			expect.objectContaining({
 				start_time: expect.any(String),
 				date: expect.any(String)
 			})
 		);
 		expect(get(state.currentSession)?.id).toBe(77);
+		expect(get(state.currentSession)?.exercises).toEqual([]);
+		expect(get(state.plannedTemplateExercises)).toEqual([
+			expect.objectContaining({
+				id: 30,
+				name: 'Bench Press',
+				notes: 'pause reps',
+				perSideWeight: true,
+				splitWeight: true,
+				tracksReps: true,
+				tracksTime: false,
+				tracksWeight: true,
+				settings: [{ key: 'Bench angle', value: '30' }]
+			}),
+			expect.objectContaining({ id: 31, name: 'Overhead Press' })
+		]);
 		expect(refreshFromBackend).toHaveBeenCalledTimes(1);
 		expect(offlineActionMocks.setOffline).not.toHaveBeenCalled();
 	});

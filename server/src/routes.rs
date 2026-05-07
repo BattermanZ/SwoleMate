@@ -16,6 +16,12 @@ pub struct ExerciseTypeQuery {
     pub exercise_type: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ProgressOverviewQuery {
+    #[serde(default)]
+    pub timezone_offset_minutes: Option<i64>,
+}
+
 #[get("/api/health")]
 pub async fn health_check() -> HttpResponse {
     HttpResponse::Ok().json(json!({
@@ -552,6 +558,21 @@ pub async fn get_workout_stats(
     Ok(HttpResponse::Ok().json(stats))
 }
 
+#[get("/api/progress/overview")]
+pub async fn get_progress_overview(
+    user: CurrentUser,
+    db: web::Data<Database>,
+    query: web::Query<ProgressOverviewQuery>,
+) -> Result<HttpResponse, AppError> {
+    let stats = progress::get_progress_overview(
+        db.get_ref(),
+        user.0.id,
+        query.timezone_offset_minutes.unwrap_or(0),
+    )
+    .await?;
+    Ok(HttpResponse::Ok().json(stats))
+}
+
 #[get("/api/progress/volume")]
 pub async fn get_volume_stats(
     user: CurrentUser,
@@ -603,6 +624,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(restore_backup)
         .service(delete_backup)
         .service(get_exercise_progress)
+        .service(get_progress_overview)
         .service(get_workout_stats)
         .service(get_volume_stats)
         .service(mcp_tokens::list_mcp_tokens)

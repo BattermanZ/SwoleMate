@@ -6,6 +6,7 @@ import { hydrateOfflineState, persistInProgressSession, setOffline } from '../..
 import type { TodayState } from '../../state';
 import { getErrorMessage, isNetworkFailure, makeLocalNumericId } from '../../utils';
 import type { ExerciseSeedOptions, LastTime, SeedSet } from '../types';
+import { trackingFieldsSetting } from '$lib/today/tracking';
 
 export type ExerciseCoreActions = {
 	toggleExercise: (exerciseId: number) => void;
@@ -21,7 +22,8 @@ export function createExerciseCoreActions(args: {
 		reps: number,
 		weight: number,
 		weightLeft?: number,
-		weightRight?: number
+		weightRight?: number,
+		durationSeconds?: number
 	) => Promise<void>;
 	refreshFromBackend: () => Promise<void>;
 }): ExerciseCoreActions {
@@ -41,6 +43,9 @@ export function createExerciseCoreActions(args: {
 				notes: match.notes,
 				sets: match.sets,
 				settings: match.settings,
+				tracksReps: match.tracksReps,
+				tracksTime: match.tracksTime,
+				tracksWeight: match.tracksWeight,
 				perSideWeight: match.perSideWeight,
 				splitWeight: match.splitWeight
 			};
@@ -64,6 +69,12 @@ export function createExerciseCoreActions(args: {
 			const splitWeight = perSideWeight ? requestedSplit : false;
 			const settings =
 				options?.settings ?? last?.settings.map((s) => ({ key: s.key, value: s.value })) ?? [];
+			const trackingFields = {
+				reps: options?.tracksReps ?? last?.tracksReps ?? true,
+				time: options?.tracksTime ?? last?.tracksTime ?? false,
+				weight: options?.tracksWeight ?? last?.tracksWeight ?? true
+			};
+			const persistedSettings = [...settings, trackingFieldsSetting(trackingFields)];
 
 			if (get(state.offlineMode) || session.id < 0) {
 				const localExerciseId = makeLocalNumericId();
@@ -76,6 +87,9 @@ export function createExerciseCoreActions(args: {
 					status: 'active' as const,
 					perSideWeight,
 					splitWeight,
+					tracksReps: trackingFields.reps,
+					tracksTime: trackingFields.time,
+					tracksWeight: trackingFields.weight,
 					settings: settings.map((s) => ({
 						id: createId('setting'),
 						key: s.key,
@@ -94,7 +108,14 @@ export function createExerciseCoreActions(args: {
 
 				if (seedSets?.length) {
 					for (const s of seedSets) {
-						await addSet(newExercise.id, s.reps, s.weight, s.weightLeft, s.weightRight);
+						await addSet(
+							newExercise.id,
+							s.reps,
+							s.weight,
+							s.weightLeft,
+							s.weightRight,
+							s.durationSeconds
+						);
 					}
 				}
 				return;
@@ -108,8 +129,8 @@ export function createExerciseCoreActions(args: {
 				per_side_weight: perSideWeight,
 				split_weight: splitWeight,
 				settings: settings.length
-					? settings.map((s) => ({ key: s.key, value: s.value }))
-					: undefined
+					? persistedSettings.map((s) => ({ key: s.key, value: s.value }))
+					: [trackingFieldsSetting(trackingFields)]
 			});
 
 			const newExercise = {
@@ -121,6 +142,9 @@ export function createExerciseCoreActions(args: {
 				status: 'active' as const,
 				perSideWeight,
 				splitWeight,
+				tracksReps: trackingFields.reps,
+				tracksTime: trackingFields.time,
+				tracksWeight: trackingFields.weight,
 				settings: settings.map((s) => ({
 					id: createId('setting'),
 					key: s.key,
@@ -139,7 +163,14 @@ export function createExerciseCoreActions(args: {
 
 			if (seedSets?.length) {
 				for (const s of seedSets) {
-					await addSet(newExercise.id, s.reps, s.weight, s.weightLeft, s.weightRight);
+					await addSet(
+						newExercise.id,
+						s.reps,
+						s.weight,
+						s.weightLeft,
+						s.weightRight,
+						s.durationSeconds
+					);
 				}
 			}
 		} catch (e) {

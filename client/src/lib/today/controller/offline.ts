@@ -9,6 +9,7 @@ import {
 } from '$lib/offline/todaySessions';
 import type { Set } from '$lib/types';
 import type { UiSession } from '$lib/today/types';
+import { trackingFieldsSetting } from '$lib/today/tracking';
 import { scopedKey } from '$lib/auth/scope';
 import { get, type Writable } from 'svelte/store';
 
@@ -143,6 +144,7 @@ export type SyncApi = {
 			weight: number;
 			weight_left?: number;
 			weight_right?: number;
+			duration_seconds?: number;
 			notes?: string;
 		}>
 	) => Promise<Set[]>;
@@ -180,8 +182,21 @@ export async function syncOne(record: OfflineSessionRecord, api: SyncApi) {
 				per_side_weight: ex.perSideWeight,
 				split_weight: ex.splitWeight,
 				settings: ex.settings.length
-					? ex.settings.map((s) => ({ key: s.key, value: s.value }))
-					: undefined
+					? [
+							...ex.settings.map((s) => ({ key: s.key, value: s.value })),
+							trackingFieldsSetting({
+								reps: ex.tracksReps ?? true,
+								time: ex.tracksTime ?? false,
+								weight: ex.tracksWeight ?? true
+							})
+						]
+					: [
+							trackingFieldsSetting({
+								reps: ex.tracksReps ?? true,
+								time: ex.tracksTime ?? false,
+								weight: ex.tracksWeight ?? true
+							})
+						]
 			});
 			exerciseId = created.id;
 			exerciseMap[ex.id] = created.id;
@@ -194,6 +209,7 @@ export async function syncOne(record: OfflineSessionRecord, api: SyncApi) {
 				weight: s.weight,
 				weight_left: s.weightLeft,
 				weight_right: s.weightRight,
+				duration_seconds: s.durationSeconds,
 				notes: undefined
 			}))
 		);
@@ -209,7 +225,14 @@ export async function syncOne(record: OfflineSessionRecord, api: SyncApi) {
 			notes: ex.notes.trim() || undefined,
 			per_side_weight: ex.perSideWeight,
 			split_weight: ex.splitWeight,
-			settings: ex.settings.map((s) => ({ key: s.key, value: s.value }))
+			settings: [
+				...ex.settings.map((s) => ({ key: s.key, value: s.value })),
+				trackingFieldsSetting({
+					reps: ex.tracksReps ?? true,
+					time: ex.tracksTime ?? false,
+					weight: ex.tracksWeight ?? true
+				})
+			]
 		});
 	}
 

@@ -31,6 +31,7 @@
 		markExerciseDone,
 		openEndModal,
 		openExerciseId,
+		plannedTemplateExercises,
 		pendingSyncCount,
 		quickPicks,
 		recentSessions,
@@ -40,6 +41,7 @@
 		start,
 		startSession,
 		startSessionFromTemplate,
+		startPlannedTemplateExercise,
 		submitEndSession,
 		syncPendingSessions,
 		suggestions,
@@ -47,9 +49,11 @@
 		toggleExercisePerSideWeight,
 		toggleExerciseSplitWeight,
 		totalSets,
+		totalDurationSeconds,
 		totalVolumeKg,
 		updateExerciseNotes,
-		updateExerciseSetting
+		updateExerciseSetting,
+		updateExerciseTracking
 	} = controller;
 
 	let showDemoAction = false;
@@ -80,6 +84,16 @@
 	async function handleStartFromTemplate(templateId: number) {
 		await startSessionFromTemplate(templateId);
 		if (!$error) templatePickerOpen = false;
+	}
+
+	function formatSetDuration(seconds: number): string {
+		const value = Math.max(0, Math.round(seconds));
+		const minutes = Math.floor(value / 60);
+		const remaining = value % 60;
+		if (minutes < 60) return `${minutes}:${String(remaining).padStart(2, '0')}`;
+		const hours = Math.floor(minutes / 60);
+		const remMinutes = minutes % 60;
+		return remMinutes ? `${hours}h ${remMinutes}m` : `${hours}h`;
 	}
 </script>
 
@@ -205,8 +219,19 @@
 					<div class="text-lg font-bold">{$totalSets}</div>
 				</div>
 				<div class="card variant-glass-surface p-3">
-					<div class="text-xs font-semibold opacity-70">Volume</div>
-					<div class="text-lg font-bold">{Math.round($totalVolumeKg)} kg</div>
+					<div class="text-xs font-semibold opacity-70">
+						{$totalVolumeKg > 0 ? 'Volume' : $totalDurationSeconds > 0 ? 'Time' : 'Volume'}
+					</div>
+					<div class="text-lg font-bold">
+						{$totalVolumeKg > 0
+							? `${Math.round($totalVolumeKg)} kg`
+							: $totalDurationSeconds > 0
+								? formatSetDuration($totalDurationSeconds)
+								: '0 kg'}
+					</div>
+					{#if $totalVolumeKg > 0 && $totalDurationSeconds > 0}
+						<div class="text-xs opacity-65">{formatSetDuration($totalDurationSeconds)} timed</div>
+					{/if}
 				</div>
 			</div>
 		{/if}
@@ -276,9 +301,15 @@
 
 				{#if $currentSession.exercises.length === 0}
 					<div class="card variant-ghost p-6 text-center space-y-2">
-						<div class="text-lg font-semibold">Add your first exercise</div>
+						<div class="text-lg font-semibold">
+							{$plannedTemplateExercises.length > 0
+								? 'Start your template plan'
+								: 'Add your first exercise'}
+						</div>
 						<p class="opacity-70 text-sm max-w-prose mx-auto">
-							Use the search below or tap a quick pick from your recent sessions.
+							{$plannedTemplateExercises.length > 0
+								? 'Start an exercise from your template plan below.'
+								: 'Use the search below or tap a quick pick from your recent sessions.'}
 						</p>
 					</div>
 				{:else}
@@ -286,7 +317,7 @@
 						{#each $currentSession.exercises as ex (ex.id)}
 							<SessionExercise
 								exercise={ex}
-								isOpen={ex.status !== 'done' || $openExerciseId === ex.id}
+								isOpen={$openExerciseId === ex.id}
 								disabled={$loading}
 								lastTime={getLastTimeForExercise(ex.name)}
 								on:toggle={() => toggleExercise(ex.id)}
@@ -298,7 +329,8 @@
 										e.detail.reps,
 										e.detail.weight,
 										e.detail.weightLeft,
-										e.detail.weightRight
+										e.detail.weightRight,
+										e.detail.durationSeconds
 									)}
 								on:updateNotes={(e) => updateExerciseNotes(ex.id, e.detail.notes)}
 								on:addSetting={(e) => addExerciseSetting(ex.id, e.detail.key, e.detail.value)}
@@ -307,6 +339,7 @@
 									updateExerciseSetting(ex.id, e.detail.id, e.detail.key, e.detail.value)}
 								on:togglePerSideWeight={(e) => toggleExercisePerSideWeight(ex.id, e.detail.enabled)}
 								on:toggleSplitWeight={(e) => toggleExerciseSplitWeight(ex.id, e.detail.enabled)}
+								on:updateTracking={(e) => updateExerciseTracking(ex.id, e.detail)}
 							/>
 						{/each}
 					</div>
@@ -316,8 +349,10 @@
 					bind:query={$exerciseQuery}
 					disabled={$loading || !$currentSession}
 					suggestions={$suggestions}
+					templatePicks={$plannedTemplateExercises}
 					quickPicks={$quickPicks}
 					on:add={(e) => addExercise(e.detail.name)}
+					on:addTemplateExercise={(e) => startPlannedTemplateExercise(e.detail.id)}
 				/>
 			{:else}
 				<!-- no extra landing card -->

@@ -14,6 +14,9 @@
 			notes?: string;
 			perSideWeight?: boolean;
 			splitWeight?: boolean;
+			tracksReps?: boolean;
+			tracksTime?: boolean;
+			tracksWeight?: boolean;
 			settings?: Array<{ key: string; value: string }>;
 		};
 	}>();
@@ -107,6 +110,9 @@
 													notes: ex.notes,
 													perSideWeight: ex.perSideWeight,
 													splitWeight: ex.splitWeight,
+													tracksReps: ex.tracksReps,
+													tracksTime: ex.tracksTime,
+													tracksWeight: ex.tracksWeight,
 													settings: ex.settings.map((s) => ({ key: s.key, value: s.value }))
 												})}
 											{disabled}

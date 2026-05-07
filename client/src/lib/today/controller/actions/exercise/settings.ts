@@ -4,6 +4,7 @@ import { get } from 'svelte/store';
 import { persistInProgressSession, setOffline } from '../../offline';
 import type { TodayState } from '../../state';
 import { getErrorMessage, isNetworkFailure } from '../../utils';
+import { trackingFieldsSetting } from '$lib/today/tracking';
 
 export type ExerciseSettingsActions = {
 	updateExerciseNotes: (exerciseId: number, notes: string) => void;
@@ -14,6 +15,10 @@ export type ExerciseSettingsActions = {
 		settingId: string,
 		key: string,
 		value: string
+	) => void;
+	updateExerciseTracking: (
+		exerciseId: number,
+		fields: { reps: boolean; time: boolean; weight: boolean }
 	) => void;
 };
 
@@ -50,7 +55,14 @@ export function createExerciseSettingsActions(args: {
 				notes: ex.notes || undefined,
 				per_side_weight: ex.perSideWeight,
 				split_weight: ex.splitWeight,
-				settings: ex.settings.map((s) => ({ key: s.key, value: s.value }))
+				settings: [
+					...ex.settings.map((s) => ({ key: s.key, value: s.value })),
+					trackingFieldsSetting({
+						reps: ex.tracksReps ?? true,
+						time: ex.tracksTime ?? false,
+						weight: ex.tracksWeight ?? true
+					})
+				]
 			});
 		} catch (e) {
 			if (isNetworkFailure(e)) {
@@ -125,10 +137,36 @@ export function createExerciseSettingsActions(args: {
 		scheduleExerciseSync(exerciseId);
 	}
 
+	function updateExerciseTracking(
+		exerciseId: number,
+		fields: { reps: boolean; time: boolean; weight: boolean }
+	) {
+		const session = get(state.currentSession);
+		if (!session) return;
+		const nextFields = fields.reps || fields.time ? fields : { ...fields, reps: true };
+		state.currentSession.set({
+			...session,
+			exercises: session.exercises.map((e) =>
+				e.id === exerciseId
+					? {
+							...e,
+							tracksReps: nextFields.reps,
+							tracksTime: nextFields.time,
+							tracksWeight: nextFields.weight,
+							perSideWeight: nextFields.weight ? e.perSideWeight : false,
+							splitWeight: nextFields.weight ? e.splitWeight : false
+						}
+					: e
+			)
+		});
+		scheduleExerciseSync(exerciseId);
+	}
+
 	return {
 		updateExerciseNotes,
 		addExerciseSetting,
 		removeExerciseSetting,
-		updateExerciseSetting
+		updateExerciseSetting,
+		updateExerciseTracking
 	} satisfies ExerciseSettingsActions;
 }

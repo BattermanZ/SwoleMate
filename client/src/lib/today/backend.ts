@@ -1,5 +1,10 @@
 import type { Exercise, Set, Workout } from '$lib/types';
 import type { UiExercise, UiExerciseSetting, UiSession, UiSet } from '$lib/today/types';
+import {
+	decodeTrackingFields,
+	isTrackingFieldsSetting,
+	TRACKING_FIELDS_SETTING_KEY
+} from '$lib/today/tracking';
 
 function ms(iso: string): number {
 	return new Date(iso).getTime();
@@ -19,7 +24,8 @@ export function toUiSet(set: Set): UiSet {
 		reps: Number(set.reps),
 		weight: set.weight,
 		weightLeft: set.weight_left ?? undefined,
-		weightRight: set.weight_right ?? undefined
+		weightRight: set.weight_right ?? undefined,
+		durationSeconds: set.duration_seconds ?? undefined
 	};
 }
 
@@ -37,6 +43,9 @@ export function toUiExercise(
 					key: s.key,
 					value: s.value
 				}));
+	const tracking = decodeTrackingFields(
+		resolvedSettings.find((s) => s.key === TRACKING_FIELDS_SETTING_KEY)?.value
+	);
 
 	return {
 		id,
@@ -47,7 +56,10 @@ export function toUiExercise(
 		perSideWeight: exercise.per_side_weight ?? false,
 		splitWeight: exercise.split_weight ?? false,
 		status: exerciseIsDone(exercise) ? 'done' : 'active',
-		settings: resolvedSettings,
+		settings: resolvedSettings.filter((s) => !isTrackingFieldsSetting(s)),
+		tracksReps: tracking.reps,
+		tracksTime: tracking.time,
+		tracksWeight: tracking.weight,
 		sets: sets.map(toUiSet)
 	};
 }

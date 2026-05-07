@@ -1,4 +1,5 @@
-import { fireEvent, render } from '@testing-library/svelte';
+import { fireEvent, render, within } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
 import ExerciseComposer from '$lib/components/today/ExerciseComposer.svelte';
 import EndSessionModal from '$lib/components/today/EndSessionModal.svelte';
@@ -32,6 +33,28 @@ describe('today components', () => {
 		expect(onAdd).toHaveBeenNthCalledWith(
 			3,
 			expect.objectContaining({ detail: { name: 'Squat' } })
+		);
+	});
+
+	it('adds a planned template exercise from the exercise composer', async () => {
+		const onAddTemplateExercise = vi.fn();
+		const { getByRole, getByText } = render(ExerciseComposer, {
+			props: {
+				query: '',
+				suggestions: [],
+				templatePicks: [{ id: 42, name: 'Incline Press' }],
+				quickPicks: [],
+				disabled: false
+			},
+			events: { addTemplateExercise: onAddTemplateExercise }
+		});
+
+		expect(getByText('Template plan')).toBeInTheDocument();
+		expect(getByText('1 left')).toBeInTheDocument();
+		await fireEvent.click(getByRole('button', { name: '+ Incline Press' }));
+
+		expect(onAddTemplateExercise).toHaveBeenCalledWith(
+			expect.objectContaining({ detail: { id: 42 } })
 		);
 	});
 
@@ -75,5 +98,141 @@ describe('today components', () => {
 		});
 
 		expect(getByLabelText('Reps')).toHaveValue(12);
+	});
+
+	it('shows the last time summary above current sets', () => {
+		const { getByText } = render(SessionExercise, {
+			props: {
+				exercise: {
+					id: 1,
+					name: 'Bench Press',
+					notes: '',
+					startedAt: '2026-01-01T10:00:00.000Z',
+					endedAt: '2026-01-01T10:00:00.000Z',
+					sets: [{ id: 1, reps: 10, weight: 70 }],
+					settings: [],
+					perSideWeight: false,
+					splitWeight: false,
+					status: 'active'
+				},
+				isOpen: true,
+				disabled: false,
+				lastTime: {
+					startedAt: '2025-12-20T10:00:00.000Z',
+					notes: '',
+					sets: [{ reps: 8, weight: 60 }],
+					perSideWeight: false,
+					splitWeight: false
+				}
+			}
+		});
+
+		expect(
+			getByText('Last time').compareDocumentPosition(getByText('Current sets')) &
+				Node.DOCUMENT_POSITION_FOLLOWING
+		).toBeTruthy();
+	});
+
+	it('uses circular overlay timer for time-only sets without reps', async () => {
+		vi.useFakeTimers();
+		const onAddSet = vi.fn();
+		try {
+			const { getByLabelText, getByRole, queryByLabelText } = render(SessionExercise, {
+				props: {
+					exercise: {
+						id: 1,
+						name: 'Plank',
+						notes: '',
+						startedAt: '2026-01-01T10:00:00.000Z',
+						endedAt: '2026-01-01T10:00:00.000Z',
+						sets: [],
+						settings: [],
+						tracksReps: false,
+						tracksTime: true,
+						tracksWeight: false,
+						perSideWeight: false,
+						splitWeight: false,
+						status: 'active'
+					},
+					isOpen: true,
+					disabled: false,
+					lastTime: undefined
+				},
+				events: { addSet: onAddSet }
+			});
+
+			expect(queryByLabelText('Reps')).not.toBeInTheDocument();
+
+			await fireEvent.input(getByLabelText('Target duration (sec)'), { target: { value: '1' } });
+			await fireEvent.click(getByRole('button', { name: 'Start timer' }));
+			const dialog = getByRole('dialog', { name: 'Plank timer' });
+			expect(dialog).toBeInTheDocument();
+			expect(within(dialog).getByRole('button', { name: 'Add set' })).toBeDisabled();
+			expect(dialog.querySelector('[data-tone="danger"]')).toBeInTheDocument();
+
+			await vi.advanceTimersByTimeAsync(1000);
+			await tick();
+			expect(within(dialog).getByText('Complete')).toBeInTheDocument();
+			expect(dialog.querySelector('[data-tone="steady"]')).toBeInTheDocument();
+
+			await fireEvent.click(within(dialog).getByRole('button', { name: 'Add set' }));
+			expect(onAddSet).toHaveBeenCalledWith(
+				expect.objectContaining({
+					detail: expect.objectContaining({ reps: 0, weight: 0, durationSeconds: 1 })
+				})
+			);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('adds elapsed time when saving a paused timer', async () => {
+		vi.useFakeTimers();
+		const onAddSet = vi.fn();
+		try {
+			const { getByLabelText, getByRole } = render(SessionExercise, {
+				props: {
+					exercise: {
+						id: 1,
+						name: 'Plank',
+						notes: '',
+						startedAt: '2026-01-01T10:00:00.000Z',
+						endedAt: '2026-01-01T10:00:00.000Z',
+						sets: [],
+						settings: [],
+						tracksReps: false,
+						tracksTime: true,
+						tracksWeight: false,
+						perSideWeight: false,
+						splitWeight: false,
+						status: 'active'
+					},
+					isOpen: true,
+					disabled: false,
+					lastTime: undefined
+				},
+				events: { addSet: onAddSet }
+			});
+
+			await fireEvent.input(getByLabelText('Target duration (sec)'), { target: { value: '10' } });
+			await fireEvent.click(getByRole('button', { name: 'Start timer' }));
+			const dialog = getByRole('dialog', { name: 'Plank timer' });
+
+			await vi.advanceTimersByTimeAsync(3000);
+			await tick();
+			await fireEvent.click(within(dialog).getByRole('button', { name: 'Pause' }));
+
+			const addSet = within(dialog).getByRole('button', { name: 'Add set' });
+			expect(addSet).toBeEnabled();
+			await fireEvent.click(addSet);
+
+			expect(onAddSet).toHaveBeenCalledWith(
+				expect.objectContaining({
+					detail: expect.objectContaining({ reps: 0, weight: 0, durationSeconds: 3 })
+				})
+			);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 });

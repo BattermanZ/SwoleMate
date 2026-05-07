@@ -37,7 +37,8 @@
 								reps: s.reps,
 								weight: s.weight,
 								weightLeft: s.weight_left,
-								weightRight: s.weight_right
+								weightRight: s.weight_right,
+								durationSeconds: s.duration_seconds
 							}))}
 							perSideWeight={session.exercise.per_side_weight ?? false}
 							splitWeight={session.exercise.split_weight ?? false}

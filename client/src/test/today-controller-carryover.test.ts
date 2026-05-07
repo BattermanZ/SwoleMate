@@ -64,10 +64,11 @@ describe('today controller carry-over', () => {
 				exercise_type: 'Bench Press',
 				per_side_weight: true,
 				split_weight: false,
-				settings: [
+				settings: expect.arrayContaining([
 					{ key: 'Bench', value: 'Flat' },
-					{ key: 'Rack height', value: '6' }
-				]
+					{ key: 'Rack height', value: '6' },
+					{ key: '_tracking_fields', value: 'reps,weight' }
+				])
 			})
 		);
 
@@ -75,9 +76,52 @@ describe('today controller carry-over', () => {
 		expect(updated?.exercises).toHaveLength(1);
 		expect(updated?.exercises[0]?.perSideWeight).toBe(true);
 		expect(updated?.exercises[0]?.splitWeight).toBe(false);
+		expect(updated?.exercises[0]?.tracksReps).toBe(true);
+		expect(updated?.exercises[0]?.tracksTime).toBe(false);
+		expect(updated?.exercises[0]?.tracksWeight).toBe(true);
 		expect(updated?.exercises[0]?.settings.map((s) => `${s.key}:${s.value}`)).toEqual([
 			'Bench:Flat',
 			'Rack height:6'
 		]);
+	});
+
+	it('starts a planned template exercise and removes it from the plan', async () => {
+		const controller = createTodayController();
+
+		controller.currentSession.set({
+			id: 99,
+			startedAt: '2026-01-02T10:00:00.000Z',
+			notes: '',
+			exercises: []
+		});
+		controller.plannedTemplateExercises.set([
+			{
+				id: 7,
+				name: 'Incline Press',
+				notes: 'controlled eccentric',
+				perSideWeight: false,
+				splitWeight: false,
+				tracksReps: true,
+				tracksTime: false,
+				tracksWeight: true,
+				settings: [{ key: 'Bench angle', value: '30' }]
+			}
+		]);
+
+		await controller.startPlannedTemplateExercise(7);
+
+		expect(createExercise).toHaveBeenCalledWith(
+			99,
+			expect.objectContaining({
+				exercise_type: 'Incline Press',
+				notes: 'controlled eccentric',
+				settings: expect.arrayContaining([
+					{ key: 'Bench angle', value: '30' },
+					{ key: '_tracking_fields', value: 'reps,weight' }
+				])
+			})
+		);
+		expect(get(controller.currentSession)?.exercises[0]?.name).toBe('Incline Press');
+		expect(get(controller.plannedTemplateExercises)).toEqual([]);
 	});
 });

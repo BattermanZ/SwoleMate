@@ -3,6 +3,7 @@ import type { TodayState } from '../../state';
 import { get } from 'svelte/store';
 import { hydrateOfflineState, persistInProgressSession, setOffline } from '../../offline';
 import { getErrorMessage, isNetworkFailure, makeLocalNumericId } from '../../utils';
+import { trackingFieldsSetting } from '$lib/today/tracking';
 
 export type ExerciseSetActions = {
 	markExerciseDone: (exerciseId: number) => Promise<void>;
@@ -11,7 +12,8 @@ export type ExerciseSetActions = {
 		reps: number,
 		weight: number,
 		weightLeft?: number,
-		weightRight?: number
+		weightRight?: number,
+		durationSeconds?: number
 	) => Promise<void>;
 };
 
@@ -46,7 +48,14 @@ export function createExerciseSetActions(args: { state: TodayState }) {
 				notes: ex.notes || undefined,
 				per_side_weight: ex.perSideWeight,
 				split_weight: ex.splitWeight,
-				settings: ex.settings.map((s) => ({ key: s.key, value: s.value }))
+				settings: [
+					...ex.settings.map((s) => ({ key: s.key, value: s.value })),
+					trackingFieldsSetting({
+						reps: ex.tracksReps ?? true,
+						time: ex.tracksTime ?? false,
+						weight: ex.tracksWeight ?? true
+					})
+				]
 			});
 
 			state.currentSession.set({
@@ -74,7 +83,8 @@ export function createExerciseSetActions(args: { state: TodayState }) {
 		reps: number,
 		weight: number,
 		weightLeft?: number,
-		weightRight?: number
+		weightRight?: number,
+		durationSeconds?: number
 	) {
 		const session = get(state.currentSession);
 		if (!session) return;
@@ -96,7 +106,8 @@ export function createExerciseSetActions(args: { state: TodayState }) {
 									reps,
 									weight,
 									weightLeft,
-									weightRight
+									weightRight,
+									durationSeconds
 								}
 							]
 						};
@@ -112,6 +123,7 @@ export function createExerciseSetActions(args: { state: TodayState }) {
 				weight,
 				weight_left: weightLeft,
 				weight_right: weightRight,
+				duration_seconds: durationSeconds,
 				notes: undefined
 			});
 
@@ -128,7 +140,8 @@ export function createExerciseSetActions(args: { state: TodayState }) {
 								reps,
 								weight,
 								weightLeft,
-								weightRight
+								weightRight,
+								durationSeconds
 							}
 						]
 					};
@@ -139,7 +152,7 @@ export function createExerciseSetActions(args: { state: TodayState }) {
 				setOffline(state);
 				await persistInProgressSession(state);
 				await hydrateOfflineState(state);
-				await addSet(exerciseId, reps, weight, weightLeft, weightRight);
+				await addSet(exerciseId, reps, weight, weightLeft, weightRight, durationSeconds);
 			} else {
 				state.error.set(getErrorMessage(e));
 			}

@@ -1,13 +1,16 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
+	import type { PlannedTemplateExercise } from '$lib/today/types';
 
 	export let query = '';
 	export let suggestions: string[] = [];
+	export let templatePicks: PlannedTemplateExercise[] = [];
 	export let quickPicks: string[] = [];
 	export let disabled = false;
 
 	const dispatch = createEventDispatcher<{
 		add: { name: string };
+		addTemplateExercise: { id: number };
 	}>();
 
 	function add(name: string) {
@@ -69,6 +72,30 @@
 			Add
 		</button>
 	</div>
+
+	{#if templatePicks.length > 0}
+		<div class="rounded-lg border border-primary-500/20 bg-primary-500/5 p-3 space-y-2">
+			<div class="flex items-center justify-between gap-3">
+				<span class="text-xs font-semibold opacity-80">Template plan</span>
+				<span class="badge variant-soft-primary text-xs">
+					{templatePicks.length} left
+				</span>
+			</div>
+			<div class="flex flex-wrap gap-2">
+				{#each templatePicks as pick (pick.id)}
+					<button
+						type="button"
+						class="btn btn-sm justify-start border border-primary-500/30 bg-primary-500/10 text-primary-700 hover:border-primary-500/60 hover:bg-primary-500/15 dark:text-primary-200"
+						on:click={() => dispatch('addTemplateExercise', { id: pick.id })}
+						{disabled}
+					>
+						<span class="font-semibold">+</span>
+						{pick.name}
+					</button>
+				{/each}
+			</div>
+		</div>
+	{/if}
 
 	{#if quickPicks.length > 0}
 		<div class="flex flex-wrap gap-2 items-center">

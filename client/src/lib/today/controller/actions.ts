@@ -8,6 +8,7 @@ import { createExerciseCoreActions } from './actions/exercise/core';
 import { createExerciseSetActions } from './actions/exercise/sets';
 import { createExerciseSettingsActions } from './actions/exercise/settings';
 import { createExerciseWeightModeActions } from './actions/exercise/weightModes';
+import { get } from 'svelte/store';
 
 export function createTodayActions(state: TodayState) {
 	const { schedulePersist } = createPersistScheduler(state);
@@ -31,6 +32,29 @@ export function createTodayActions(state: TodayState) {
 		refreshFromBackend: refresh
 	});
 
+	async function startPlannedTemplateExercise(plannedExerciseId: number) {
+		const planned = get(state.plannedTemplateExercises).find(
+			(exercise) => exercise.id === plannedExerciseId
+		);
+		if (!planned) return;
+
+		await coreActions.addExercise(planned.name, {
+			notes: planned.notes,
+			perSideWeight: planned.perSideWeight,
+			splitWeight: planned.splitWeight,
+			tracksReps: planned.tracksReps,
+			tracksTime: planned.tracksTime,
+			tracksWeight: planned.tracksWeight,
+			settings: planned.settings
+		});
+
+		if (!get(state.error)) {
+			state.plannedTemplateExercises.update((exercises) =>
+				exercises.filter((exercise) => exercise.id !== plannedExerciseId)
+			);
+		}
+	}
+
 	const syncActions = createSyncActions({
 		state,
 		refreshFromBackend: refresh,
@@ -44,6 +68,7 @@ export function createTodayActions(state: TodayState) {
 		...settingsActions,
 		...weightModeActions,
 		...sessionActions,
+		startPlannedTemplateExercise,
 		...syncActions,
 		refreshFromBackend: refresh
 	};

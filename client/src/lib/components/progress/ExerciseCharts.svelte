@@ -7,10 +7,12 @@
 		observeTheme,
 		rgba,
 		readTheme,
+		sqliteWeekKeyToTimestamp,
 		upsertChart,
 		type AnyChart,
 		type ChartTheme
 	} from '$lib/progress/charting';
+	import { getEffectiveWeight, getSetVolume } from '$lib/progress/weights';
 
 	export let volumeStats: VolumeStats | null = null;
 	export let exerciseProgress: ExerciseProgress[] | null = null;
@@ -38,6 +40,19 @@
 
 	let observer: MutationObserver | null = null;
 
+	$: weeklyVolumeRows = (volumeStats?.weekly_volume ?? []).filter(
+		(v) => v.total_volume > 0 || v.max_estimated_1rm > 0
+	);
+	$: monthlyVolumeRows = (volumeStats?.monthly_volume ?? []).filter((v) => v.total_volume > 0);
+	$: sessionProgressRows = exerciseProgress ?? [];
+	$: hasWeeklyVolume = weeklyVolumeRows.length > 0;
+	$: hasMonthlyVolume = monthlyVolumeRows.length > 0;
+	$: hasSessionProgress = sessionProgressRows.some((ep) =>
+		ep.sets.some(
+			(set) => getEffectiveWeight(set, ep.exercise) > 0 || getSetVolume(set, ep.exercise) > 0
+		)
+	);
+
 	function destroyCharts() {
 		volumeChart?.destroy();
 		progressChart?.destroy();
@@ -48,7 +63,7 @@
 	}
 
 	function render(...deps: unknown[]) {
-		if (deps.length < 0) return;
+		void deps;
 		if (!volumeStats) {
 			destroyCharts();
 			return;
@@ -59,94 +74,89 @@
 			x?: Record<string, unknown>;
 			y?: Record<string, unknown>;
 		};
+		const weeklyVolumePoints = weeklyVolumeRows
+			.map((v) => ({
+				x: sqliteWeekKeyToTimestamp(v.week),
+				y: v.total_volume
+			}))
+			.filter((p): p is { x: number; y: number } => p.x != null);
+		const weeklyOneRepMaxPoints = weeklyVolumeRows
+			.map((v) => ({
+				x: sqliteWeekKeyToTimestamp(v.week),
+				y: v.max_estimated_1rm
+			}))
+			.filter((p): p is { x: number; y: number } => p.x != null);
 
-		volumeChart = upsertChart(volumeChart, volumeCanvas, {
-			type: 'line',
-			data: {
-				labels: volumeStats.weekly_volume.map((v) => v.week),
-				datasets: [
-					{
-						label: 'Weekly volume (kg)',
-						data: volumeStats.weekly_volume.map((v) => v.total_volume),
-						borderColor: theme.primary,
-						backgroundColor: rgba(theme.primary, theme.isDark ? 0.22 : 0.14),
-						pointRadius: 3,
-						tension: 0.25,
-						fill: false,
-						yAxisID: 'y'
-					},
-					{
-						label: 'Best estimated 1RM (kg)',
-						data: volumeStats.weekly_volume.map((v) => v.max_estimated_1rm),
-						borderColor: theme.tertiary,
-						backgroundColor: rgba(theme.tertiary, theme.isDark ? 0.18 : 0.12),
-						pointRadius: 3,
-						tension: 0.25,
-						fill: false,
-						yAxisID: 'y1'
-					}
-				]
-			},
-			options: {
-				...base,
-				scales: {
-					x: {
-						...(baseScales.x ?? {}),
-						title: { display: true, text: 'Week', color: theme.mutedText }
-					},
-					y: {
-						...(baseScales.y ?? {}),
-						beginAtZero: true,
-						title: { display: true, text: 'Volume (kg)', color: theme.mutedText }
-					},
-					y1: {
-						position: 'right',
-						beginAtZero: true,
-						ticks: { color: theme.mutedText },
-						grid: { drawOnChartArea: false },
-						title: { display: true, text: 'Estimated 1RM (kg)', color: theme.mutedText }
+		if (hasWeeklyVolume) {
+			volumeChart = upsertChart(volumeChart, volumeCanvas, {
+				type: 'line',
+				data: {
+					datasets: [
+						{
+							label: 'Weekly volume (kg)',
+							data: weeklyVolumePoints,
+							borderColor: theme.primary,
+							backgroundColor: rgba(theme.primary, theme.isDark ? 0.22 : 0.14),
+							pointRadius: 3,
+							tension: 0.25,
+							fill: false,
+							yAxisID: 'y'
+						},
+						{
+							label: 'Best estimated 1RM (kg)',
+							data: weeklyOneRepMaxPoints,
+							borderColor: theme.tertiary,
+							backgroundColor: rgba(theme.tertiary, theme.isDark ? 0.18 : 0.12),
+							pointRadius: 3,
+							tension: 0.25,
+							fill: false,
+							yAxisID: 'y1'
+						}
+					]
+				},
+				options: {
+					...base,
+					scales: {
+						x: {
+							type: 'time',
+							time: { unit: 'month' },
+							ticks: { color: theme.mutedText, source: 'auto' },
+							grid: { color: theme.grid },
+							title: { display: true, text: 'Month', color: theme.mutedText }
+						},
+						y: {
+							...(baseScales.y ?? {}),
+							beginAtZero: true,
+							title: { display: true, text: 'Volume (kg)', color: theme.mutedText }
+						},
+						y1: {
+							position: 'right',
+							beginAtZero: true,
+							ticks: { color: theme.mutedText },
+							grid: { drawOnChartArea: false },
+							title: { display: true, text: 'Estimated 1RM (kg)', color: theme.mutedText }
+						}
 					}
 				}
-			}
-		});
+			});
+		} else {
+			volumeChart?.destroy();
+			volumeChart = null;
+		}
 
-		if (exerciseProgress && exerciseProgress.length > 0) {
-			const bestWeight = exerciseProgress
-				.map((ep) => {
-					const maxWeight = Math.max(...ep.sets.map((s) => Number(s.weight)));
-					return {
-						x: new Date(ep.exercise.start_time).getTime(),
-						y: Number.isFinite(maxWeight) ? maxWeight : 0
-					};
-				})
+		if (hasSessionProgress) {
+			const bestWeight = sessionProgressRows
+				.map((ep) => ({
+					x: new Date(ep.exercise.start_time).getTime(),
+					y: Math.max(0, ...ep.sets.map((set) => getEffectiveWeight(set, ep.exercise)))
+				}))
 				.filter((p) => p.y > 0);
 
-			const totalVolume = exerciseProgress
-				.map((ep) => {
-					const perSide = ep.exercise.per_side_weight ?? false;
-					const split = ep.exercise.split_weight ?? false;
-					const volume = ep.sets.reduce((sum, s) => {
-						const reps = Number(s.reps);
-						const baseWeight = Number(s.weight);
-						if (!Number.isFinite(reps) || !Number.isFinite(baseWeight)) return sum;
-
-						let effectiveWeight = baseWeight;
-						if (perSide) {
-							if (split && s.weight_left != null && s.weight_right != null) {
-								effectiveWeight = Number(s.weight_left) + Number(s.weight_right);
-							} else {
-								effectiveWeight = baseWeight * 2;
-							}
-						}
-
-						return sum + reps * effectiveWeight;
-					}, 0);
-
-					return {
-						x: new Date(ep.exercise.start_time).getTime(),
-						y: Number.isFinite(volume) ? volume : 0
-					};
-				})
+			const totalVolume = sessionProgressRows
+				.map((ep) => ({
+					x: new Date(ep.exercise.start_time).getTime(),
+					y: ep.sets.reduce((sum, set) => sum + getSetVolume(set, ep.exercise), 0)
+				}))
 				.filter((p) => p.y > 0);
 
 			progressChart = upsertChart(progressChart, progressCanvas, {
@@ -182,9 +192,7 @@
 					scales: {
 						x: {
 							type: 'time',
-							time: {
-								unit: 'week'
-							},
+							time: { unit: 'week' },
 							ticks: { color: theme.mutedText },
 							grid: { color: theme.grid },
 							title: { display: true, text: 'Date', color: theme.mutedText }
@@ -209,36 +217,41 @@
 			progressChart = null;
 		}
 
-		monthlyVolumeChart = upsertChart(monthlyVolumeChart, monthlyVolumeCanvas, {
-			type: 'bar',
-			data: {
-				labels: volumeStats.monthly_volume.map((v) => v.month),
-				datasets: [
-					{
-						label: 'Monthly volume (kg)',
-						data: volumeStats.monthly_volume.map((v) => v.total_volume),
-						backgroundColor: rgba(theme.primary, theme.isDark ? 0.7 : 0.58),
-						borderColor: rgba(theme.primary, theme.isDark ? 0.92 : 0.85),
-						borderWidth: 1,
-						borderRadius: 8
-					}
-				]
-			},
-			options: {
-				...base,
-				scales: {
-					x: {
-						...(baseScales.x ?? {}),
-						title: { display: true, text: 'Month', color: theme.mutedText }
-					},
-					y: {
-						...(baseScales.y ?? {}),
-						beginAtZero: true,
-						title: { display: true, text: 'Volume (kg)', color: theme.mutedText }
+		if (hasMonthlyVolume) {
+			monthlyVolumeChart = upsertChart(monthlyVolumeChart, monthlyVolumeCanvas, {
+				type: 'bar',
+				data: {
+					labels: monthlyVolumeRows.map((v) => v.month),
+					datasets: [
+						{
+							label: 'Monthly volume (kg)',
+							data: monthlyVolumeRows.map((v) => v.total_volume),
+							backgroundColor: rgba(theme.primary, theme.isDark ? 0.7 : 0.58),
+							borderColor: rgba(theme.primary, theme.isDark ? 0.92 : 0.85),
+							borderWidth: 1,
+							borderRadius: 8
+						}
+					]
+				},
+				options: {
+					...base,
+					scales: {
+						x: {
+							...(baseScales.x ?? {}),
+							title: { display: true, text: 'Month', color: theme.mutedText }
+						},
+						y: {
+							...(baseScales.y ?? {}),
+							beginAtZero: true,
+							title: { display: true, text: 'Volume (kg)', color: theme.mutedText }
+						}
 					}
 				}
-			}
-		});
+			});
+		} else {
+			monthlyVolumeChart?.destroy();
+			monthlyVolumeChart = null;
+		}
 	}
 
 	onMount(() => {
@@ -254,7 +267,10 @@
 		volumeCanvas,
 		progressCanvas,
 		monthlyVolumeCanvas,
-		theme
+		theme,
+		hasWeeklyVolume,
+		hasSessionProgress,
+		hasMonthlyVolume
 	);
 
 	onDestroy(() => {
@@ -272,9 +288,17 @@
 				<p class="text-sm opacity-70">Volume and best estimated 1RM per week.</p>
 			</div>
 		</div>
-		<div class="mt-3 h-72 relative overflow-hidden">
-			<canvas bind:this={volumeCanvas}></canvas>
-		</div>
+		{#if hasWeeklyVolume}
+			<div class="mt-3 h-72 relative overflow-hidden">
+				<canvas bind:this={volumeCanvas}></canvas>
+			</div>
+		{:else}
+			<div
+				class="mt-3 rounded-xl border border-surface-200/50 p-4 text-sm opacity-70 dark:border-surface-700/50"
+			>
+				No weekly volume data yet. Complete a few sets for this exercise to unlock the trend.
+			</div>
+		{/if}
 	</div>
 
 	<div class="card variant-glass-surface p-4 min-w-0">
@@ -284,9 +308,17 @@
 				<p class="text-sm opacity-70">Tracks your top weight for the chosen exercise.</p>
 			</div>
 		</div>
-		<div class="mt-3 h-72 relative overflow-hidden">
-			<canvas bind:this={progressCanvas}></canvas>
-		</div>
+		{#if hasSessionProgress}
+			<div class="mt-3 h-72 relative overflow-hidden">
+				<canvas bind:this={progressCanvas}></canvas>
+			</div>
+		{:else}
+			<div
+				class="mt-3 rounded-xl border border-surface-200/50 p-4 text-sm opacity-70 dark:border-surface-700/50"
+			>
+				No session trend yet. Log weighted sets for this exercise to see progression over time.
+			</div>
+		{/if}
 	</div>
 </div>
 
@@ -297,7 +329,15 @@
 			<p class="text-sm opacity-70">Smoother long-term trend.</p>
 		</div>
 	</div>
-	<div class="mt-3 h-64 relative overflow-hidden">
-		<canvas bind:this={monthlyVolumeCanvas}></canvas>
-	</div>
+	{#if hasMonthlyVolume}
+		<div class="mt-3 h-64 relative overflow-hidden">
+			<canvas bind:this={monthlyVolumeCanvas}></canvas>
+		</div>
+	{:else}
+		<div
+			class="mt-3 rounded-xl border border-surface-200/50 p-4 text-sm opacity-70 dark:border-surface-700/50"
+		>
+			No monthly volume yet. This will appear once the selected exercise has logged volume.
+		</div>
+	{/if}
 </div>

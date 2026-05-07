@@ -30,3 +30,11 @@ export function calculateTotalVolumeKg(session: UiSession | null): number {
 		0
 	);
 }
+
+export function calculateTotalDurationSeconds(session: UiSession | null): number {
+	if (!session) return 0;
+	return session.exercises.reduce(
+		(total, e) => total + e.sets.reduce((t, s) => t + (s.durationSeconds ?? 0), 0),
+		0
+	);
+}

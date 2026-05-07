@@ -405,6 +405,96 @@ async fn create_user_as_admin(
     json_body(resp).await["id"].as_i64().expect("user id")
 }
 
+async fn create_workout_with_times(
+    app: &impl actix_web::dev::Service<
+        actix_http::Request,
+        Response = actix_web::dev::ServiceResponse,
+        Error = actix_web::Error,
+    >,
+    cookie: &actix_web::cookie::Cookie<'static>,
+    start_time: chrono::DateTime<chrono::Utc>,
+    end_time: chrono::DateTime<chrono::Utc>,
+) -> i64 {
+    let req = with_cookie(test::TestRequest::post(), cookie)
+        .uri("/api/workouts")
+        .set_json(json!({
+            "date": start_time,
+            "start_time": start_time,
+            "timezone_offset_minutes": 0
+        }))
+        .to_request();
+    let workout_id = json_body(test::call_service(app, req).await).await["id"]
+        .as_i64()
+        .expect("workout id");
+
+    let req = with_cookie(test::TestRequest::put(), cookie)
+        .uri(&format!("/api/workouts/{workout_id}/end"))
+        .set_json(json!({ "end_time": end_time }))
+        .to_request();
+    let resp = test::call_service(app, req).await;
+    assert!(resp.status().is_success());
+
+    workout_id
+}
+
+async fn create_exercise_for_workout(
+    app: &impl actix_web::dev::Service<
+        actix_http::Request,
+        Response = actix_web::dev::ServiceResponse,
+        Error = actix_web::Error,
+    >,
+    cookie: &actix_web::cookie::Cookie<'static>,
+    workout_id: i64,
+    exercise_type: &str,
+    start_time: chrono::DateTime<chrono::Utc>,
+    end_time: chrono::DateTime<chrono::Utc>,
+) -> i64 {
+    let req = with_cookie(test::TestRequest::post(), cookie)
+        .uri(&format!("/api/workouts/{workout_id}/exercises"))
+        .set_json(json!({
+            "exercise_type": exercise_type,
+            "start_time": start_time
+        }))
+        .to_request();
+    let exercise_id = json_body(test::call_service(app, req).await).await["id"]
+        .as_i64()
+        .expect("exercise id");
+
+    let req = with_cookie(test::TestRequest::put(), cookie)
+        .uri(&format!("/api/exercises/{exercise_id}/end"))
+        .set_json(json!({ "end_time": end_time }))
+        .to_request();
+    let resp = test::call_service(app, req).await;
+    assert!(resp.status().is_success());
+
+    exercise_id
+}
+
+async fn create_set_for_exercise(
+    app: &impl actix_web::dev::Service<
+        actix_http::Request,
+        Response = actix_web::dev::ServiceResponse,
+        Error = actix_web::Error,
+    >,
+    cookie: &actix_web::cookie::Cookie<'static>,
+    exercise_id: i64,
+    reps: i64,
+    weight: f64,
+    duration_seconds: Option<i64>,
+) {
+    let mut payload = json!({ "reps": reps, "weight": weight });
+    if let Some(duration) = duration_seconds {
+        payload["duration_seconds"] = json!(duration);
+    }
+
+    let req = with_cookie(test::TestRequest::post(), cookie)
+        .uri(&format!("/api/exercises/{exercise_id}/sets"))
+        .set_json(payload)
+        .to_request();
+    let resp = test::call_service(app, req).await;
+    assert_eq!(resp.status(), 201);
+}
+
 fn pkce_challenge(verifier: &str) -> String {
     let digest = Sha256::digest(verifier.as_bytes());
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(digest)
@@ -1205,6 +1295,62 @@ async fn workout_and_exercise_flow_works_for_normal_user() {
 }
 
 #[actix_web::test]
+async fn hidden_tracking_setting_does_not_consume_visible_settings_limit() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(
+        &app,
+        &admin_cookie,
+        "settings-limit-user",
+        "passwordpassword",
+    )
+    .await;
+    let cookie = login_cookie_active(&app, "settings-limit-user", "passwordpassword").await;
+    let now = chrono::Utc::now();
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri("/api/workouts")
+        .set_json(json!({ "date": now, "start_time": now, "notes": "settings limit" }))
+        .to_request();
+    let workout_id = json_body(test::call_service(&app, req).await).await["id"]
+        .as_i64()
+        .expect("workout id");
+
+    let mut settings: Vec<_> = (0..24)
+        .map(|i| json!({ "key": format!("setting_{i}"), "value": "1" }))
+        .collect();
+    settings.push(json!({ "key": "_tracking_fields", "value": "reps,time,weight" }));
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}/exercises"))
+        .set_json(json!({
+            "exercise_type": "Plank",
+            "start_time": now,
+            "settings": settings
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 201);
+
+    let mut too_many_settings: Vec<_> = (0..25)
+        .map(|i| json!({ "key": format!("visible_{i}"), "value": "1" }))
+        .collect();
+    too_many_settings.push(json!({ "key": "_tracking_fields", "value": "reps,time,weight" }));
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}/exercises"))
+        .set_json(json!({
+            "exercise_type": "Side plank",
+            "start_time": now,
+            "settings": too_many_settings
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+}
+
+#[actix_web::test]
 async fn data_is_scoped_per_user() {
     let _env = TestEnv::new();
     let (_db, admin_cookie, app) = setup_test_app().await;
@@ -1939,7 +2085,7 @@ async fn replace_sets_endpoint_replaces_existing_sets_and_validates_payload() {
         .uri(&format!("/api/exercises/{exercise_id}/sets"))
         .set_json(json!([
             { "reps": 3, "weight": 90.0, "notes": "heavy" },
-            { "reps": 8, "weight": 70.0 }
+            { "reps": 0, "weight": 20.0, "duration_seconds": 75 }
         ]))
         .to_request();
     let resp = test::call_service(&app, req).await;
@@ -1955,12 +2101,21 @@ async fn replace_sets_endpoint_replaces_existing_sets_and_validates_payload() {
     assert_eq!(sets.len(), 2);
     assert_eq!(sets[0]["reps"], 3);
     assert_eq!(sets[0]["weight"], 90.0);
+    assert_eq!(sets[1]["reps"], 0);
+    assert_eq!(sets[1]["duration_seconds"], 75);
 
     let req = with_cookie(test::TestRequest::put(), &cookie)
         .uri(&format!("/api/exercises/{exercise_id}/sets"))
         .set_json(json!([
             { "reps": 10, "weight": 20.0, "weight_left": 10.0 }
         ]))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/exercises/{exercise_id}/sets"))
+        .set_json(json!({ "reps": 0, "weight": 0.0 }))
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 400);
@@ -2064,6 +2219,144 @@ async fn exercise_and_progress_endpoints_are_covered() {
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 404);
+}
+
+#[actix_web::test]
+async fn progress_overview_reports_periods_timed_stats_and_pr_feed() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "overview-user", "passwordpassword").await;
+    let cookie = login_cookie_active(&app, "overview-user", "passwordpassword").await;
+
+    let current_time = chrono::Utc::now() - chrono::Duration::days(1);
+    let previous_period_time = current_time - chrono::Duration::days(8);
+
+    let previous_workout = create_workout_with_times(
+        &app,
+        &cookie,
+        previous_period_time,
+        previous_period_time + chrono::Duration::minutes(45),
+    )
+    .await;
+    let previous_bench = create_exercise_for_workout(
+        &app,
+        &cookie,
+        previous_workout,
+        "Bench Press",
+        previous_period_time,
+        previous_period_time + chrono::Duration::minutes(20),
+    )
+    .await;
+    create_set_for_exercise(&app, &cookie, previous_bench, 5, 80.0, None).await;
+
+    let current_workout = create_workout_with_times(
+        &app,
+        &cookie,
+        current_time,
+        current_time + chrono::Duration::minutes(60),
+    )
+    .await;
+    let current_bench = create_exercise_for_workout(
+        &app,
+        &cookie,
+        current_workout,
+        "Bench Press",
+        current_time,
+        current_time + chrono::Duration::minutes(25),
+    )
+    .await;
+    create_set_for_exercise(&app, &cookie, current_bench, 5, 90.0, None).await;
+
+    let current_plank = create_exercise_for_workout(
+        &app,
+        &cookie,
+        current_workout,
+        "Plank",
+        current_time + chrono::Duration::minutes(30),
+        current_time + chrono::Duration::minutes(40),
+    )
+    .await;
+    create_set_for_exercise(&app, &cookie, current_plank, 0, 0.0, Some(45)).await;
+    create_set_for_exercise(&app, &cookie, current_plank, 0, 0.0, Some(75)).await;
+
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri("/api/progress/overview?timezone_offset_minutes=0")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+    let overview = json_body(resp).await;
+
+    assert_eq!(overview["last_7_days"]["label"], "Last 7 days");
+    assert_eq!(overview["last_7_days"]["workouts"], 1);
+    assert_eq!(overview["last_7_days"]["timed_sets"], 2);
+    assert_eq!(overview["last_7_days"]["total_timed_duration_seconds"], 120);
+    assert_eq!(overview["last_7_days"]["comparison"]["workouts_delta"], 0);
+    assert!(overview["last_7_days"]["pr_count"].as_i64().unwrap() >= 1);
+    assert!(
+        overview["last_7_days"]["recent_best_count"]
+            .as_i64()
+            .unwrap()
+            >= 1
+    );
+
+    let prs = overview["recent_prs"].as_array().expect("recent prs");
+    let recent_bests = overview["recent_bests"].as_array().expect("recent bests");
+    assert!(prs.iter().any(|pr| {
+        pr["exercise_type"] == "Bench Press"
+            && pr["pr_type"] == "estimated_1rm"
+            && pr["previous_value"].as_f64() == Some(90.0)
+    }));
+    assert!(prs.iter().any(|pr| {
+        pr["exercise_type"] == "Plank"
+            && pr["pr_type"] == "timed_duration"
+            && pr["previous_value"].as_f64() == Some(45.0)
+    }));
+    assert!(recent_bests.iter().any(|pr| {
+        pr["exercise_type"] == "Plank"
+            && pr["pr_type"] == "timed_duration"
+            && pr["previous_value"].as_f64() == Some(45.0)
+    }));
+
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri("/api/progress/volume?exercise_type=Plank")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+    let volume = json_body(resp).await;
+    assert_eq!(volume["timed_records"]["longest_set_seconds"], 75);
+    assert_eq!(
+        volume["timed_records"]["best_session_duration_seconds"],
+        120
+    );
+    assert_eq!(volume["timed_records"]["lifetime_duration_seconds"], 120);
+    assert_eq!(volume["timed_records"]["average_set_duration_seconds"], 60);
+}
+
+#[actix_web::test]
+async fn progress_overview_empty_and_invalid_timezone_are_handled() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "overview-empty", "passwordpassword").await;
+    let cookie = login_cookie_active(&app, "overview-empty", "passwordpassword").await;
+
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri("/api/progress/overview?timezone_offset_minutes=0")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+    let overview = json_body(resp).await;
+    assert_eq!(overview["last_7_days"]["workouts"], 0);
+    assert_eq!(overview["last_30_days"]["sets"], 0);
+    assert_eq!(overview["recent_prs"].as_array().unwrap().len(), 0);
+    assert_eq!(overview["recent_bests"].as_array().unwrap().len(), 0);
+
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri("/api/progress/overview?timezone_offset_minutes=900")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
 }
 
 #[actix_web::test]

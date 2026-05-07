@@ -27,7 +27,12 @@ const chartingMocks = vi.hoisted(() => ({
 		error: '#999'
 	})),
 	observeTheme: vi.fn(() => ({ disconnect: vi.fn() })),
-	rgba: vi.fn((color: string) => color)
+	rgba: vi.fn((color: string) => color),
+	sqliteWeekKeyToTimestamp: vi.fn((weekKey: string) => {
+		const match = weekKey.match(/^(?<year>\d{4})-(?:W)?(?<week>\d{1,2})$/);
+		if (!match?.groups) return null;
+		return Date.UTC(Number(match.groups.year), 0, 1 + Number(match.groups.week) * 7);
+	})
 }));
 
 const sampleVolumeStats: VolumeStats = {
@@ -57,7 +62,8 @@ vi.mock('$lib/progress/charting', () => ({
 	baseOptions: chartingMocks.baseOptions,
 	readTheme: chartingMocks.readTheme,
 	observeTheme: chartingMocks.observeTheme,
-	rgba: chartingMocks.rgba
+	rgba: chartingMocks.rgba,
+	sqliteWeekKeyToTimestamp: chartingMocks.sqliteWeekKeyToTimestamp
 }));
 
 describe('ExerciseCharts', () => {
@@ -87,6 +93,29 @@ describe('ExerciseCharts', () => {
 		expect(types).toContain('line');
 		expect(types).toContain('bar');
 		expect(types).not.toContain('scatter');
+	});
+
+	it('plots weekly volume as weekly points on a monthly time axis', () => {
+		render(ExerciseCharts, {
+			props: {
+				volumeStats: sampleVolumeStats,
+				exerciseProgress: []
+			}
+		});
+
+		const volumeConfig = chartingMocks.upsertChart.mock.calls.find(
+			(call) => call[2]?.type === 'line'
+		)?.[2] as {
+			data?: { datasets?: Array<{ data?: Array<{ x: number; y: number }> }> };
+			options?: {
+				scales?: { x?: { type?: string; time?: { unit?: string }; title?: { text?: string } } };
+			};
+		};
+
+		expect(volumeConfig.data?.datasets?.[0]?.data).toEqual([{ x: Date.UTC(2026, 0, 8), y: 1000 }]);
+		expect(volumeConfig.options?.scales?.x?.type).toBe('time');
+		expect(volumeConfig.options?.scales?.x?.time?.unit).toBe('month');
+		expect(volumeConfig.options?.scales?.x?.title?.text).toBe('Month');
 	});
 
 	it('renders progress scatter chart when exercise progress exists', () => {

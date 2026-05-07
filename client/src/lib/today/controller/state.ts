@@ -1,7 +1,12 @@
 import { EXERCISE_LIBRARY } from '$lib/mocks/today';
-import type { UiMood, UiSession } from '$lib/today/types';
+import type { PlannedTemplateExercise, UiMood, UiSession } from '$lib/today/types';
 import { derived, writable } from 'svelte/store';
-import { calculateElapsedLabel, calculateTotalSets, calculateTotalVolumeKg } from './metrics';
+import {
+	calculateElapsedLabel,
+	calculateTotalDurationSeconds,
+	calculateTotalSets,
+	calculateTotalVolumeKg
+} from './metrics';
 import { getQuickPicks, getSuggestions } from './suggestions';
 
 export function createTodayState() {
@@ -10,6 +15,7 @@ export function createTodayState() {
 	const currentSession = writable<UiSession | null>(null);
 	const recentSessions = writable<UiSession[]>([]);
 	const openExerciseId = writable<number | null>(null);
+	const plannedTemplateExercises = writable<PlannedTemplateExercise[]>([]);
 
 	const exerciseQuery = writable('');
 	const sessionNotes = writable('');
@@ -36,6 +42,10 @@ export function createTodayState() {
 		calculateTotalVolumeKg($currentSession)
 	);
 
+	const totalDurationSeconds = derived(currentSession, ($currentSession) =>
+		calculateTotalDurationSeconds($currentSession)
+	);
+
 	const quickPicks = derived(recentSessions, ($recentSessions) => getQuickPicks($recentSessions));
 
 	const suggestions = derived(
@@ -52,6 +62,7 @@ export function createTodayState() {
 		currentSession,
 		recentSessions,
 		openExerciseId,
+		plannedTemplateExercises,
 		exerciseQuery,
 		sessionNotes,
 		endMood,
@@ -68,6 +79,7 @@ export function createTodayState() {
 		elapsedLabel,
 		totalSets,
 		totalVolumeKg,
+		totalDurationSeconds,
 		quickPicks,
 		suggestions
 	};
