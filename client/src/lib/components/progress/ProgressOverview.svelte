@@ -7,19 +7,19 @@
 	export let error: string | null = null;
 
 	const metricBase =
-		'relative overflow-hidden rounded-xl border p-3 shadow-[0_10px_24px_-18px_rgba(15,23,42,0.45)] dark:shadow-none';
+		'relative overflow-hidden rounded-xl border bg-white/70 p-3 shadow-[0_10px_24px_-18px_rgba(15,23,42,0.35)] dark:bg-surface-950/35 dark:shadow-none';
 
 	const metrics = {
-		workouts: `${metricBase} border-primary-500/20 bg-primary-500/10 dark:bg-primary-500/10`,
-		time: `${metricBase} border-warning-500/25 bg-warning-500/10 dark:bg-warning-500/10`,
-		volume: `${metricBase} border-success-500/20 bg-success-500/10 dark:bg-success-500/10`,
-		records: `${metricBase} border-tertiary-500/25 bg-tertiary-500/10 dark:bg-tertiary-500/10`
+		workouts: `${metricBase} border-primary-500/25 dark:border-primary-500/25`,
+		time: `${metricBase} border-warning-500/30 dark:border-warning-500/25`,
+		volume: `${metricBase} border-success-500/25 dark:border-success-500/25`,
+		records: `${metricBase} border-tertiary-500/30 dark:border-tertiary-500/25`
 	};
 
 	const periodCardClass = (index: number) =>
 		index === 0
-			? 'relative overflow-hidden rounded-2xl border border-primary-500/25 bg-gradient-to-br from-primary-500/10 via-surface-50/85 to-warning-500/10 p-3 shadow-[0_18px_45px_-28px_rgba(37,99,235,0.55)] dark:from-primary-500/15 dark:via-surface-900/80 dark:to-warning-500/10'
-			: 'relative overflow-hidden rounded-2xl border border-surface-200/70 bg-surface-50/70 p-3 shadow-[0_14px_34px_-30px_rgba(15,23,42,0.5)] dark:border-surface-700/70 dark:bg-surface-950/35';
+			? 'relative overflow-hidden rounded-2xl border border-primary-500/25 bg-white p-3 shadow-[0_18px_45px_-28px_rgba(37,99,235,0.35)] dark:bg-surface-950/35'
+			: 'relative overflow-hidden rounded-2xl border border-surface-200/70 bg-white p-3 shadow-[0_14px_34px_-30px_rgba(15,23,42,0.4)] dark:border-surface-700/70 dark:bg-surface-950/35';
 
 	function volume(value: number): string {
 		return `${Math.round(value)}kg`;

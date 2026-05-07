@@ -49,7 +49,7 @@
 	const quietButtonClass =
 		'text-surface-700 hover:bg-surface-100 dark:text-surface-200 dark:hover:bg-surface-800/70';
 	const recordRowClass =
-		'relative overflow-hidden rounded-xl border bg-surface-50/80 p-3 shadow-[0_10px_28px_-24px_rgba(15,23,42,0.6)] dark:bg-surface-950/35';
+		'relative overflow-hidden rounded-xl border bg-white p-3 shadow-[0_10px_28px_-24px_rgba(15,23,42,0.45)] dark:bg-surface-950/35';
 
 	$: activeBadgeClass =
 		selectedFeed === 'prs'
