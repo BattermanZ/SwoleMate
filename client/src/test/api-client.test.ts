@@ -119,7 +119,7 @@ describe('api client behavior', () => {
 
 		const overviewFetcher = vi.fn(async (input: URL | RequestInfo) => {
 			seenUrls.push(String(input));
-			return jsonResponse({ current_week: {}, last_30_days: {}, recent_prs: [] });
+			return jsonResponse({ last_7_days: {}, last_30_days: {}, recent_prs: [], recent_bests: [] });
 		});
 		await getProgressOverview(overviewFetcher as unknown as typeof fetch);
 		expect(seenUrls[3]).toContain('/api/progress/overview?timezone_offset_minutes=');

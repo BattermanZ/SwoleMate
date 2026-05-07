@@ -1,12 +1,13 @@
 use super::Database;
 use crate::{errors::AppError, models::*};
-use chrono::{DateTime, Datelike, Duration, NaiveTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use log::{debug, error};
 use serde_json::json;
 use sqlx::Row;
 
 const MAX_TIMEZONE_OFFSET_MINUTES: i64 = 14 * 60;
 const RECENT_PR_LIMIT: usize = 20;
+const RECENT_BEST_WINDOW_DAYS: i64 = 90;
 
 #[derive(Debug, Clone)]
 struct SetFact {
@@ -56,14 +57,6 @@ struct PeriodSummaryBase {
     total_timed_duration_seconds: i64,
 }
 
-fn local_period_start_utc(now: DateTime<Utc>, timezone_offset_minutes: i64) -> DateTime<Utc> {
-    let local_now = now - Duration::minutes(timezone_offset_minutes);
-    let days_since_monday = local_now.weekday().num_days_from_monday() as i64;
-    let monday = local_now.date_naive() - Duration::days(days_since_monday);
-    let local_start = monday.and_time(NaiveTime::MIN).and_utc();
-    local_start + Duration::minutes(timezone_offset_minutes)
-}
-
 fn validate_progress_offset(offset: i64) -> Result<(), AppError> {
     if !(-MAX_TIMEZONE_OFFSET_MINUTES..=MAX_TIMEZONE_OFFSET_MINUTES).contains(&offset) {
         return Err(AppError::BadRequest(
@@ -78,6 +71,22 @@ fn count_prs_in_period(events: &[PrEvent], start: DateTime<Utc>, end: DateTime<U
         .iter()
         .filter(|event| event.occurred_at >= start && event.occurred_at < end)
         .count() as i64
+}
+
+fn event_json(event: &PrEvent) -> serde_json::Value {
+    json!({
+        "exercise_type": event.exercise_type,
+        "pr_type": event.pr_type,
+        "new_value": event.new_value,
+        "previous_value": event.previous_value,
+        "date": event.occurred_at,
+        "set_id": event.set_id,
+        "set_details": {
+            "reps": event.reps,
+            "weight": event.weight,
+            "duration_seconds": event.duration_seconds
+        }
+    })
 }
 
 fn detect_pr_events(facts: &[SetFact]) -> Vec<PrEvent> {
@@ -167,6 +176,109 @@ fn detect_pr_events(facts: &[SetFact]) -> Vec<PrEvent> {
             .then_with(|| a.set_id.cmp(&b.set_id))
     });
     events
+}
+
+fn detect_recent_best_events(facts: &[SetFact]) -> Vec<PrEvent> {
+    use std::collections::HashMap;
+
+    let mut histories: HashMap<String, Vec<(DateTime<Utc>, f64)>> = HashMap::new();
+    let mut events = Vec::new();
+
+    for fact in facts {
+        let mut set_events = Vec::new();
+
+        maybe_record_recent_best(
+            &mut histories,
+            format!("{}::max_weight", fact.exercise_type),
+            fact.effective_weight,
+            fact,
+            "max_weight",
+            &mut set_events,
+        );
+
+        if let Some(estimated_1rm) = fact.estimated_1rm() {
+            maybe_record_recent_best(
+                &mut histories,
+                format!("{}::estimated_1rm", fact.exercise_type),
+                estimated_1rm,
+                fact,
+                "estimated_1rm",
+                &mut set_events,
+            );
+        }
+
+        if fact.reps > 0 && fact.effective_weight > 0.0 {
+            maybe_record_recent_best(
+                &mut histories,
+                format!("{}::rep_pr::{}", fact.exercise_type, fact.reps),
+                fact.effective_weight,
+                fact,
+                "rep_pr",
+                &mut set_events,
+            );
+        }
+
+        maybe_record_recent_best(
+            &mut histories,
+            format!("{}::single_set_volume", fact.exercise_type),
+            fact.set_volume(),
+            fact,
+            "single_set_volume",
+            &mut set_events,
+        );
+
+        if let Some(duration) = fact.duration_seconds.filter(|d| *d > 0) {
+            maybe_record_recent_best(
+                &mut histories,
+                format!("{}::timed_duration", fact.exercise_type),
+                duration as f64,
+                fact,
+                "timed_duration",
+                &mut set_events,
+            );
+        }
+
+        if let Some(best_event) = set_events.into_iter().min_by_key(pr_priority) {
+            events.push(best_event);
+        }
+    }
+
+    events.sort_by(|a, b| {
+        a.occurred_at
+            .cmp(&b.occurred_at)
+            .then_with(|| a.set_id.cmp(&b.set_id))
+    });
+    events
+}
+
+fn maybe_record_recent_best(
+    histories: &mut std::collections::HashMap<String, Vec<(DateTime<Utc>, f64)>>,
+    key: String,
+    value: f64,
+    fact: &SetFact,
+    pr_type: &'static str,
+    events: &mut Vec<PrEvent>,
+) {
+    if !value.is_finite() || value <= 0.0 {
+        return;
+    }
+
+    let window_start = fact.exercise_start_time - Duration::days(RECENT_BEST_WINDOW_DAYS);
+    let history = histories.entry(key).or_default();
+    history.retain(|(occurred_at, _)| *occurred_at >= window_start);
+
+    let previous_best = history
+        .iter()
+        .map(|(_, previous)| *previous)
+        .reduce(f64::max);
+
+    if let Some(previous_value) = previous_best {
+        if value > previous_value {
+            events.push(pr_event(fact, pr_type, value, previous_value));
+        }
+    }
+
+    history.push((fact.exercise_start_time, value));
 }
 
 fn maybe_record_pr(
@@ -631,33 +743,44 @@ impl Database {
         validate_progress_offset(timezone_offset_minutes)?;
 
         let now = Utc::now();
-        let week_start = local_period_start_utc(now, timezone_offset_minutes);
-        let week_end = week_start + Duration::days(7);
-        let previous_week_start = week_start - Duration::days(7);
+        let last_7_end = now;
+        let last_7_start = now - Duration::days(7);
+        let previous_7_start = last_7_start - Duration::days(7);
         let last_30_end = now;
         let last_30_start = now - Duration::days(30);
         let previous_30_start = last_30_start - Duration::days(30);
 
         let facts = self.get_progress_set_facts(user_id).await?;
         let pr_events = detect_pr_events(&facts);
+        let recent_best_events = detect_recent_best_events(&facts);
 
-        let current_week_pr_count = count_prs_in_period(&pr_events, week_start, week_end);
-        let previous_week_pr_count =
-            count_prs_in_period(&pr_events, previous_week_start, week_start);
+        let last_7_pr_count = count_prs_in_period(&pr_events, last_7_start, last_7_end);
+        let previous_7_pr_count = count_prs_in_period(&pr_events, previous_7_start, last_7_start);
         let last_30_pr_count = count_prs_in_period(&pr_events, last_30_start, last_30_end);
         let previous_30_pr_count =
             count_prs_in_period(&pr_events, previous_30_start, last_30_start);
 
-        let current_week = self
+        let last_7_recent_best_count =
+            count_prs_in_period(&recent_best_events, last_7_start, last_7_end);
+        let previous_7_recent_best_count =
+            count_prs_in_period(&recent_best_events, previous_7_start, last_7_start);
+        let last_30_recent_best_count =
+            count_prs_in_period(&recent_best_events, last_30_start, last_30_end);
+        let previous_30_recent_best_count =
+            count_prs_in_period(&recent_best_events, previous_30_start, last_30_start);
+
+        let last_7_days = self
             .get_period_summary(
                 user_id,
-                "Current week",
-                week_start,
-                week_end,
-                previous_week_start,
-                week_start,
-                current_week_pr_count,
-                previous_week_pr_count,
+                "Last 7 days",
+                last_7_start,
+                last_7_end,
+                previous_7_start,
+                last_7_start,
+                last_7_pr_count,
+                previous_7_pr_count,
+                last_7_recent_best_count,
+                previous_7_recent_best_count,
             )
             .await?;
         let last_30_days = self
@@ -670,6 +793,8 @@ impl Database {
                 last_30_start,
                 last_30_pr_count,
                 previous_30_pr_count,
+                last_30_recent_best_count,
+                previous_30_recent_best_count,
             )
             .await?;
 
@@ -677,27 +802,21 @@ impl Database {
             .iter()
             .rev()
             .take(RECENT_PR_LIMIT)
-            .map(|event| {
-                json!({
-                    "exercise_type": event.exercise_type,
-                    "pr_type": event.pr_type,
-                    "new_value": event.new_value,
-                    "previous_value": event.previous_value,
-                    "date": event.occurred_at,
-                    "set_id": event.set_id,
-                    "set_details": {
-                        "reps": event.reps,
-                        "weight": event.weight,
-                        "duration_seconds": event.duration_seconds
-                    }
-                })
-            })
+            .map(event_json)
+            .collect::<Vec<_>>();
+
+        let recent_bests = recent_best_events
+            .iter()
+            .rev()
+            .take(RECENT_PR_LIMIT)
+            .map(event_json)
             .collect::<Vec<_>>();
 
         Ok(json!({
-            "current_week": current_week,
+            "last_7_days": last_7_days,
             "last_30_days": last_30_days,
-            "recent_prs": recent_prs
+            "recent_prs": recent_prs,
+            "recent_bests": recent_bests
         }))
     }
 
@@ -711,6 +830,8 @@ impl Database {
         comparison_end: DateTime<Utc>,
         pr_count: i64,
         comparison_pr_count: i64,
+        recent_best_count: i64,
+        comparison_recent_best_count: i64,
     ) -> Result<serde_json::Value, AppError> {
         let current = self.get_period_summary_base(user_id, start, end).await?;
         let previous = self
@@ -730,6 +851,7 @@ impl Database {
             "timed_sets": current.timed_sets,
             "total_timed_duration_seconds": current.total_timed_duration_seconds,
             "pr_count": pr_count,
+            "recent_best_count": recent_best_count,
             "comparison": {
                 "workouts_delta": current.workouts - previous.workouts,
                 "total_training_minutes_delta": current.total_training_minutes - previous.total_training_minutes,
@@ -739,7 +861,8 @@ impl Database {
                 "total_volume_delta": current.total_volume - previous.total_volume,
                 "timed_sets_delta": current.timed_sets - previous.timed_sets,
                 "total_timed_duration_seconds_delta": current.total_timed_duration_seconds - previous.total_timed_duration_seconds,
-                "pr_count_delta": pr_count - comparison_pr_count
+                "pr_count_delta": pr_count - comparison_pr_count,
+                "recent_best_count_delta": recent_best_count - comparison_recent_best_count
             }
         }))
     }

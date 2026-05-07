@@ -1,6 +1,5 @@
 use actix_web::{test, web, App, HttpResponse};
 use base64::Engine;
-use chrono::Datelike;
 use once_cell::sync::Lazy;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -2230,19 +2229,14 @@ async fn progress_overview_reports_periods_timed_stats_and_pr_feed() {
     create_user_as_admin(&app, &admin_cookie, "overview-user", "passwordpassword").await;
     let cookie = login_cookie_active(&app, "overview-user", "passwordpassword").await;
 
-    let week_start = {
-        let now = chrono::Utc::now();
-        let days_since_monday = now.weekday().num_days_from_monday() as i64;
-        let monday = now.date_naive() - chrono::Duration::days(days_since_monday);
-        monday.and_time(chrono::NaiveTime::MIN).and_utc() + chrono::Duration::hours(10)
-    };
-    let previous_week = week_start - chrono::Duration::days(7);
+    let current_time = chrono::Utc::now() - chrono::Duration::days(1);
+    let previous_period_time = current_time - chrono::Duration::days(8);
 
     let previous_workout = create_workout_with_times(
         &app,
         &cookie,
-        previous_week,
-        previous_week + chrono::Duration::minutes(45),
+        previous_period_time,
+        previous_period_time + chrono::Duration::minutes(45),
     )
     .await;
     let previous_bench = create_exercise_for_workout(
@@ -2250,8 +2244,8 @@ async fn progress_overview_reports_periods_timed_stats_and_pr_feed() {
         &cookie,
         previous_workout,
         "Bench Press",
-        previous_week,
-        previous_week + chrono::Duration::minutes(20),
+        previous_period_time,
+        previous_period_time + chrono::Duration::minutes(20),
     )
     .await;
     create_set_for_exercise(&app, &cookie, previous_bench, 5, 80.0, None).await;
@@ -2259,8 +2253,8 @@ async fn progress_overview_reports_periods_timed_stats_and_pr_feed() {
     let current_workout = create_workout_with_times(
         &app,
         &cookie,
-        week_start,
-        week_start + chrono::Duration::minutes(60),
+        current_time,
+        current_time + chrono::Duration::minutes(60),
     )
     .await;
     let current_bench = create_exercise_for_workout(
@@ -2268,8 +2262,8 @@ async fn progress_overview_reports_periods_timed_stats_and_pr_feed() {
         &cookie,
         current_workout,
         "Bench Press",
-        week_start,
-        week_start + chrono::Duration::minutes(25),
+        current_time,
+        current_time + chrono::Duration::minutes(25),
     )
     .await;
     create_set_for_exercise(&app, &cookie, current_bench, 5, 90.0, None).await;
@@ -2279,8 +2273,8 @@ async fn progress_overview_reports_periods_timed_stats_and_pr_feed() {
         &cookie,
         current_workout,
         "Plank",
-        week_start + chrono::Duration::minutes(30),
-        week_start + chrono::Duration::minutes(40),
+        current_time + chrono::Duration::minutes(30),
+        current_time + chrono::Duration::minutes(40),
     )
     .await;
     create_set_for_exercise(&app, &cookie, current_plank, 0, 0.0, Some(45)).await;
@@ -2293,22 +2287,32 @@ async fn progress_overview_reports_periods_timed_stats_and_pr_feed() {
     assert!(resp.status().is_success());
     let overview = json_body(resp).await;
 
-    assert_eq!(overview["current_week"]["workouts"], 1);
-    assert_eq!(overview["current_week"]["timed_sets"], 2);
-    assert_eq!(
-        overview["current_week"]["total_timed_duration_seconds"],
-        120
+    assert_eq!(overview["last_7_days"]["label"], "Last 7 days");
+    assert_eq!(overview["last_7_days"]["workouts"], 1);
+    assert_eq!(overview["last_7_days"]["timed_sets"], 2);
+    assert_eq!(overview["last_7_days"]["total_timed_duration_seconds"], 120);
+    assert_eq!(overview["last_7_days"]["comparison"]["workouts_delta"], 0);
+    assert!(overview["last_7_days"]["pr_count"].as_i64().unwrap() >= 1);
+    assert!(
+        overview["last_7_days"]["recent_best_count"]
+            .as_i64()
+            .unwrap()
+            >= 1
     );
-    assert_eq!(overview["current_week"]["comparison"]["workouts_delta"], 0);
-    assert!(overview["current_week"]["pr_count"].as_i64().unwrap() >= 1);
 
     let prs = overview["recent_prs"].as_array().expect("recent prs");
+    let recent_bests = overview["recent_bests"].as_array().expect("recent bests");
     assert!(prs.iter().any(|pr| {
         pr["exercise_type"] == "Bench Press"
             && pr["pr_type"] == "estimated_1rm"
             && pr["previous_value"].as_f64() == Some(90.0)
     }));
     assert!(prs.iter().any(|pr| {
+        pr["exercise_type"] == "Plank"
+            && pr["pr_type"] == "timed_duration"
+            && pr["previous_value"].as_f64() == Some(45.0)
+    }));
+    assert!(recent_bests.iter().any(|pr| {
         pr["exercise_type"] == "Plank"
             && pr["pr_type"] == "timed_duration"
             && pr["previous_value"].as_f64() == Some(45.0)
@@ -2343,9 +2347,10 @@ async fn progress_overview_empty_and_invalid_timezone_are_handled() {
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success());
     let overview = json_body(resp).await;
-    assert_eq!(overview["current_week"]["workouts"], 0);
+    assert_eq!(overview["last_7_days"]["workouts"], 0);
     assert_eq!(overview["last_30_days"]["sets"], 0);
     assert_eq!(overview["recent_prs"].as_array().unwrap().len(), 0);
+    assert_eq!(overview["recent_bests"].as_array().unwrap().len(), 0);
 
     let req = with_cookie(test::TestRequest::get(), &cookie)
         .uri("/api/progress/overview?timezone_offset_minutes=900")

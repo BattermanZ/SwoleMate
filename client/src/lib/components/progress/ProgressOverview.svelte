@@ -30,12 +30,12 @@
 		</div>
 	{:else if overview}
 		<div class="grid gap-3 md:grid-cols-2">
-			{#each [overview.current_week, overview.last_30_days] as period}
+			{#each [overview.last_7_days, overview.last_30_days] as period}
 				<article class="rounded-xl border border-surface-200/60 p-3 dark:border-surface-700/60">
 					<div class="flex items-baseline justify-between gap-3">
 						<h3 class="font-semibold">{period.label}</h3>
 						<div class="text-xs font-semibold opacity-60">
-							{formatSignedNumber(period.comparison.pr_count_delta)} PRs
+							{formatSignedNumber(period.comparison.recent_best_count_delta)} recent bests
 						</div>
 					</div>
 
@@ -62,30 +62,35 @@
 							</div>
 						</div>
 						<div class={metricClass}>
-							<div class="text-xs font-semibold opacity-70">Sets / reps</div>
-							<div class="text-lg font-bold">{period.sets} / {period.reps}</div>
+							<div class="text-xs font-semibold opacity-70">Records</div>
+							<div class="text-lg font-bold">{period.pr_count} PRs</div>
 							<div class="text-xs opacity-70">
-								{formatSignedNumber(period.comparison.sets_delta)} sets
+								{period.recent_best_count} recent bests
 							</div>
 						</div>
 					</div>
 
-					{#if period.timed_sets > 0 || period.pr_count > 0}
-						<div class="mt-3 flex flex-wrap gap-2 text-xs">
-							{#if period.timed_sets > 0}
-								<span class="badge variant-soft">
-									{period.timed_sets} timed sets · {formatDuration(
-										period.total_timed_duration_seconds
-									)}
-									<span class="opacity-70">
-										{formatSignedDuration(period.comparison.total_timed_duration_seconds_delta)}
-									</span>
+					<div class="mt-3 flex flex-wrap gap-2 text-xs">
+						<span class="badge variant-soft">{period.sets} sets · {period.reps} reps</span>
+						{#if period.timed_sets > 0}
+							<span class="badge variant-soft">
+								Timed work: {period.timed_sets} sets · {formatDuration(
+									period.total_timed_duration_seconds
+								)}
+								<span class="opacity-70">
+									{formatSignedDuration(period.comparison.total_timed_duration_seconds_delta)}
 								</span>
-							{/if}
-							{#if period.pr_count > 0}
-								<span class="badge variant-soft-primary">{period.pr_count} PRs</span>
-							{/if}
-						</div>
+							</span>
+						{/if}
+						{#if period.comparison.pr_count_delta !== 0}
+							<span class="badge variant-soft-primary">
+								{formatSignedNumber(period.comparison.pr_count_delta)} PRs
+							</span>
+						{/if}
+					</div>
+
+					{#if period.workouts === 0}
+						<div class="mt-3 text-sm opacity-70">No workouts in this period yet.</div>
 					{/if}
 				</article>
 			{/each}

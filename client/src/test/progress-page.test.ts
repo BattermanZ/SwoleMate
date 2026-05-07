@@ -62,10 +62,10 @@ describe('progress route page', () => {
 			avg_exercise_duration_series: []
 		});
 		apiMocks.getProgressOverview.mockResolvedValue({
-			current_week: {
-				label: 'Current week',
-				start_date: '2026-05-04T00:00:00Z',
-				end_date: '2026-05-11T00:00:00Z',
+			last_7_days: {
+				label: 'Last 7 days',
+				start_date: '2026-04-28T00:00:00Z',
+				end_date: '2026-05-05T00:00:00Z',
 				workouts: 2,
 				total_training_minutes: 95,
 				exercises: 7,
@@ -75,6 +75,7 @@ describe('progress route page', () => {
 				timed_sets: 2,
 				total_timed_duration_seconds: 135,
 				pr_count: 1,
+				recent_best_count: 2,
 				comparison: {
 					workouts_delta: 1,
 					total_training_minutes_delta: 35,
@@ -84,7 +85,8 @@ describe('progress route page', () => {
 					total_volume_delta: 900,
 					timed_sets_delta: 1,
 					total_timed_duration_seconds_delta: 45,
-					pr_count_delta: 1
+					pr_count_delta: 1,
+					recent_best_count_delta: 2
 				}
 			},
 			last_30_days: {
@@ -100,6 +102,7 @@ describe('progress route page', () => {
 				timed_sets: 5,
 				total_timed_duration_seconds: 390,
 				pr_count: 3,
+				recent_best_count: 6,
 				comparison: {
 					workouts_delta: 2,
 					total_training_minutes_delta: 60,
@@ -109,7 +112,8 @@ describe('progress route page', () => {
 					total_volume_delta: 4200,
 					timed_sets_delta: 2,
 					total_timed_duration_seconds_delta: 120,
-					pr_count_delta: 2
+					pr_count_delta: 2,
+					recent_best_count_delta: 4
 				}
 			},
 			recent_prs: [
@@ -121,6 +125,17 @@ describe('progress route page', () => {
 					date: '2026-05-05T10:00:00Z',
 					set_id: 9,
 					set_details: { reps: 5, weight: 87.5, duration_seconds: null }
+				}
+			],
+			recent_bests: [
+				{
+					exercise_type: 'Plank',
+					pr_type: 'timed_duration',
+					new_value: 75,
+					previous_value: 45,
+					date: '2026-05-04T10:00:00Z',
+					set_id: 10,
+					set_details: { reps: 0, weight: 0, duration_seconds: 75 }
 				}
 			]
 		});
@@ -157,9 +172,22 @@ describe('progress route page', () => {
 		const { findByText, queryByText } = render(ProgressPage as never);
 
 		expect(await findByText('Current progress')).toBeInTheDocument();
-		expect(await findByText('Recent PRs')).toBeInTheDocument();
+		expect(await findByText('Records')).toBeInTheDocument();
+		expect(await findByText('Last 7 days')).toBeInTheDocument();
 		expect(await findByText(/Estimated 1RM/)).toBeInTheDocument();
 		expect(queryByText('Longest timed set')).not.toBeInTheDocument();
+	});
+
+	it('switches records between all-time PRs and recent bests', async () => {
+		const { default: ProgressPage } = await import('../routes/progress/+page.svelte');
+		const { findAllByText, findByRole, findByText } = render(ProgressPage as never);
+
+		expect((await findAllByText('Bench Press')).length).toBeGreaterThan(0);
+		await fireEvent.click(await findByRole('tab', { name: 'Recent bests' }));
+
+		expect(await findByText('Plank')).toBeInTheDocument();
+		expect(await findByText('Timed set')).toBeInTheDocument();
+		expect(await findByText(/Timed duration/)).toBeInTheDocument();
 	});
 
 	it('loads and renders exercise details when the Exercise tab opens', async () => {
@@ -201,7 +229,7 @@ describe('progress route page', () => {
 
 		expect(localStorage.getItem('progress.selectedTab')).toBe('trends');
 		expect(await findByText('Sessions per month')).toBeInTheDocument();
-		expect(queryByText('Recent PRs')).not.toBeInTheDocument();
+		expect(queryByText('Records')).not.toBeInTheDocument();
 	});
 
 	it('restores the Exercise tab and loads exercise details', async () => {

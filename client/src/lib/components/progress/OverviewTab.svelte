@@ -14,5 +14,8 @@
 		loading={loadingOverall}
 		error={errorOverall}
 	/>
-	<RecentPrFeed prs={progressOverview?.recent_prs ?? []} />
+	<RecentPrFeed
+		prs={progressOverview?.recent_prs ?? []}
+		recentBests={progressOverview?.recent_bests ?? []}
+	/>
 </div>

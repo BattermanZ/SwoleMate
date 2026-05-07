@@ -248,6 +248,7 @@ export interface ProgressPeriodComparison {
 	timed_sets_delta: number;
 	total_timed_duration_seconds_delta: number;
 	pr_count_delta: number;
+	recent_best_count_delta: number;
 }
 
 export interface ProgressPeriodSummary {
@@ -263,6 +264,7 @@ export interface ProgressPeriodSummary {
 	timed_sets: number;
 	total_timed_duration_seconds: number;
 	pr_count: number;
+	recent_best_count: number;
 	comparison: ProgressPeriodComparison;
 }
 
@@ -288,7 +290,8 @@ export interface RecentPr {
 }
 
 export interface ProgressOverview {
-	current_week: ProgressPeriodSummary;
+	last_7_days: ProgressPeriodSummary;
 	last_30_days: ProgressPeriodSummary;
 	recent_prs: RecentPr[];
+	recent_bests: RecentPr[];
 }
