@@ -215,11 +215,8 @@ pub async fn create_set(
     set_req: web::Json<CreateSetRequest>,
 ) -> Result<HttpResponse, AppError> {
     set_req.validate().map_err(|e| AppError::BadRequest(e))?;
-    let set_id = exercises::create_set(db.get_ref(), user.0.id, *exercise_id, &set_req.0).await?;
-    Ok(HttpResponse::Created().json(json!({
-        "id": set_id,
-        "message": "Set created successfully"
-    })))
+    let set = exercises::create_set(db.get_ref(), user.0.id, *exercise_id, &set_req.0).await?;
+    Ok(HttpResponse::Created().json(set))
 }
 
 #[put("/api/exercises/{exercise_id}/sets")]

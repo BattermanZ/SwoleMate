@@ -15,18 +15,20 @@ export function calculateTotalSets(session: UiSession | null): number {
 	return session.exercises.reduce((count, e) => count + e.sets.length, 0);
 }
 
+export function calculateExerciseVolumeKg(exercise: UiSession['exercises'][number]): number {
+	return exercise.sets.reduce((total, set) => {
+		if (!exercise.perSideWeight) return total + set.reps * set.weight;
+		if (!exercise.splitWeight) return total + set.reps * (set.weight * 2);
+		const left = set.weightLeft ?? set.weight;
+		const right = set.weightRight ?? set.weight;
+		return total + set.reps * (left + right);
+	}, 0);
+}
+
 export function calculateTotalVolumeKg(session: UiSession | null): number {
 	if (!session) return 0;
 	return session.exercises.reduce(
-		(total, e) =>
-			total +
-			e.sets.reduce((t, s) => {
-				if (!e.perSideWeight) return t + s.reps * s.weight;
-				if (!e.splitWeight) return t + s.reps * (s.weight * 2);
-				const left = s.weightLeft ?? s.weight;
-				const right = s.weightRight ?? s.weight;
-				return t + s.reps * (left + right);
-			}, 0),
+		(total, exercise) => total + calculateExerciseVolumeKg(exercise),
 		0
 	);
 }

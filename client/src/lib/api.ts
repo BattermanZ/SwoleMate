@@ -191,7 +191,7 @@ export async function createSet(
 	exerciseId: number,
 	set: CreateSetRequest,
 	fetcher: Fetcher = fetch
-): Promise<{ id: number }> {
+): Promise<Set> {
 	const response = await fetcher(
 		`${API_BASE}/api/exercises/${exerciseId}/sets`,
 		withCredentials({

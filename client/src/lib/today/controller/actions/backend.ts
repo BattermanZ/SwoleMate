@@ -26,18 +26,26 @@ export async function refreshFromBackend(state: TodayState) {
 			const next = toUiSession(data.workout, data.exercises);
 			state.currentSession.set(next);
 			state.sessionNotes.set(next.notes);
-			state.openExerciseId.set(next.exercises[0]?.id ?? null);
+			state.openExerciseIds.set(
+				next.exercises
+					.filter((exercise) => exercise.status !== 'done')
+					.map((exercise) => exercise.id)
+			);
 		} else {
 			const offlineInProgress = await findInProgressOffline();
 			if (offlineInProgress?.session) {
 				state.currentSession.set(offlineInProgress.session);
 				state.sessionNotes.set(offlineInProgress.session.notes);
-				state.openExerciseId.set(offlineInProgress.session.exercises[0]?.id ?? null);
+				state.openExerciseIds.set(
+					offlineInProgress.session.exercises
+						.filter((exercise) => exercise.status !== 'done')
+						.map((exercise) => exercise.id)
+				);
 				state.notice.set('Local session in progress. You can keep logging and sync later.');
 			} else {
 				state.currentSession.set(null);
 				state.sessionNotes.set('');
-				state.openExerciseId.set(null);
+				state.openExerciseIds.set([]);
 				state.plannedTemplateExercises.set([]);
 			}
 		}

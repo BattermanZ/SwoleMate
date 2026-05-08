@@ -52,20 +52,23 @@ describe('offline today flow', () => {
 		expect(session?.exercises[0]?.id).toBeLessThan(0);
 	});
 
-	it('collapses the exercise card when marked done', async () => {
+	it('collapses only the completed exercise card when marked done', async () => {
 		localStorage.clear();
 		const controller = createTodayController();
 
 		await controller.startSession('empty');
 		await controller.addExercise('Bench Press');
+		await controller.addExercise('Cable Row');
 
 		const session = get(controller.currentSession);
 		const exerciseId = session?.exercises[0]?.id;
+		const nextExerciseId = session?.exercises[1]?.id;
 		expect(exerciseId).toBeTruthy();
-		expect(get(controller.openExerciseId)).toBe(exerciseId);
+		expect(nextExerciseId).toBeTruthy();
+		expect(get(controller.openExerciseIds)).toEqual([exerciseId, nextExerciseId]);
 
 		await controller.markExerciseDone(exerciseId!);
 
-		expect(get(controller.openExerciseId)).toBeNull();
+		expect(get(controller.openExerciseIds)).toEqual([nextExerciseId]);
 	});
 });

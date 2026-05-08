@@ -56,7 +56,7 @@ export function createSessionActions(args: {
 			exercises: []
 		});
 		state.sessionNotes.set(notes);
-		state.openExerciseId.set(null);
+		state.openExerciseIds.set([]);
 		state.plannedTemplateExercises.set([]);
 		resetLocalSessionUi(state);
 	}
@@ -220,7 +220,7 @@ export function createSessionActions(args: {
 				}
 				state.currentSession.set(null);
 				state.sessionNotes.set('');
-				state.openExerciseId.set(null);
+				state.openExerciseIds.set([]);
 				state.plannedTemplateExercises.set([]);
 				resetLocalSessionUi(state);
 				await refreshPendingSyncCount(state);
@@ -232,7 +232,7 @@ export function createSessionActions(args: {
 			await cancelWorkout(session.id);
 			state.currentSession.set(null);
 			state.sessionNotes.set('');
-			state.openExerciseId.set(null);
+			state.openExerciseIds.set([]);
 			state.plannedTemplateExercises.set([]);
 			resetLocalSessionUi(state);
 			await refreshFromBackend();
@@ -273,7 +273,7 @@ export function createSessionActions(args: {
 				const ended: UiSession = { ...session, endedAt, mood, exercises: endedExercises };
 				state.currentSession.set(null);
 				state.sessionNotes.set('');
-				state.openExerciseId.set(null);
+				state.openExerciseIds.set([]);
 				state.plannedTemplateExercises.set([]);
 				resetLocalSessionUi(state);
 
@@ -326,7 +326,7 @@ export function createSessionActions(args: {
 
 			state.currentSession.set(null);
 			state.sessionNotes.set('');
-			state.openExerciseId.set(null);
+			state.openExerciseIds.set([]);
 			state.plannedTemplateExercises.set([]);
 			resetLocalSessionUi(state);
 			await refreshFromBackend();

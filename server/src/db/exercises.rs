@@ -223,7 +223,7 @@ impl Database {
         user_id: i64,
         exercise_id: i64,
         req: &CreateSetRequest,
-    ) -> Result<i64, AppError> {
+    ) -> Result<Set, AppError> {
         debug!(
             target: "database",
             "Creating set for exercise #{}: {}x{}kg duration={:?}",
@@ -280,7 +280,16 @@ impl Database {
         tx.commit().await.map_err(AppError::DatabaseError)?;
 
         debug!(target: "database", "Created set #{}", result.id);
-        Ok(result.id)
+        Ok(Set {
+            id: Some(result.id),
+            exercise_id,
+            reps: req.reps,
+            weight: req.weight,
+            weight_left: req.weight_left,
+            weight_right: req.weight_right,
+            duration_seconds: req.duration_seconds,
+            notes: req.notes.clone(),
+        })
     }
 
     pub async fn replace_sets_for_exercise(

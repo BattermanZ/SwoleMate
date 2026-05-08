@@ -495,6 +495,56 @@ async fn create_set_for_exercise(
     assert_eq!(resp.status(), 201);
 }
 
+#[actix_web::test]
+async fn create_set_returns_created_set_payload() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "set-payload-user", "passwordpassword").await;
+    let cookie = login_cookie_active(&app, "set-payload-user", "passwordpassword").await;
+    let now = chrono::Utc::now();
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri("/api/workouts")
+        .set_json(json!({ "date": now, "start_time": now }))
+        .to_request();
+    let workout_id = json_body(test::call_service(&app, req).await).await["id"]
+        .as_i64()
+        .expect("workout id");
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}/exercises"))
+        .set_json(json!({ "exercise_type": "Bench Press", "start_time": now }))
+        .to_request();
+    let exercise_id = json_body(test::call_service(&app, req).await).await["id"]
+        .as_i64()
+        .expect("exercise id");
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/exercises/{exercise_id}/sets"))
+        .set_json(json!({
+            "reps": 8,
+            "weight": 42.5,
+            "weight_left": 20.0,
+            "weight_right": 22.5,
+            "duration_seconds": 60,
+            "notes": "controlled",
+        }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 201);
+    let set = json_body(resp).await;
+
+    assert!(set["id"].as_i64().unwrap() > 0);
+    assert_eq!(set["exercise_id"], exercise_id);
+    assert_eq!(set["reps"], 8);
+    assert_eq!(set["weight"], 42.5);
+    assert_eq!(set["weight_left"], 20.0);
+    assert_eq!(set["weight_right"], 22.5);
+    assert_eq!(set["duration_seconds"], 60);
+    assert_eq!(set["notes"], "controlled");
+}
+
 fn pkce_challenge(verifier: &str) -> String {
     let digest = Sha256::digest(verifier.as_bytes());
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(digest)

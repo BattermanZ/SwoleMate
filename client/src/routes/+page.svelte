@@ -30,7 +30,7 @@
 		offlineMode,
 		markExerciseDone,
 		openEndModal,
-		openExerciseId,
+		openExerciseIds,
 		plannedTemplateExercises,
 		pendingSyncCount,
 		quickPicks,
@@ -61,6 +61,7 @@
 	let templateLoading = false;
 	let templateError: string | null = null;
 	let templates: WorkoutTemplate[] = [];
+	let exerciseComposerTarget: HTMLDivElement;
 
 	onMount(() => {
 		showDemoAction = readDemoModePreference();
@@ -94,6 +95,18 @@
 		const hours = Math.floor(minutes / 60);
 		const remMinutes = minutes % 60;
 		return remMinutes ? `${hours}h ${remMinutes}m` : `${hours}h`;
+	}
+
+	async function handleMarkExerciseDone(exerciseId: number) {
+		await markExerciseDone(exerciseId);
+		if ($error || typeof window === 'undefined') return;
+
+		window.requestAnimationFrame(() => {
+			exerciseComposerTarget?.scrollIntoView?.({
+				behavior: 'smooth',
+				block: 'center'
+			});
+		});
 	}
 </script>
 
@@ -317,12 +330,12 @@
 						{#each $currentSession.exercises as ex (ex.id)}
 							<SessionExercise
 								exercise={ex}
-								isOpen={$openExerciseId === ex.id}
+								isOpen={$openExerciseIds.includes(ex.id)}
 								disabled={$loading}
 								lastTime={getLastTimeForExercise(ex.name)}
 								on:toggle={() => toggleExercise(ex.id)}
 								on:delete={() => removeExercise(ex.id)}
-								on:markDone={() => markExerciseDone(ex.id)}
+								on:markDone={() => handleMarkExerciseDone(ex.id)}
 								on:addSet={(e) =>
 									addSet(
 										ex.id,
@@ -345,15 +358,17 @@
 					</div>
 				{/if}
 
-				<ExerciseComposer
-					bind:query={$exerciseQuery}
-					disabled={$loading || !$currentSession}
-					suggestions={$suggestions}
-					templatePicks={$plannedTemplateExercises}
-					quickPicks={$quickPicks}
-					on:add={(e) => addExercise(e.detail.name)}
-					on:addTemplateExercise={(e) => startPlannedTemplateExercise(e.detail.id)}
-				/>
+				<div bind:this={exerciseComposerTarget}>
+					<ExerciseComposer
+						bind:query={$exerciseQuery}
+						disabled={$loading || !$currentSession}
+						suggestions={$suggestions}
+						templatePicks={$plannedTemplateExercises}
+						quickPicks={$quickPicks}
+						on:add={(e) => addExercise(e.detail.name)}
+						on:addTemplateExercise={(e) => startPlannedTemplateExercise(e.detail.id)}
+					/>
+				</div>
 			{:else}
 				<!-- no extra landing card -->
 			{/if}

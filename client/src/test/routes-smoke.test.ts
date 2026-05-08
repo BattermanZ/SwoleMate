@@ -20,12 +20,13 @@ const authStateStore = writable({
 });
 
 const todayControllerMocks = vi.hoisted(() => ({
+	markExerciseDone: vi.fn(async () => undefined),
 	startSession: vi.fn(async () => undefined),
 	startSessionFromTemplate: vi.fn(async () => undefined)
 }));
 
 const todayCurrentSessionStore = writable<UiSession | null>(null);
-const todayOpenExerciseIdStore = writable<number | null>(null);
+const todayOpenExerciseIdsStore = writable<number[]>([]);
 const todayPlannedTemplateExercisesStore = writable<PlannedTemplateExercise[]>([]);
 
 vi.mock('$lib/auth', () => ({
@@ -156,9 +157,9 @@ vi.mock('$lib/today/controller', () => {
 			loading: writable(false),
 			notice: writable(null),
 			offlineMode: writable(false),
-			markExerciseDone: vi.fn(async () => undefined),
+			markExerciseDone: todayControllerMocks.markExerciseDone,
 			openEndModal: vi.fn(),
-			openExerciseId: todayOpenExerciseIdStore,
+			openExerciseIds: todayOpenExerciseIdsStore,
 			plannedTemplateExercises: todayPlannedTemplateExercisesStore,
 			pendingSyncCount: writable(0),
 			quickPicks: writable<string[]>([]),
@@ -180,7 +181,8 @@ vi.mock('$lib/today/controller', () => {
 			totalVolumeKg: writable(0),
 			totalDurationSeconds: writable(0),
 			updateExerciseNotes: vi.fn(),
-			updateExerciseSetting: vi.fn()
+			updateExerciseSetting: vi.fn(),
+			updateExerciseTracking: vi.fn()
 		})
 	};
 });
@@ -194,7 +196,7 @@ beforeEach(() => {
 	localStorage.clear();
 	vi.clearAllMocks();
 	todayCurrentSessionStore.set(null);
-	todayOpenExerciseIdStore.set(null);
+	todayOpenExerciseIdsStore.set([]);
 	todayPlannedTemplateExercisesStore.set([]);
 });
 
@@ -226,8 +228,8 @@ describe('route smoke', () => {
 		expect(todayControllerMocks.startSessionFromTemplate).toHaveBeenCalledWith(5);
 	});
 
-	it('renders only the selected exercise open', async () => {
-		todayOpenExerciseIdStore.set(101);
+	it('renders each selected exercise open', async () => {
+		todayOpenExerciseIdsStore.set([101, 202]);
 		todayCurrentSessionStore.set({
 			id: 12,
 			startedAt: '2026-01-01T10:00:00.000Z',
@@ -255,7 +257,7 @@ describe('route smoke', () => {
 					settings: [],
 					perSideWeight: false,
 					splitWeight: false,
-					status: 'done' as const
+					status: 'active' as const
 				}
 			]
 		});
@@ -265,9 +267,9 @@ describe('route smoke', () => {
 
 		expect(getByText('Bench Press')).toBeInTheDocument();
 		expect(getByText('Cable Row')).toBeInTheDocument();
-		expect(queryAllByText('Add your first set for this exercise.')).toHaveLength(1);
-		expect(queryAllByText('Mark done')).toHaveLength(1);
-		expect(queryAllByText('Collapse')).toHaveLength(1);
+		expect(queryAllByText('Add your first set for this exercise.')).toHaveLength(2);
+		expect(queryAllByText('Mark done')).toHaveLength(2);
+		expect(queryAllByText('Collapse')).toHaveLength(2);
 	});
 
 	it('points empty template sessions to the template plan', async () => {

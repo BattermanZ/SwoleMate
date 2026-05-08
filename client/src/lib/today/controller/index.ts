@@ -17,7 +17,7 @@ export function createTodayController() {
 		loading: state.loading,
 		notice: state.notice,
 		offlineMode: state.offlineMode,
-		openExerciseId: state.openExerciseId,
+		openExerciseIds: state.openExerciseIds,
 		plannedTemplateExercises: state.plannedTemplateExercises,
 		pendingSyncCount: state.pendingSyncCount,
 		quickPicks: state.quickPicks,
