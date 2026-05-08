@@ -33,7 +33,13 @@ describe('today controller set actions', () => {
 	});
 
 	it('adds set online with server id', async () => {
-		apiMocks.createSet.mockResolvedValueOnce({ id: 88 });
+		apiMocks.createSet.mockResolvedValueOnce({
+			id: 88,
+			exercise_id: 9,
+			reps: 8,
+			weight: 125,
+			notes: null
+		});
 
 		const state = createTodayState();
 		state.currentSession.set({
@@ -56,8 +62,7 @@ describe('today controller set actions', () => {
 			]
 		});
 
-		const refreshFromBackend = vi.fn(async () => undefined);
-		const actions = createExerciseSetActions({ state, refreshFromBackend });
+		const actions = createExerciseSetActions({ state });
 		await actions.addSet(9, 8, 100);
 
 		expect(apiMocks.createSet).toHaveBeenCalledWith(
@@ -67,13 +72,19 @@ describe('today controller set actions', () => {
 		expect(get(state.currentSession)!.exercises[0]!.sets[0]).toMatchObject({
 			id: 88,
 			reps: 8,
-			weight: 100
+			weight: 125
 		});
-		expect(refreshFromBackend).toHaveBeenCalledTimes(1);
 	});
 
 	it('adds timed set online with duration seconds', async () => {
-		apiMocks.createSet.mockResolvedValueOnce({ id: 89 });
+		apiMocks.createSet.mockResolvedValueOnce({
+			id: 89,
+			exercise_id: 9,
+			reps: 0,
+			weight: 0,
+			duration_seconds: 75,
+			notes: null
+		});
 
 		const state = createTodayState();
 		state.currentSession.set({

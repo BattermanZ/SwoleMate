@@ -36,7 +36,7 @@ pub async fn create_set(
     user_id: i64,
     exercise_id: i64,
     request: &CreateSetRequest,
-) -> Result<i64, AppError> {
+) -> Result<Set, AppError> {
     db.create_set(user_id, exercise_id, request).await
 }
 

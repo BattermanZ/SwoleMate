@@ -4,6 +4,7 @@ import { get } from 'svelte/store';
 import { hydrateOfflineState, persistInProgressSession, setOffline } from '../../offline';
 import { getErrorMessage, isNetworkFailure, makeLocalNumericId } from '../../utils';
 import { trackingFieldsSetting } from '$lib/today/tracking';
+import { toUiSet } from '$lib/today/backend';
 
 export type ExerciseSetActions = {
 	markExerciseDone: (exerciseId: number) => Promise<void>;
@@ -17,11 +18,8 @@ export type ExerciseSetActions = {
 	) => Promise<void>;
 };
 
-export function createExerciseSetActions(args: {
-	state: TodayState;
-	refreshFromBackend?: () => Promise<void>;
-}) {
-	const { state, refreshFromBackend } = args;
+export function createExerciseSetActions(args: { state: TodayState }) {
+	const { state } = args;
 
 	async function markExerciseDone(exerciseId: number) {
 		const session = get(state.currentSession);
@@ -139,18 +137,12 @@ export function createExerciseSetActions(args: {
 						sets: [
 							...e.sets,
 							{
-								id: created.id,
-								reps,
-								weight,
-								weightLeft,
-								weightRight,
-								durationSeconds
+								...toUiSet(created)
 							}
 						]
 					};
 				})
 			});
-			await refreshFromBackend?.();
 		} catch (e) {
 			if (isNetworkFailure(e)) {
 				setOffline(state);
