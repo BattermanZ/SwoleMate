@@ -14,7 +14,7 @@ export function createTodayState() {
 
 	const currentSession = writable<UiSession | null>(null);
 	const recentSessions = writable<UiSession[]>([]);
-	const openExerciseId = writable<number | null>(null);
+	const openExerciseIds = writable<number[]>([]);
 	const plannedTemplateExercises = writable<PlannedTemplateExercise[]>([]);
 
 	const exerciseQuery = writable('');
@@ -61,7 +61,7 @@ export function createTodayState() {
 		// state stores
 		currentSession,
 		recentSessions,
-		openExerciseId,
+		openExerciseIds,
 		plannedTemplateExercises,
 		exerciseQuery,
 		sessionNotes,

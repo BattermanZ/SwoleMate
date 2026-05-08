@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { createEventDispatcher, onDestroy } from 'svelte';
 	import type { UiExercise } from '$lib/today/types';
+	import { calculateExerciseVolumeKg } from '$lib/today/controller/metrics';
 	import SetPillsHybrid from '$lib/components/ui/SetPillsHybrid.svelte';
 	import { formatDateShort } from '$lib/utils/date';
 
@@ -115,37 +116,12 @@
 		editing = !editing;
 	}
 
-	function setTotalWeight(
-		set: { weight: number; weightLeft?: number; weightRight?: number },
-		perSideWeight: boolean,
-		splitWeight: boolean
-	): number {
-		if (!perSideWeight) return set.weight;
-		if (!splitWeight) return set.weight * 2;
-		const left = set.weightLeft ?? set.weight;
-		const right = set.weightRight ?? set.weight;
-		return left + right;
-	}
-
-	function volumeForSets(
-		sets: Array<{ reps: number; weight: number; weightLeft?: number; weightRight?: number }>,
-		perSideWeight: boolean,
-		splitWeight: boolean
-	) {
-		return sets.reduce(
-			(total, s) => total + s.reps * setTotalWeight(s, perSideWeight, splitWeight),
-			0
-		);
-	}
-
 	function durationForSets(sets: Array<{ durationSeconds?: number }>) {
 		return sets.reduce((total, s) => total + (s.durationSeconds ?? 0), 0);
 	}
 
 	function setSummaryLabel() {
-		const totalVolume = Math.round(
-			volumeForSets(exercise.sets, exercise.perSideWeight, exercise.splitWeight)
-		);
+		const totalVolume = Math.round(calculateExerciseVolumeKg(exercise));
 		if (totalVolume > 0) return `${totalVolume} kg`;
 		const totalDuration = durationForSets(exercise.sets);
 		if (totalDuration > 0) return formatDuration(totalDuration);

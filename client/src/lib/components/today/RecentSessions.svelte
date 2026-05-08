@@ -11,7 +11,6 @@
 	const dispatch = createEventDispatcher<{
 		addExercise: {
 			name: string;
-			notes?: string;
 			perSideWeight?: boolean;
 			splitWeight?: boolean;
 			tracksReps?: boolean;
@@ -107,7 +106,6 @@
 											on:click={() =>
 												dispatch('addExercise', {
 													name: ex.name,
-													notes: ex.notes,
 													perSideWeight: ex.perSideWeight,
 													splitWeight: ex.splitWeight,
 													tracksReps: ex.tracksReps,

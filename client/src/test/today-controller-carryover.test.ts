@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { get } from 'svelte/store';
 import type { UiSession } from '$lib/today/types';
 import { createTodayController } from '$lib/today/controller';
@@ -19,6 +19,10 @@ vi.mock('$lib/api', () => ({
 }));
 
 describe('today controller carry-over', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
 	it('carries over settings and weight modes when adding exercise', async () => {
 		const controller = createTodayController();
 
@@ -83,6 +87,19 @@ describe('today controller carry-over', () => {
 			'Bench:Flat',
 			'Rack height:6'
 		]);
+	});
+
+	it('allows multiple active exercises to stay expanded', () => {
+		const controller = createTodayController();
+
+		controller.toggleExercise(10);
+		controller.toggleExercise(20);
+
+		expect(get(controller.openExerciseIds)).toEqual([10, 20]);
+
+		controller.toggleExercise(10);
+
+		expect(get(controller.openExerciseIds)).toEqual([20]);
 	});
 
 	it('starts a planned template exercise and removes it from the plan', async () => {

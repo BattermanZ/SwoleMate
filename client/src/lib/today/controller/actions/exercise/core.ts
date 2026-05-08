@@ -30,7 +30,11 @@ export function createExerciseCoreActions(args: {
 	const { state, addSet, refreshFromBackend } = args;
 
 	function toggleExercise(exerciseId: number) {
-		state.openExerciseId.update((current) => (current === exerciseId ? null : exerciseId));
+		state.openExerciseIds.update((current) =>
+			current.includes(exerciseId)
+				? current.filter((id) => id !== exerciseId)
+				: [...current, exerciseId]
+		);
 	}
 
 	function getLastTimeForExercise(name: string): LastTime | undefined {
@@ -102,7 +106,7 @@ export function createExerciseCoreActions(args: {
 					...session,
 					exercises: [...session.exercises, newExercise]
 				});
-				state.openExerciseId.set(newExercise.id);
+				state.openExerciseIds.update((current) => [...current, newExercise.id]);
 				state.exerciseQuery.set('');
 				await persistInProgressSession(state);
 
@@ -158,7 +162,7 @@ export function createExerciseCoreActions(args: {
 				exercises: [...session.exercises, newExercise]
 			});
 
-			state.openExerciseId.set(newExercise.id);
+			state.openExerciseIds.update((current) => [...current, newExercise.id]);
 			state.exerciseQuery.set('');
 
 			if (seedSets?.length) {
@@ -197,7 +201,7 @@ export function createExerciseCoreActions(args: {
 					...session,
 					exercises: session.exercises.filter((e) => e.id !== exerciseId)
 				});
-				state.openExerciseId.update((current) => (current === exerciseId ? null : current));
+				state.openExerciseIds.update((current) => current.filter((id) => id !== exerciseId));
 				if (exerciseId > 0) {
 					const key = sessionKeyForId(session.id);
 					const existing = await loadOfflineSession(key).catch(() => null);
@@ -217,7 +221,7 @@ export function createExerciseCoreActions(args: {
 				...session,
 				exercises: session.exercises.filter((e) => e.id !== exerciseId)
 			});
-			state.openExerciseId.update((current) => (current === exerciseId ? null : current));
+			state.openExerciseIds.update((current) => current.filter((id) => id !== exerciseId));
 		} catch (e) {
 			if (isNetworkFailure(e)) {
 				setOffline(state);

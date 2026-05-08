@@ -37,7 +37,7 @@ export function createExerciseSetActions(args: { state: TodayState }) {
 						e.id === exerciseId ? { ...e, status: 'done' as const, endedAt } : e
 					)
 				});
-				state.openExerciseId.update((current) => (current === exerciseId ? null : current));
+				state.openExerciseIds.update((current) => current.filter((id) => id !== exerciseId));
 				await persistInProgressSession(state);
 				return;
 			}
@@ -64,7 +64,7 @@ export function createExerciseSetActions(args: { state: TodayState }) {
 					e.id === exerciseId ? { ...e, status: 'done' as const, endedAt } : e
 				)
 			});
-			state.openExerciseId.update((current) => (current === exerciseId ? null : current));
+			state.openExerciseIds.update((current) => current.filter((id) => id !== exerciseId));
 		} catch (e) {
 			if (isNetworkFailure(e)) {
 				setOffline(state);

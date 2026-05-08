@@ -3,6 +3,7 @@ import { tick } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
 import ExerciseComposer from '$lib/components/today/ExerciseComposer.svelte';
 import EndSessionModal from '$lib/components/today/EndSessionModal.svelte';
+import RecentSessions from '$lib/components/today/RecentSessions.svelte';
 import SessionExercise from '$lib/components/today/SessionExercise.svelte';
 
 describe('today components', () => {
@@ -55,6 +56,48 @@ describe('today components', () => {
 
 		expect(onAddTemplateExercise).toHaveBeenCalledWith(
 			expect.objectContaining({ detail: { id: 42 } })
+		);
+	});
+
+	it('adds recent exercises without copying old exercise notes', async () => {
+		const onAddExercise = vi.fn();
+		const { getByRole, getByText } = render(RecentSessions, {
+			props: {
+				canAdd: true,
+				disabled: false,
+				sessions: [
+					{
+						id: 1,
+						startedAt: '2026-01-01T10:00:00.000Z',
+						endedAt: '2026-01-01T11:00:00.000Z',
+						notes: '',
+						exercises: [
+							{
+								id: 2,
+								name: 'Bench Press',
+								notes: 'pause reps',
+								startedAt: '2026-01-01T10:00:00.000Z',
+								endedAt: '2026-01-01T10:10:00.000Z',
+								sets: [],
+								settings: [],
+								perSideWeight: false,
+								splitWeight: false,
+								status: 'done'
+							}
+						]
+					}
+				]
+			},
+			events: { addExercise: onAddExercise }
+		});
+
+		expect(getByText('Notes: pause reps')).toBeInTheDocument();
+		await fireEvent.click(getByRole('button', { name: 'Add →' }));
+
+		expect(onAddExercise).toHaveBeenCalledWith(
+			expect.objectContaining({
+				detail: expect.not.objectContaining({ notes: expect.any(String) })
+			})
 		);
 	});
 

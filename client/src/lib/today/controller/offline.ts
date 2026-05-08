@@ -27,7 +27,7 @@ export type OfflineStoreAccess = {
 	currentSession: Writable<UiSession | null>;
 	recentSessions: Writable<UiSession[]>;
 	sessionNotes: Writable<string>;
-	openExerciseId: Writable<number | null>;
+	openExerciseIds: Writable<number[]>;
 	notice: Writable<string | null>;
 	offlineMode: Writable<boolean>;
 	pendingSyncCount: Writable<number>;
@@ -72,7 +72,11 @@ export async function hydrateOfflineState(access: OfflineStoreAccess) {
 	if (!get(access.currentSession) && inProgress?.session) {
 		access.currentSession.set(inProgress.session);
 		access.sessionNotes.set(inProgress.session.notes);
-		access.openExerciseId.set(inProgress.session.exercises[0]?.id ?? null);
+		access.openExerciseIds.set(
+			inProgress.session.exercises
+				.filter((exercise) => exercise.status !== 'done')
+				.map((exercise) => exercise.id)
+		);
 	}
 }
 

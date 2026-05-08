@@ -147,10 +147,10 @@ describe('today controller set actions', () => {
 		expect(added).toMatchObject({ reps: 5, weight: 140 });
 	});
 
-	it('marks exercise done offline and collapses open card', async () => {
+	it('marks exercise done offline and collapses only that card', async () => {
 		const state = createTodayState();
 		state.offlineMode.set(true);
-		state.openExerciseId.set(-3);
+		state.openExerciseIds.set([-3, -4]);
 		state.currentSession.set({
 			id: -1,
 			startedAt: '2026-01-01T10:00:00.000Z',
@@ -177,7 +177,7 @@ describe('today controller set actions', () => {
 		expect(apiMocks.endExercise).not.toHaveBeenCalled();
 		expect(offlineMocks.persistInProgressSession).toHaveBeenCalledTimes(1);
 		expect(get(state.currentSession)!.exercises[0]!.status).toBe('done');
-		expect(get(state.openExerciseId)).toBeNull();
+		expect(get(state.openExerciseIds)).toEqual([-4]);
 	});
 
 	it('sets error on non-network addSet failures', async () => {
