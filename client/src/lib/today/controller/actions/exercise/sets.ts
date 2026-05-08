@@ -4,7 +4,6 @@ import { get } from 'svelte/store';
 import { hydrateOfflineState, persistInProgressSession, setOffline } from '../../offline';
 import { getErrorMessage, isNetworkFailure, makeLocalNumericId } from '../../utils';
 import { trackingFieldsSetting } from '$lib/today/tracking';
-import { toUiSet } from '$lib/today/backend';
 
 export type ExerciseSetActions = {
 	markExerciseDone: (exerciseId: number) => Promise<void>;
@@ -137,7 +136,12 @@ export function createExerciseSetActions(args: { state: TodayState }) {
 						sets: [
 							...e.sets,
 							{
-								...toUiSet(created)
+								id: created.id ?? 0,
+								reps,
+								weight,
+								weightLeft,
+								weightRight,
+								durationSeconds
 							}
 						]
 					};

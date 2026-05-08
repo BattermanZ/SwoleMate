@@ -32,7 +32,7 @@ describe('today controller set actions', () => {
 		vi.clearAllMocks();
 	});
 
-	it('adds set online with server id', async () => {
+	it('adds set online with server id while preserving the submitted live values', async () => {
 		apiMocks.createSet.mockResolvedValueOnce({
 			id: 88,
 			exercise_id: 9,
@@ -72,7 +72,48 @@ describe('today controller set actions', () => {
 		expect(get(state.currentSession)!.exercises[0]!.sets[0]).toMatchObject({
 			id: 88,
 			reps: 8,
-			weight: 125
+			weight: 100
+		});
+	});
+
+	it('keeps live set volume when marking an online exercise done', async () => {
+		apiMocks.createSet.mockResolvedValueOnce({
+			id: 90,
+			exercise_id: 9,
+			reps: 8,
+			weight: 0,
+			notes: null
+		});
+		apiMocks.endExercise.mockResolvedValueOnce({ message: 'Exercise ended successfully' });
+
+		const state = createTodayState();
+		state.currentSession.set({
+			id: 5,
+			startedAt: '2026-01-01T10:00:00.000Z',
+			notes: '',
+			exercises: [
+				{
+					id: 9,
+					name: 'Shoulder press',
+					notes: '',
+					startedAt: '2026-01-01T10:00:00.000Z',
+					endedAt: '2026-01-01T10:05:00.000Z',
+					status: 'active',
+					perSideWeight: false,
+					splitWeight: false,
+					settings: [],
+					sets: []
+				}
+			]
+		});
+
+		const actions = createExerciseSetActions({ state });
+		await actions.addSet(9, 8, 100);
+		await actions.markExerciseDone(9);
+
+		expect(get(state.currentSession)!.exercises[0]).toMatchObject({
+			status: 'done',
+			sets: [{ id: 90, reps: 8, weight: 100 }]
 		});
 	});
 
