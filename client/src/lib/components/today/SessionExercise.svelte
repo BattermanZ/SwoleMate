@@ -83,6 +83,7 @@
 	$: timerProgressPct = `${Math.round(timerProgress * 100)}%`;
 	$: timerTone =
 		timerComplete || timerProgress <= 0.15 ? 'steady' : timerProgress <= 0.4 ? 'warning' : 'danger';
+	$: summaryLabel = setSummaryLabel(exercise);
 
 	$: if (
 		isOpen &&
@@ -120,10 +121,10 @@
 		return sets.reduce((total, s) => total + (s.durationSeconds ?? 0), 0);
 	}
 
-	function setSummaryLabel() {
-		const totalVolume = Math.round(calculateExerciseVolumeKg(exercise));
+	function setSummaryLabel(currentExercise: UiExercise) {
+		const totalVolume = Math.round(calculateExerciseVolumeKg(currentExercise));
 		if (totalVolume > 0) return `${totalVolume} kg`;
-		const totalDuration = durationForSets(exercise.sets);
+		const totalDuration = durationForSets(currentExercise.sets);
 		if (totalDuration > 0) return formatDuration(totalDuration);
 		return '0 kg';
 	}
@@ -340,7 +341,7 @@
 			<div class="mt-1 flex flex-wrap gap-2 text-sm opacity-80">
 				<span>{exercise.sets.length} set{exercise.sets.length === 1 ? '' : 's'}</span>
 				<span class="opacity-50">•</span>
-				<span>{setSummaryLabel()}</span>
+				<span>{summaryLabel}</span>
 			</div>
 		</button>
 

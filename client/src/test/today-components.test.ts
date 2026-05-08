@@ -278,4 +278,83 @@ describe('today components', () => {
 			vi.useRealTimers();
 		}
 	});
+
+	it('dispatches the entered reps and weight when adding a weighted set', async () => {
+		const onAddSet = vi.fn();
+		const { getByLabelText, getByRole } = render(SessionExercise, {
+			props: {
+				exercise: {
+					id: 1,
+					name: 'Shoulder press',
+					notes: '',
+					startedAt: '2026-01-01T10:00:00.000Z',
+					endedAt: '2026-01-01T10:00:00.000Z',
+					sets: [],
+					settings: [],
+					tracksReps: true,
+					tracksTime: false,
+					tracksWeight: true,
+					perSideWeight: false,
+					splitWeight: false,
+					status: 'active'
+				},
+				isOpen: true,
+				disabled: false,
+				lastTime: undefined
+			},
+			events: { addSet: onAddSet }
+		});
+
+		await fireEvent.input(getByLabelText('Reps'), { target: { value: '8' } });
+		await fireEvent.input(getByLabelText('Weight (kg)'), { target: { value: '100' } });
+		await fireEvent.click(getByRole('button', { name: 'Add set' }));
+
+		expect(onAddSet).toHaveBeenCalledWith(
+			expect.objectContaining({
+				detail: expect.objectContaining({ reps: 8, weight: 100 })
+			})
+		);
+	});
+
+	it('updates the collapsed summary when a weighted set is added to the exercise prop', async () => {
+		const exercise = {
+			id: 1,
+			name: 'Shoulder press',
+			notes: '',
+			startedAt: '2026-01-01T10:00:00.000Z',
+			endedAt: '2026-01-01T10:00:00.000Z',
+			sets: [],
+			settings: [],
+			tracksReps: true,
+			tracksTime: false,
+			tracksWeight: true,
+			perSideWeight: false,
+			splitWeight: false,
+			status: 'active' as const
+		};
+		const view = render(SessionExercise, {
+			props: {
+				exercise,
+				isOpen: false,
+				disabled: false,
+				lastTime: undefined
+			}
+		});
+
+		expect(view.getByText('0 sets')).toBeInTheDocument();
+		expect(view.getByText('0 kg')).toBeInTheDocument();
+
+		await view.rerender({
+			exercise: {
+				...exercise,
+				sets: [{ id: 10, reps: 8, weight: 100 }]
+			},
+			isOpen: false,
+			disabled: false,
+			lastTime: undefined
+		});
+
+		expect(view.getByText('1 set')).toBeInTheDocument();
+		expect(view.getByText('800 kg')).toBeInTheDocument();
+	});
 });
