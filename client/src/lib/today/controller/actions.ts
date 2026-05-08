@@ -17,7 +17,7 @@ export function createTodayActions(state: TodayState) {
 	const refresh = () => refreshFromBackend(state);
 	const hydrateLibrary = () => hydrateExerciseLibrary(state);
 
-	const setActions = createExerciseSetActions({ state });
+	const setActions = createExerciseSetActions({ state, refreshFromBackend: refresh });
 	const coreActions = createExerciseCoreActions({
 		state,
 		addSet: setActions.addSet,

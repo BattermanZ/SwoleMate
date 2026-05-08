@@ -35,7 +35,6 @@
 		pendingSyncCount,
 		quickPicks,
 		recentSessions,
-		refreshFromBackend,
 		removeExercise,
 		removeExerciseSetting,
 		sessionNotes,
@@ -101,8 +100,6 @@
 	async function handleMarkExerciseDone(exerciseId: number) {
 		await markExerciseDone(exerciseId);
 		if ($error || typeof window === 'undefined') return;
-		if (!$offlineMode) await refreshFromBackend();
-		if ($error) return;
 
 		window.requestAnimationFrame(() => {
 			exerciseComposerTarget?.scrollIntoView?.({

@@ -17,8 +17,11 @@ export type ExerciseSetActions = {
 	) => Promise<void>;
 };
 
-export function createExerciseSetActions(args: { state: TodayState }) {
-	const { state } = args;
+export function createExerciseSetActions(args: {
+	state: TodayState;
+	refreshFromBackend?: () => Promise<void>;
+}) {
+	const { state, refreshFromBackend } = args;
 
 	async function markExerciseDone(exerciseId: number) {
 		const session = get(state.currentSession);
@@ -147,6 +150,7 @@ export function createExerciseSetActions(args: { state: TodayState }) {
 					};
 				})
 			});
+			await refreshFromBackend?.();
 		} catch (e) {
 			if (isNetworkFailure(e)) {
 				setOffline(state);

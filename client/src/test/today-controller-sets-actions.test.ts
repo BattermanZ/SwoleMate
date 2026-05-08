@@ -56,7 +56,8 @@ describe('today controller set actions', () => {
 			]
 		});
 
-		const actions = createExerciseSetActions({ state });
+		const refreshFromBackend = vi.fn(async () => undefined);
+		const actions = createExerciseSetActions({ state, refreshFromBackend });
 		await actions.addSet(9, 8, 100);
 
 		expect(apiMocks.createSet).toHaveBeenCalledWith(
@@ -68,6 +69,7 @@ describe('today controller set actions', () => {
 			reps: 8,
 			weight: 100
 		});
+		expect(refreshFromBackend).toHaveBeenCalledTimes(1);
 	});
 
 	it('adds timed set online with duration seconds', async () => {

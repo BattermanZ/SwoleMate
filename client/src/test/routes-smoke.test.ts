@@ -21,7 +21,6 @@ const authStateStore = writable({
 
 const todayControllerMocks = vi.hoisted(() => ({
 	markExerciseDone: vi.fn(async () => undefined),
-	refreshFromBackend: vi.fn(async () => undefined),
 	startSession: vi.fn(async () => undefined),
 	startSessionFromTemplate: vi.fn(async () => undefined)
 }));
@@ -165,7 +164,6 @@ vi.mock('$lib/today/controller', () => {
 			pendingSyncCount: writable(0),
 			quickPicks: writable<string[]>([]),
 			recentSessions: writable([]),
-			refreshFromBackend: todayControllerMocks.refreshFromBackend,
 			removeExercise: vi.fn(async () => undefined),
 			removeExerciseSetting: vi.fn(),
 			sessionNotes: writable(''),
@@ -272,37 +270,6 @@ describe('route smoke', () => {
 		expect(queryAllByText('Add your first set for this exercise.')).toHaveLength(2);
 		expect(queryAllByText('Mark done')).toHaveLength(2);
 		expect(queryAllByText('Collapse')).toHaveLength(2);
-	});
-
-	it('refreshes today data after marking an exercise done', async () => {
-		todayOpenExerciseIdsStore.set([101]);
-		todayCurrentSessionStore.set({
-			id: 12,
-			startedAt: '2026-01-01T10:00:00.000Z',
-			notes: '',
-			exercises: [
-				{
-					id: 101,
-					name: 'Bench Press',
-					notes: '',
-					startedAt: '2026-01-01T10:00:00.000Z',
-					endedAt: '2026-01-01T10:05:00.000Z',
-					sets: [{ id: 1, reps: 12, weight: 0 }],
-					settings: [],
-					perSideWeight: false,
-					splitWeight: false,
-					status: 'active' as const
-				}
-			]
-		});
-
-		const TodayPage = await importComponent('../routes/+page.svelte');
-		const { getByRole } = render(TodayPage as never);
-
-		await fireEvent.click(getByRole('button', { name: 'Mark done' }));
-
-		expect(todayControllerMocks.markExerciseDone).toHaveBeenCalledWith(101);
-		expect(todayControllerMocks.refreshFromBackend).toHaveBeenCalledTimes(1);
 	});
 
 	it('points empty template sessions to the template plan', async () => {
