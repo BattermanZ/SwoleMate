@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0a0a0a" />
+<title>SwoleMate · Industrial Chronograph</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #0a0b0c;
+    --panel: #111315;
+    --panel-2: #16181b;
+    --line: #1f2226;
+    --line-2: #2a2e34;
+    --ink: #e6e7e9;
+    --ink-mid: #9aa0a6;
+    --ink-dim: #5a6068;
+    --lume: #ffb347;
+    --lume-hot: #ff7a1a;
+    --pr: #d8ff3a;
+    --warn: #ff4a3d;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #050505; color: var(--ink); font-family: 'Archivo', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  body { min-height: 100dvh; display: grid; place-items: center; padding: 24px; background:
+    radial-gradient(1200px 600px at 20% -10%, #1a1410 0%, transparent 60%),
+    radial-gradient(900px 600px at 110% 110%, #0d1620 0%, transparent 55%),
+    #050505;
+  }
+  .device {
+    width: 100%; max-width: 420px; aspect-ratio: 390/844;
+    background: var(--bg);
+    border-radius: 44px; padding: 14px;
+    box-shadow:
+      0 0 0 1.5px #2a2a2a,
+      0 0 0 14px #0c0c0c,
+      0 40px 80px rgba(0,0,0,0.6),
+      inset 0 0 0 1px #1a1a1a;
+    position: relative; overflow: hidden;
+  }
+  .screen {
+    height: 100%; width: 100%; border-radius: 32px;
+    background: var(--bg); overflow: hidden;
+    display: flex; flex-direction: column;
+    position: relative;
+  }
+  .screen::before {
+    content: ""; position: absolute; inset: 0;
+    background:
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.012) 0 1px, transparent 1px 3px),
+      radial-gradient(600px 300px at 80% 0%, rgba(255,179,71,0.06), transparent 70%);
+    pointer-events: none; z-index: 1;
+  }
+  .notch { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); width: 120px; height: 28px; background: #000; border-radius: 14px; z-index: 3; }
+  .statusbar { padding: 14px 22px 8px; display: flex; justify-content: space-between; font: 600 12px/1 'JetBrains Mono'; color: var(--ink-mid); letter-spacing: 0.05em; position: relative; z-index: 2; }
+  main { flex: 1; padding: 8px 18px 96px; overflow-y: auto; position: relative; z-index: 2; }
+
+  /* Page header */
+  .meta { display: flex; align-items: baseline; justify-content: space-between; padding: 8px 0 10px; border-bottom: 1px solid var(--line); }
+  .meta .tag { font: 700 10px/1 'JetBrains Mono'; letter-spacing: 0.18em; color: var(--lume); text-transform: uppercase; }
+  .meta .id { font: 500 10px/1 'JetBrains Mono'; letter-spacing: 0.12em; color: var(--ink-dim); }
+
+  .hero { padding: 22px 0 18px; border-bottom: 1px solid var(--line); }
+  .hero .label { font: 700 10px/1 'JetBrains Mono'; letter-spacing: 0.24em; color: var(--ink-dim); text-transform: uppercase; }
+  .timer {
+    font: 800 64px/1 'JetBrains Mono'; letter-spacing: -0.04em; margin-top: 10px; color: var(--ink);
+    display: flex; align-items: baseline; gap: 6px;
+  }
+  .timer .sec { font-size: 36px; color: var(--lume); }
+  .timer .sec::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--lume); margin-right: 8px; transform: translateY(-8px); animation: blink 1s steps(2, end) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .hero-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1px; margin-top: 18px; background: var(--line); border: 1px solid var(--line); }
+  .stat { background: var(--panel); padding: 10px 12px; }
+  .stat .k { font: 700 9px/1 'JetBrains Mono'; letter-spacing: 0.2em; color: var(--ink-dim); text-transform: uppercase; }
+  .stat .v { font: 700 22px/1.1 'JetBrains Mono'; margin-top: 6px; letter-spacing: -0.03em; }
+  .stat .v.lume { color: var(--lume); }
+
+  /* Exercise card */
+  section.ex { margin-top: 22px; }
+  .ex-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 0 10px; }
+  .ex-name { font: 800 18px/1 'Archivo'; letter-spacing: -0.01em; text-transform: uppercase; }
+  .ex-count { font: 700 11px/1 'JetBrains Mono'; color: var(--ink-mid); letter-spacing: 0.1em; }
+
+  .setrow { display: grid; grid-template-columns: 22px 64px 64px 1fr 16px; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px dashed var(--line); font-family: 'JetBrains Mono'; }
+  .setrow .n { color: var(--ink-dim); font-weight: 700; font-size: 11px; }
+  .setrow .w { font-weight: 700; font-size: 14px; }
+  .setrow .r { font-weight: 500; font-size: 13px; color: var(--ink-mid); }
+  .setrow .bar { height: 6px; background: var(--line); position: relative; overflow: hidden; }
+  .setrow .bar::after { content: ""; position: absolute; inset: 0 auto 0 0; background: var(--lume); width: var(--w, 0%); }
+  .setrow.pr .w { color: var(--pr); }
+  .setrow.pr .pr { color: var(--pr); font-size: 12px; }
+  .setrow.live { background: linear-gradient(90deg, rgba(255,179,71,0.06), transparent 70%); }
+
+  /* Composer */
+  .composer { margin-top: 18px; border: 1px solid var(--line-2); background: var(--panel-2); padding: 14px; }
+  .composer .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font: 700 9px/1 'JetBrains Mono'; letter-spacing: 0.2em; color: var(--ink-dim); text-transform: uppercase; }
+  .field .control { display: flex; align-items: center; background: #0a0c0e; border: 1px solid var(--line-2); }
+  .field button.step { width: 36px; height: 44px; background: transparent; border: 0; color: var(--ink-mid); font: 700 18px/1 'JetBrains Mono'; }
+  .field button.step:active { color: var(--lume); }
+  .field input { flex: 1; background: transparent; border: 0; color: var(--ink); font: 700 22px/1 'JetBrains Mono'; text-align: center; padding: 10px 0; width: 100%; outline: none; }
+
+  .log-btn {
+    margin-top: 12px; width: 100%; height: 56px; background: var(--lume); color: #0a0a0a; border: 0;
+    font: 800 13px/1 'Archivo'; letter-spacing: 0.28em; text-transform: uppercase;
+    box-shadow: inset 0 -3px 0 var(--lume-hot); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+  }
+  .log-btn .glyph { font: 800 12px/1 'JetBrains Mono'; }
+
+  /* Rest timer */
+  .rest { margin-top: 22px; border: 1px solid var(--line); padding: 16px; display: grid; grid-template-columns: 96px 1fr; gap: 16px; align-items: center; }
+  .ring { position: relative; width: 96px; height: 96px; }
+  .ring svg { transform: rotate(-90deg); }
+  .ring .num { position: absolute; inset: 0; display: grid; place-items: center; font: 800 26px/1 'JetBrains Mono'; color: var(--lume); }
+  .ring .num .u { font-size: 10px; color: var(--ink-dim); display: block; text-align: center; margin-top: 2px; letter-spacing: 0.2em; }
+  .rest .meta-l { font: 700 9px/1 'JetBrains Mono'; letter-spacing: 0.2em; color: var(--ink-dim); text-transform: uppercase; }
+  .rest .title { font: 800 18px/1 'Archivo'; margin-top: 6px; text-transform: uppercase; }
+  .rest .ctrls { display: flex; gap: 8px; margin-top: 12px; }
+  .rest button { background: transparent; color: var(--ink); border: 1px solid var(--line-2); padding: 8px 10px; font: 700 10px/1 'JetBrains Mono'; letter-spacing: 0.16em; text-transform: uppercase; }
+  .rest button.primary { background: var(--ink); color: #0a0a0a; border-color: var(--ink); }
+
+  /* Bottom tab bar */
+  nav.tabs {
+    position: absolute; left: 14px; right: 14px; bottom: 14px; height: 72px;
+    background: rgba(10,11,12,0.85); backdrop-filter: blur(14px);
+    border: 1px solid var(--line-2);
+    display: grid; grid-template-columns: repeat(5, 1fr); align-items: center;
+    z-index: 4;
+  }
+  nav.tabs a { display: grid; place-items: center; gap: 4px; color: var(--ink-dim); text-decoration: none; font: 700 9px/1 'JetBrains Mono'; letter-spacing: 0.18em; text-transform: uppercase; padding: 8px 0; }
+  nav.tabs a .glyph { width: 22px; height: 22px; display: grid; place-items: center; color: var(--ink-mid); }
+  nav.tabs a.active { color: var(--lume); }
+  nav.tabs a.active .glyph { color: var(--lume); }
+
+  /* Back link */
+  .home {
+    position: fixed; top: 20px; left: 20px;
+    color: var(--ink-mid); font: 700 11px/1 'JetBrains Mono'; letter-spacing: 0.15em; text-decoration: none; text-transform: uppercase;
+    border: 1px solid var(--line-2); padding: 8px 10px; background: rgba(0,0,0,0.5); backdrop-filter: blur(8px);
+  }
+  .home:hover { color: var(--lume); border-color: var(--lume); }
+
+  @media (max-width: 480px) {
+    body { padding: 0; background: var(--bg); }
+    .device { max-width: 100%; aspect-ratio: auto; min-height: 100dvh; border-radius: 0; padding: 0; box-shadow: none; }
+    .screen { border-radius: 0; }
+    .notch { display: none; }
+    .home { top: 12px; left: 12px; }
+  }
+</style>
+</head>
+<body>
+  <a class="home" href="index.html">← gallery</a>
+  <div class="device">
+    <div class="notch"></div>
+    <div class="screen">
+      <div class="statusbar">
+        <span>19:42</span>
+        <span>● REC · 5G · 92%</span>
+      </div>
+      <main>
+        <div class="meta">
+          <span class="tag">▸ Session in progress</span>
+          <span class="id">SES-00428 / 14 MAY</span>
+        </div>
+
+        <section class="hero">
+          <div class="label">Elapsed</div>
+          <div class="timer">
+            <span>00:42</span><span class="sec">18</span>
+          </div>
+          <div class="hero-grid">
+            <div class="stat"><div class="k">Volume</div><div class="v">4,820<span style="font-size:12px;color:var(--ink-dim);"> KG</span></div></div>
+            <div class="stat"><div class="k">Sets</div><div class="v">18</div></div>
+            <div class="stat"><div class="k">Exercises</div><div class="v lume">04</div></div>
+          </div>
+        </section>
+
+        <section class="ex">
+          <div class="ex-head">
+            <div class="ex-name">Bench Press</div>
+            <div class="ex-count">04 / 05</div>
+          </div>
+          <div class="setrow"><span class="n">01</span><span class="w">100.0</span><span class="r">× 10</span><span class="bar" style="--w:80%"></span><span></span></div>
+          <div class="setrow"><span class="n">02</span><span class="w">102.5</span><span class="r">× 9</span><span class="bar" style="--w:86%"></span><span></span></div>
+          <div class="setrow pr"><span class="n">03</span><span class="w">105.0</span><span class="r">× 8</span><span class="bar" style="--w:92%"></span><span class="pr">▲</span></div>
+          <div class="setrow live"><span class="n">04</span><span class="w" style="color:var(--lume)">—</span><span class="r">logging</span><span class="bar"></span><span></span></div>
+        </section>
+
+        <section class="composer">
+          <div class="row">
+            <div class="field">
+              <label>Weight · kg</label>
+              <div class="control">
+                <button class="step" type="button">−</button>
+                <input value="105.0" inputmode="decimal" />
+                <button class="step" type="button">+</button>
+              </div>
+            </div>
+            <div class="field">
+              <label>Reps</label>
+              <div class="control">
+                <button class="step" type="button">−</button>
+                <input value="8" inputmode="numeric" />
+                <button class="step" type="button">+</button>
+              </div>
+            </div>
+          </div>
+          <button class="log-btn"><span class="glyph">▸</span> Log set 04</button>
+        </section>
+
+        <section class="rest">
+          <div class="ring">
+            <svg width="96" height="96" viewBox="0 0 96 96">
+              <circle cx="48" cy="48" r="42" stroke="#1f2226" stroke-width="6" fill="none" />
+              <circle cx="48" cy="48" r="42" stroke="url(#g)" stroke-width="6" fill="none"
+                stroke-dasharray="264" stroke-dashoffset="80" stroke-linecap="butt" />
+              <defs>
+                <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stop-color="#ffb347"/>
+                  <stop offset="100%" stop-color="#ff7a1a"/>
+                </linearGradient>
+              </defs>
+            </svg>
+            <div class="num">63<span class="u">SEC</span></div>
+          </div>
+          <div>
+            <div class="meta-l">Rest interval</div>
+            <div class="title">Recovery 90″</div>
+            <div class="ctrls">
+              <button>+15</button>
+              <button>Skip</button>
+              <button class="primary">▮▮ Pause</button>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <nav class="tabs">
+        <a class="active" href="#"><span class="glyph">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h3l2-6 4 12 2-6h3"/></svg>
+        </span>Today</a>
+        <a href="#"><span class="glyph">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="4" y="5" width="16" height="14" rx="1"/><path d="M4 9h16M9 5v14"/></svg>
+        </span>Tmpl</a>
+        <a href="#"><span class="glyph">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="5" width="18" height="16" rx="1"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>
+        </span>Hist</a>
+        <a href="#"><span class="glyph">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 19h16M6 16l4-6 4 4 6-9"/></svg>
+        </span>Prog</a>
+        <a href="#"><span class="glyph">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        </span>Set</a>
+      </nav>
+    </div>
+  </div>
+</body>
+</html>

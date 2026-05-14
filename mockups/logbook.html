@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#f4ede0" />
+<title>SwoleMate · Editorial Logbook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,800;1,9..144,400;1,9..144,500&family=Inter+Tight:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --paper: #f4ede0;
+    --paper-2: #ede4d2;
+    --rule: #d9ccae;
+    --ink: #1a1614;
+    --ink-2: #4b4239;
+    --ink-soft: #7c6f5e;
+    --accent: #8a3a1b;     /* burnt sienna */
+    --accent-2: #2f4a2d;   /* moss */
+    --margin: 24px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    min-height: 100dvh; background:
+      radial-gradient(1200px 700px at -10% 0%, #ece2cc 0%, transparent 50%),
+      radial-gradient(900px 600px at 110% 100%, #efe3c8 0%, transparent 55%),
+      #e6dcc4;
+    display: grid; place-items: center; padding: 24px;
+    font-family: 'Inter Tight', system-ui, sans-serif; color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  .device {
+    width: 100%; max-width: 420px; aspect-ratio: 390/844;
+    background: var(--paper);
+    border-radius: 44px; padding: 14px;
+    box-shadow:
+      0 0 0 1.5px #c9b993,
+      0 0 0 12px #2a221a,
+      0 40px 80px rgba(0,0,0,0.4);
+    position: relative; overflow: hidden;
+  }
+  .screen {
+    height: 100%; width: 100%; border-radius: 32px;
+    background:
+      repeating-linear-gradient(transparent 0 27px, rgba(202,178,131,0.18) 27px 28px),
+      linear-gradient(180deg, var(--paper), var(--paper-2));
+    overflow: hidden; display: flex; flex-direction: column; position: relative;
+  }
+  .screen::before {
+    content: ""; position: absolute; inset: 0;
+    background:
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.4 0 0 0 0 0.32 0 0 0 0 0.22 0 0 0 0.15 0'/></filter><rect width='200' height='200' filter='url(%23n)' opacity='0.5'/></svg>");
+    mix-blend-mode: multiply; opacity: 0.45; pointer-events: none; z-index: 1;
+  }
+  .notch { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); width: 120px; height: 28px; background: #2a221a; border-radius: 14px; z-index: 3; }
+
+  .statusbar { padding: 14px 22px 6px; display: flex; justify-content: space-between; font: 600 12px/1 'Inter Tight'; color: var(--ink-soft); position: relative; z-index: 2; }
+
+  main { flex: 1; padding: 4px 26px 96px; overflow-y: auto; position: relative; z-index: 2; }
+
+  .masthead { padding: 10px 0 6px; border-bottom: 0.5px solid var(--rule); display: flex; justify-content: space-between; align-items: baseline; }
+  .masthead .vol { font: italic 500 11px/1 'Fraunces'; color: var(--accent); letter-spacing: 0.04em; }
+  .masthead .date { font: 500 11px/1 'Inter Tight'; color: var(--ink-soft); letter-spacing: 0.06em; text-transform: uppercase; }
+
+  .dateline { padding: 22px 0 4px; }
+  .dateline .day { font: italic 400 18px/1 'Fraunces'; color: var(--ink-2); }
+  .dateline h1 {
+    margin: 6px 0 0; font: 800 56px/0.95 'Fraunces'; letter-spacing: -0.035em; color: var(--ink);
+    font-variation-settings: "opsz" 144;
+  }
+  .dateline h1 .amp { font-style: italic; font-weight: 400; color: var(--accent); }
+
+  .lede { margin-top: 14px; font: 400 16px/1.5 'Fraunces'; color: var(--ink-2); font-variation-settings: "opsz" 24; max-width: 28ch; }
+  .lede em { color: var(--ink); font-style: italic; }
+
+  .ribbon { margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; border-top: 0.5px solid var(--rule); border-bottom: 0.5px solid var(--rule); padding: 14px 0; }
+  .ribbon .cell { text-align: left; padding-right: 8px; }
+  .ribbon .k { font: 500 9px/1 'Inter Tight'; letter-spacing: 0.18em; color: var(--ink-soft); text-transform: uppercase; }
+  .ribbon .v { margin-top: 4px; font: 600 26px/1 'Fraunces'; letter-spacing: -0.02em; color: var(--ink); font-variation-settings: "opsz" 60; }
+  .ribbon .v small { font: italic 400 12px/1 'Fraunces'; color: var(--ink-soft); margin-left: 2px; }
+
+  /* Article-style exercise */
+  .article { margin-top: 28px; }
+  .kicker { font: 500 10px/1 'Inter Tight'; letter-spacing: 0.22em; color: var(--accent); text-transform: uppercase; }
+  .article h2 { margin: 6px 0 4px; font: 600 30px/1 'Fraunces'; letter-spacing: -0.025em; font-variation-settings: "opsz" 72; }
+  .article h2 em { font-style: italic; font-weight: 400; color: var(--ink-soft); }
+
+  .entries { margin-top: 16px; }
+  .entry { display: grid; grid-template-columns: 24px 1fr auto; gap: 12px; align-items: baseline; padding: 10px 0; border-bottom: 0.5px dashed var(--rule); }
+  .entry .n { font: italic 500 14px/1 'Fraunces'; color: var(--ink-soft); }
+  .entry .body { font: 500 17px/1.4 'Fraunces'; font-variation-settings: "opsz" 24; }
+  .entry .body .w { font-weight: 700; }
+  .entry .body .x { color: var(--ink-soft); margin: 0 4px; }
+  .entry .body .note { display: block; font: italic 400 13px/1.4 'Fraunces'; color: var(--ink-soft); margin-top: 2px; }
+  .entry .right { font: 600 13px/1 'Inter Tight'; color: var(--ink-soft); letter-spacing: 0.04em; }
+  .entry.live { background: linear-gradient(90deg, rgba(138,58,27,0.05), transparent); }
+  .entry.live .body { color: var(--accent); font-style: italic; }
+  .entry.pr .right { color: var(--accent); }
+  .entry.pr::after { content: ""; }
+
+  .margin-note { float: right; width: 110px; margin: 4px -10px 8px 14px; font: 500 16px/1.2 'Caveat'; color: var(--accent); transform: rotate(-3deg); padding: 6px 8px; border-left: 2px solid var(--accent); background: transparent; }
+
+  /* Composer */
+  .compose { margin-top: 22px; padding: 16px; background: #fbf4e3; border: 0.5px solid var(--rule); border-radius: 6px; box-shadow: 0 1px 0 var(--rule), inset 0 0 0 1px rgba(255,255,255,0.4); }
+  .compose-title { font: italic 500 12px/1 'Fraunces'; color: var(--ink-soft); }
+  .compose .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 10px; }
+  .field label { font: 500 10px/1 'Inter Tight'; letter-spacing: 0.18em; color: var(--ink-soft); text-transform: uppercase; }
+  .field .v {
+    margin-top: 6px; font: 700 36px/1 'Fraunces'; letter-spacing: -0.03em;
+    border-bottom: 1.5px solid var(--ink); padding: 0 0 6px; display: flex; align-items: baseline; justify-content: space-between;
+    font-variation-settings: "opsz" 96;
+  }
+  .field .v .u { font: italic 400 13px/1 'Fraunces'; color: var(--ink-soft); }
+  .pen-btn {
+    margin-top: 16px; width: 100%; padding: 14px; background: var(--ink); color: var(--paper);
+    border: 0; border-radius: 4px; font: 600 13px/1 'Inter Tight'; letter-spacing: 0.16em; text-transform: uppercase;
+    display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer;
+  }
+  .pen-btn .arrow { font: 700 14px/1 'Fraunces'; font-style: italic; }
+
+  /* Rest */
+  .rest { margin-top: 24px; display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: end; padding: 16px 0; border-top: 0.5px solid var(--rule); }
+  .rest .label { font: italic 500 12px/1 'Fraunces'; color: var(--ink-soft); }
+  .rest .num { font: 800 56px/0.9 'Fraunces'; letter-spacing: -0.04em; color: var(--accent-2); font-variation-settings: "opsz" 144; }
+  .rest .ctrls { display: flex; gap: 8px; }
+  .rest button { background: transparent; border: 1px solid var(--rule); color: var(--ink-2); padding: 8px 12px; font: 500 11px/1 'Inter Tight'; letter-spacing: 0.12em; text-transform: uppercase; border-radius: 999px; }
+  .rest button.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+  /* Bottom nav */
+  nav.tabs {
+    position: absolute; left: 14px; right: 14px; bottom: 14px; height: 74px;
+    background: rgba(252,247,236,0.85); backdrop-filter: blur(14px);
+    border: 0.5px solid var(--rule); border-radius: 999px;
+    display: grid; grid-template-columns: repeat(5, 1fr); align-items: center;
+    z-index: 4; box-shadow: 0 10px 30px rgba(60,40,20,0.15);
+  }
+  nav.tabs a { display: grid; place-items: center; gap: 2px; color: var(--ink-soft); text-decoration: none; font: italic 500 11px/1 'Fraunces'; padding: 8px 0; }
+  nav.tabs a .glyph { color: var(--ink-soft); }
+  nav.tabs a.active { color: var(--accent); }
+  nav.tabs a.active .glyph { color: var(--accent); }
+
+  .home {
+    position: fixed; top: 20px; left: 20px;
+    color: var(--ink-2); font: italic 500 12px/1 'Fraunces'; text-decoration: underline; text-underline-offset: 4px;
+  }
+
+  @media (max-width: 480px) {
+    body { padding: 0; background: var(--paper); }
+    .device { max-width: 100%; aspect-ratio: auto; min-height: 100dvh; border-radius: 0; padding: 0; box-shadow: none; }
+    .screen { border-radius: 0; }
+    .notch { display: none; }
+    .home { top: 12px; left: 12px; }
+  }
+</style>
+</head>
+<body>
+  <a class="home" href="index.html">← back to gallery</a>
+  <div class="device">
+    <div class="notch"></div>
+    <div class="screen">
+      <div class="statusbar">
+        <span>7:42 pm</span>
+        <span>Vol. IV · No. 428</span>
+      </div>
+      <main>
+        <div class="masthead">
+          <span class="vol">The Training Journal</span>
+          <span class="date">Tue · 14 May</span>
+        </div>
+
+        <div class="dateline">
+          <div class="day">The forty-second minute,</div>
+          <h1>Push&nbsp;<span class="amp">day</span></h1>
+        </div>
+
+        <p class="lede">
+          <em>Solid through bench.</em> Felt the pin on set three — backed off the volume,
+          stayed clean. Two exercises remain.
+        </p>
+
+        <div class="ribbon">
+          <div class="cell"><div class="k">Elapsed</div><div class="v">42<small>min</small></div></div>
+          <div class="cell"><div class="k">Volume</div><div class="v">4,820<small>kg</small></div></div>
+          <div class="cell"><div class="k">Sets</div><div class="v">18</div></div>
+        </div>
+
+        <section class="article">
+          <div class="kicker">Exercise iii · of v</div>
+          <h2>Bench Press <em>— heavy</em></h2>
+
+          <div class="margin-note">strongest set in months ✦</div>
+
+          <div class="entries">
+            <div class="entry">
+              <span class="n">i.</span>
+              <span class="body">
+                <span class="w">100</span><span class="x">kg</span> × 10 reps
+                <span class="note">warm-up double, easy</span>
+              </span>
+              <span class="right">7:18</span>
+            </div>
+            <div class="entry">
+              <span class="n">ii.</span>
+              <span class="body">
+                <span class="w">102.5</span><span class="x">kg</span> × 9 reps
+              </span>
+              <span class="right">7:26</span>
+            </div>
+            <div class="entry pr">
+              <span class="n">iii.</span>
+              <span class="body">
+                <span class="w">105.0</span><span class="x">kg</span> × 8 reps
+                <span class="note">8-rep best · paused on the last</span>
+              </span>
+              <span class="right">PR ✦</span>
+            </div>
+            <div class="entry live">
+              <span class="n">iv.</span>
+              <span class="body">— logging the next set —</span>
+              <span class="right">now</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="compose">
+          <div class="compose-title">Mark the entry</div>
+          <div class="grid">
+            <div class="field">
+              <label>Weight</label>
+              <div class="v"><span>105.0</span><span class="u">kg</span></div>
+            </div>
+            <div class="field">
+              <label>Reps</label>
+              <div class="v"><span>8</span><span class="u">×</span></div>
+            </div>
+          </div>
+          <button class="pen-btn"><span class="arrow">↳</span> Inscribe set iv</button>
+        </section>
+
+        <section class="rest">
+          <div>
+            <div class="label">Resting, gently</div>
+            <div class="num">1:03</div>
+          </div>
+          <div class="ctrls">
+            <button>+15</button>
+            <button class="primary">Pause</button>
+          </div>
+        </section>
+      </main>
+
+      <nav class="tabs">
+        <a class="active" href="#"><span class="glyph">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 7h16M4 12h10M4 17h16"/></svg>
+        </span>Today</a>
+        <a href="#"><span class="glyph">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 4h12v16H6z M6 9h12 M11 4v16"/></svg>
+        </span>Plans</a>
+        <a href="#"><span class="glyph">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="5" width="18" height="16" rx="1"/><path d="M3 10h18"/></svg>
+        </span>Past</a>
+        <a href="#"><span class="glyph">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 18c4-2 6-6 8-6s4 3 8 1"/></svg>
+        </span>Arc</a>
+        <a href="#"><span class="glyph">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9"/></svg>
+        </span>You</a>
+      </nav>
+    </div>
+  </div>
+</body>
+</html>
