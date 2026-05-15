@@ -297,16 +297,55 @@
   .last-time .head b { font-weight: 800; }
   .last-time .head .date { color: var(--ink-soft); font-style: italic; font-family: 'Instrument Serif'; font-size: 13px; }
   .last-time .pills { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px; }
+  /* Flat .pill — small chip used for settings/badges (grip: pronated, etc.) */
   .pill {
-    font: 700 11px/1 'Onest'; letter-spacing: 0.02em; font-variant-numeric: tabular-nums;
+    font: 700 11px/1 'Onest'; letter-spacing: 0.02em;
     padding: 5px 8px; border-radius: 8px; background: var(--bg-2); color: var(--ink-2);
     display: inline-flex; align-items: center; gap: 4px;
   }
   .pill.xs { font-size: 10px; padding: 4px 7px; }
-  .pill .x { color: var(--ink-soft); }
-  .pill.pr { background: rgba(213,162,58,0.22); color: var(--clay-deep); }
-  .pill.pr::after { content: "★"; color: var(--gold); }
-  .pill.times { background: rgba(255,94,31,0.12); color: var(--clay-deep); }
+
+  /* ── .spill — segmented "set pill" (mirrors real SetPillsHybrid) ───
+     Sections in order: count? · reps? · duration? · weight?
+     Weight cell shades by relative intensity within the group (--w). */
+  .spill {
+    display: inline-flex; align-items: stretch; overflow: hidden;
+    border-radius: 999px;
+    border: 1px solid rgba(24,19,13,0.08);
+    box-shadow: 0 4px 10px -4px rgba(60,40,20,0.15);
+    font: 800 12px/1 'Onest'; letter-spacing: 0;
+    font-variant-numeric: tabular-nums;
+    vertical-align: middle;
+  }
+  .spill > span {
+    padding: 7px 10px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-left: 1px solid rgba(24,19,13,0.08);
+    white-space: nowrap;
+  }
+  .spill > span:first-child { border-left: 0; }
+
+  .spill .count    { background: var(--gold); color: #fff; padding: 7px 11px; }
+  .spill .reps     { background: var(--bg-2); color: var(--ink-2); }
+  .spill .duration { background: rgba(255,122,42,0.20); color: var(--clay-deep); }
+  .spill .weight   {
+    background: color-mix(in oklab, var(--clay) var(--w, 60%), var(--bg-2));
+    color: var(--ink); font-weight: 800;
+  }
+  /* Bodyweight tag — same slot as weight but neutral */
+  .spill .weight.bw {
+    background: color-mix(in oklab, var(--ink) 14%, var(--bg-2));
+    color: var(--ink);
+  }
+
+  /* PR variant: gold border + glow + star suffix */
+  .spill.pr { border-color: var(--gold); box-shadow: 0 6px 14px -4px rgba(213,162,58,0.55); }
+  .spill.pr .weight::after { content: " ★"; color: var(--gold); margin-left: 3px; }
+
+  /* xs size used inside dense Past-2-Sessions cards */
+  .spill.xs { font-size: 10.5px; box-shadow: 0 2px 6px -2px rgba(60,40,20,0.12); }
+  .spill.xs > span { padding: 5px 8px; }
+  .spill.xs .count { padding: 5px 9px; }
   .last-time .notes { margin-top: 6px; font: italic 400 13px/1.4 'Instrument Serif'; color: var(--ink-2); }
 
   /* tracking toggles row */
@@ -736,10 +775,10 @@
             <div class="last-time">
               <div class="head"><b>4 sets</b> <span>logged</span> <span class="date">— Tuesday 7 May</span></div>
               <div class="pills">
-                <span class="pill">100<span class="x">kg</span>× 10</span>
-                <span class="pill">102.5<span class="x">kg</span>× 8</span>
-                <span class="pill">102.5<span class="x">kg</span>× 7</span>
-                <span class="pill">100<span class="x">kg</span>× 8</span>
+                <span class="spill xs"><span class="reps">10×</span><span class="weight" style="--w:38%">100kg</span></span>
+                <span class="spill xs"><span class="reps">8×</span><span class="weight" style="--w:85%">102.5kg</span></span>
+                <span class="spill xs"><span class="reps">7×</span><span class="weight" style="--w:85%">102.5kg</span></span>
+                <span class="spill xs"><span class="reps">8×</span><span class="weight" style="--w:38%">100kg</span></span>
               </div>
               <p class="notes">Notes: paused last rep felt good, push 105 next.</p>
             </div>
@@ -759,9 +798,9 @@
 
             <div class="set-pills">
               <span class="lbl">3 done</span>
-              <span class="pill">100<span class="x">kg</span>× 10</span>
-              <span class="pill">102.5<span class="x">kg</span>× 9</span>
-              <span class="pill pr">105<span class="x">kg</span>× 8</span>
+              <span class="spill"><span class="reps">10×</span><span class="weight" style="--w:38%">100kg</span></span>
+              <span class="spill"><span class="reps">9×</span><span class="weight" style="--w:62%">102.5kg</span></span>
+              <span class="spill pr"><span class="reps">8×</span><span class="weight" style="--w:85%">105kg</span></span>
             </div>
 
             <div class="add-set-form">
@@ -915,9 +954,9 @@
                 <span class="b">grip: mixed</span>
               </div>
               <div class="pills">
-                <span class="pill xs">100<span class="x">kg</span>× 5</span>
-                <span class="pill xs">120<span class="x">kg</span>× 5</span>
-                <span class="pill xs">140<span class="x">kg</span>× 3</span>
+                <span class="spill xs"><span class="reps">5×</span><span class="weight" style="--w:38%">100kg</span></span>
+                <span class="spill xs"><span class="reps">5×</span><span class="weight" style="--w:62%">120kg</span></span>
+                <span class="spill xs"><span class="reps">3×</span><span class="weight" style="--w:85%">140kg</span></span>
               </div>
               <div class="ex-notes">Notes: back tight in warm-ups, opened up by set 2.</div>
             </div>
@@ -927,9 +966,9 @@
             <div>
               <div class="name">Pull-up</div>
               <div class="pills">
-                <span class="pill xs">BW × 10</span>
-                <span class="pill xs">BW × 8</span>
-                <span class="pill xs">BW × 6</span>
+                <!-- two identical sets group as 2× 10× BW, then the back-off 8× sits separate -->
+                <span class="spill xs"><span class="count">2×</span><span class="reps">10×</span><span class="weight bw">BW</span></span>
+                <span class="spill xs"><span class="reps">8×</span><span class="weight bw">BW</span></span>
               </div>
             </div>
             <button class="add-prev">Add →</button>
@@ -946,9 +985,19 @@
             <div>
               <div class="name">Squat</div>
               <div class="pills">
-                <span class="pill xs">100<span class="x">kg</span>× 8</span>
-                <span class="pill xs">120<span class="x">kg</span>× 5</span>
-                <span class="pill xs">140<span class="x">kg</span>× 5</span>
+                <span class="spill xs"><span class="reps">8×</span><span class="weight" style="--w:38%">100kg</span></span>
+                <span class="spill xs"><span class="reps">5×</span><span class="weight" style="--w:62%">120kg</span></span>
+                <span class="spill xs"><span class="reps">5×</span><span class="weight" style="--w:85%">140kg</span></span>
+              </div>
+            </div>
+            <button class="add-prev">Add →</button>
+          </div>
+          <div class="ex-mini">
+            <div>
+              <div class="name">Plank</div>
+              <div class="pills">
+                <!-- 3 identical timed sets group as 3× 0:30 (no weight segment) -->
+                <span class="spill xs"><span class="count">3×</span><span class="duration">0:30</span></span>
               </div>
             </div>
             <button class="add-prev">Add →</button>
