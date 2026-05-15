@@ -1,334 +1,319 @@
 <script lang="ts">
-	import {
-		Btn,
-		Card,
-		Chip,
-		Badge,
-		Chk,
-		Spill,
-		SetPillList,
-		StepperPill,
-		PageHero,
-		SegmentedTabs,
-		BottomNav,
-		type NavItem
-	} from '$lib/components/ui';
+	import { onMount } from 'svelte';
+	import { getWorkoutTemplates } from '$lib/api';
+	import { readDemoModePreference } from '$lib/preferences/demoMode';
+	import { createTodayController } from '$lib/today/controller';
+	import type { WorkoutTemplate } from '$lib/types';
+	import { formatTime, formatDateRelative } from '$lib/utils/date';
+	import { Btn, Card } from '$lib/components/ui';
+	import SessionHero from '$lib/components/today/SessionHero.svelte';
+	import NoSessionState from '$lib/components/today/NoSessionState.svelte';
+	import Notice from '$lib/components/today/Notice.svelte';
+	import SessionExercise from '$lib/components/today/SessionExercise.svelte';
+	import ExerciseComposer from '$lib/components/today/ExerciseComposer.svelte';
+	import RecentSessions from '$lib/components/today/RecentSessions.svelte';
+	import EndSessionModal from '$lib/components/today/EndSessionModal.svelte';
 
-	let reps = $state(8);
-	let weight = $state(105);
-	let trackReps = $state(true);
-	let trackTime = $state(false);
-	let trackWeight = $state(true);
-	let perSide = $state(false);
+	const c = createTodayController();
 
-	type Tab = 'overview' | 'exercise' | 'trends';
-	let tab = $state<Tab>('overview');
+	// Pull stores out of the controller so the auto-subscribe $-prefix works cleanly in the template.
+	const error = c.error;
+	const notice = c.notice;
+	const loading = c.loading;
+	const offlineMode = c.offlineMode;
+	const pendingSyncCount = c.pendingSyncCount;
+	const currentSession = c.currentSession;
+	const elapsedLabel = c.elapsedLabel;
+	const totalSets = c.totalSets;
+	const totalVolumeKg = c.totalVolumeKg;
+	const totalDurationSeconds = c.totalDurationSeconds;
+	const exerciseQuery = c.exerciseQuery;
+	const sessionNotes = c.sessionNotes;
+	const endModalOpen = c.endModalOpen;
+	const endMood = c.endMood;
+	const endNotes = c.endNotes;
+	const suggestions = c.suggestions;
+	const quickPicks = c.quickPicks;
+	const plannedTemplateExercises = c.plannedTemplateExercises;
+	const recentSessions = c.recentSessions;
+	const openExerciseIds = c.openExerciseIds;
 
-	// Sample sets demonstrating spill grouping + per-side modes
-	const benchSets = [
-		{ id: 1, reps: 10, weight: 100 },
-		{ id: 2, reps: 9, weight: 102.5 },
-		{ id: 3, reps: 8, weight: 105 }
-	];
-	const grouped = [
-		{ id: 1, reps: 10, weight: 100 },
-		{ id: 2, reps: 10, weight: 100 },
-		{ id: 3, reps: 10, weight: 100 },
-		{ id: 4, reps: 8, weight: 105 }
-	];
+	let showDemoAction = $state(false);
+	let templatePickerOpen = $state(false);
+	let templateLoading = $state(false);
+	let templateError = $state<string | null>(null);
+	let templates = $state<WorkoutTemplate[]>([]);
 
-	const navItems: NavItem[] = [
-		{
-			href: '/',
-			label: 'Today',
-			icon: heart
-		},
-		{
-			href: '/plans',
-			label: 'Plans',
-			icon: plans
-		},
-		{
-			href: '/history',
-			label: 'History',
-			icon: clock
-		},
-		{
-			href: '/progress',
-			label: 'Progress',
-			icon: chart
-		},
-		{
-			href: '/more',
-			label: 'More',
-			icon: more
-		}
-	];
+	onMount(() => {
+		showDemoAction = readDemoModePreference();
+		return c.start();
+	});
 
-	function toggleTheme() {
-		const root = document.documentElement;
-		const isDark = root.getAttribute('data-theme') === 'dark';
-		const next = isDark ? 'light' : 'dark';
-		root.setAttribute('data-theme', next);
-		root.classList.toggle('dark', next === 'dark');
+	async function openTemplatePicker() {
+		templatePickerOpen = true;
+		templateError = null;
+		templateLoading = true;
 		try {
-			localStorage.setItem('theme', next);
-		} catch {
-			/* ignore */
+			templates = await getWorkoutTemplates();
+		} catch (e) {
+			templateError = e instanceof Error ? e.message : 'Failed to load templates';
+		} finally {
+			templateLoading = false;
 		}
+	}
+
+	async function handleStartFromTemplate(templateId: number) {
+		await c.startSessionFromTemplate(templateId);
+		// `c.error` is the raw store, so peek via $- in the template; here we just close optimistically.
+		templatePickerOpen = false;
 	}
 </script>
 
-{#snippet heart()}
-	<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
-		><path d="M12 21s-7-4.5-7-11a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 6.5-7 11-7 11z" /></svg
-	>
-{/snippet}
-{#snippet plans()}
-	<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-		><rect x="4" y="4" width="16" height="16" rx="3" /><path d="M4 9h16" /></svg
-	>
-{/snippet}
-{#snippet clock()}
-	<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-		><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg
-	>
-{/snippet}
-{#snippet chart()}
-	<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-		><path d="M4 19h16" /><path d="M6 16l4-5 4 3 5-7" /></svg
-	>
-{/snippet}
-{#snippet more()}
-	<span style="font-weight: 800;">⋯</span>
-{/snippet}
+<div class="page">
+	{#if $notice || $pendingSyncCount}
+		<Notice
+			tone="info"
+			action={$pendingSyncCount
+				? {
+						label: 'Sync now',
+						onclick: c.syncPendingSessions,
+						disabled: $loading || $offlineMode
+					}
+				: undefined}
+		>
+			{#if $notice}{$notice}{/if}
+			{#if $pendingSyncCount}
+				<span style="opacity: 0.8;">
+					{#if $notice}&nbsp;·&nbsp;{/if}
+					{$pendingSyncCount} change{$pendingSyncCount === 1 ? '' : 's'} pending sync
+				</span>
+			{/if}
+		</Notice>
+	{/if}
 
-<main class="page">
-	<header class="page-head">
-		<div class="brand">
-			<span class="logo">SM</span>
-			<span class="name">SwoleMate</span>
-			<span class="ver">design-system v0.1</span>
-		</div>
-		<Btn variant="ghost" size="sm" onclick={toggleTheme} aria-label="Toggle theme">
-			Toggle theme
-		</Btn>
-	</header>
+	{#if $error}
+		<Notice tone="error">{$error}</Notice>
+	{/if}
 
-	<PageHero kicker="► Component showcase">
-		{#snippet title()}Step 2 done. <em>Components live.</em>{/snippet}
-		{#snippet sub()}
-			Every primitive from the spec is implemented as a Svelte 5 component. Step 3 (porting Today)
-			starts next.
-		{/snippet}
-		<div class="hero-stats">
-			<div class="cell"><div class="k">Components</div><div class="v">11</div></div>
-			<div class="cell"><div class="k">Tokens</div><div class="v">26</div></div>
-			<div class="cell"><div class="k">Tests</div><div class="v">69 ✓</div></div>
-			<div class="cell"><div class="k">Skeleton</div><div class="v">0</div></div>
-		</div>
-	</PageHero>
-
-	<!-- ─── Buttons ───────────────────────────────────────────── -->
-	<Card>
-		{#snippet title()}Buttons <em>— 6 variants</em>{/snippet}
-		{#snippet lede()}One primary, three secondaries, one celebratory, one icon-only.{/snippet}
-		<div class="row">
-			<Btn variant="primary">▶ Log set 4 of 5</Btn>
-			<Btn variant="success">✓ Mark done</Btn>
-			<Btn variant="ink">Sync now</Btn>
-			<Btn variant="soft">Collapse</Btn>
-			<Btn variant="ghost">Use template</Btn>
-			<Btn variant="icon" aria-label="Delete">✕</Btn>
-		</div>
-	</Card>
-
-	<!-- ─── Spill pills ───────────────────────────────────────── -->
-	<Card>
-		{#snippet title()}Spill pills <em>— segmented set rendering</em>{/snippet}
-		{#snippet lede()}
-			Single sets, count-grouped sets, timed sets, bodyweight, and a PR marker. Heatmap intensity
-			scales with the relative weight inside the group.
-		{/snippet}
-
-		<h4 class="sub">Current sets (heatmap)</h4>
-		<SetPillList sets={benchSets} prGroupIndex={2} />
-
-		<h4 class="sub">Grouped sets (count prefix)</h4>
-		<SetPillList sets={grouped} />
-
-		<h4 class="sub">Single pills</h4>
-		<div class="row">
-			<Spill count={2} reps={10} weight="BW" bodyweight intensity={0.5} />
-			<Spill reps={8} weight="22.5kg/side" intensity={0.7} />
-			<Spill reps={6} weight="27.5/22.5kg" intensity={0.85} />
-			<Spill count={3} duration="0:30" />
-			<Spill reps={8} weight="105kg" intensity={0.85} pr />
-		</div>
-	</Card>
-
-	<!-- ─── Stepper pill ──────────────────────────────────────── -->
-	<Card>
-		{#snippet title()}Stepper pill <em>— numeric input</em>{/snippet}
-		{#snippet lede()}
-			Two-handed steppers with a centred value and optional unit suffix.
-		{/snippet}
-		<div class="row">
-			<StepperPill bind:value={reps} label="Reps" min={0} max={50} />
-			<StepperPill bind:value={weight} label="Weight" step={2.5} min={0} unit="kg" />
-		</div>
-		<p class="aside">Bound state: <code>reps={reps}</code> · <code>weight={weight}</code></p>
-	</Card>
-
-	<!-- ─── Chk / Chip / Badge ───────────────────────────────── -->
-	<Card>
-		{#snippet title()}Toggles, chips &amp; badges{/snippet}
-		<h4 class="sub">Tracking toggle (Chk)</h4>
-		<div class="row">
-			<Chk bind:checked={trackReps} label="Reps" />
-			<Chk bind:checked={trackTime} label="Time" />
-			<Chk bind:checked={trackWeight} label="Weight" />
-			<Chk bind:checked={perSide} label="Per-side" />
-		</div>
-
-		<h4 class="sub">Chips</h4>
-		<div class="row">
-			<Chip>grip: pronated</Chip>
-			<Chip>rom: full</Chip>
-			<Chip size="xs">+2</Chip>
-		</div>
-
-		<h4 class="sub">Badges</h4>
-		<div class="row">
-			<Badge tone="done">Done</Badge>
-			<Badge tone="live">In progress</Badge>
-			<Badge tone="soft">Edit</Badge>
-			<Badge tone="warn">Offline</Badge>
-			<Badge tone="pr">All-time PR</Badge>
-		</div>
-	</Card>
-
-	<!-- ─── Segmented tabs ───────────────────────────────────── -->
-	<Card>
-		{#snippet title()}Segmented tabs <em>— 2-3 positions</em>{/snippet}
-		<SegmentedTabs
-			items={[
-				{ id: 'overview', label: 'Overview' },
-				{ id: 'exercise', label: 'Exercise' },
-				{ id: 'trends', label: 'Trends' }
-			]}
-			bind:selected={tab}
-			aria-label="Progress sections"
+	{#if $currentSession}
+		<SessionHero
+			elapsedLabel={$elapsedLabel}
+			exerciseCount={$currentSession.exercises.length}
+			exercisesPlanned={$plannedTemplateExercises.length + $currentSession.exercises.length}
+			setCount={$totalSets}
+			volumeKg={$totalVolumeKg}
+			durationSeconds={$totalDurationSeconds}
+			startedAtLabel={`${formatTime($currentSession.startedAt)} · ${formatDateRelative($currentSession.startedAt)}`}
+			onCancel={c.cancelSession}
+			onEnd={c.openEndModal}
+			disabled={$loading}
 		/>
-		<p class="aside">Selected: <code>{tab}</code></p>
-	</Card>
+	{:else}
+		<NoSessionState
+			{showDemoAction}
+			offlineMode={$offlineMode}
+			loading={$loading}
+			onStart={() => c.startSession('empty')}
+			onUseTemplate={openTemplatePicker}
+			onDemo={() => c.startSession('demo')}
+		/>
+	{/if}
 
-	<div style="height: 100px"></div>
-</main>
+	{#if templatePickerOpen && !$currentSession}
+		<Card>
+			{#snippet title()}Start from template <em>— preloads exercise plan</em>{/snippet}
+			{#snippet actions()}
+				<Btn variant="soft" size="sm" onclick={() => (templatePickerOpen = false)}>Close</Btn>
+			{/snippet}
 
-<BottomNav items={navItems} current="/" />
+			{#if templateError}
+				<Notice tone="error">{templateError}</Notice>
+			{:else if templateLoading}
+				<div class="muted">Loading templates…</div>
+			{:else if templates.length === 0}
+				<div class="muted">No templates yet. Create one from the Plans page first.</div>
+			{:else}
+				<div class="t-grid">
+					{#each templates as t (t.id)}
+						<button
+							class="t-card"
+							type="button"
+							onclick={() => handleStartFromTemplate(t.id)}
+							disabled={$loading}
+						>
+							<div class="t-name">{t.name}</div>
+							<div class="t-count">
+								{t.exercise_count} exercise{t.exercise_count === 1 ? '' : 's'}
+							</div>
+						</button>
+					{/each}
+				</div>
+			{/if}
+		</Card>
+	{/if}
+
+	{#if $currentSession}
+		<Card>
+			<label class="notes-label">
+				<span class="lbl">Session notes</span>
+				<textarea
+					bind:value={$sessionNotes}
+					rows="2"
+					placeholder="How did it feel? Any cues to remember…"
+				></textarea>
+			</label>
+		</Card>
+
+		{#if $currentSession.exercises.length === 0}
+			<Card>
+				<div class="empty">
+					{#if $plannedTemplateExercises.length > 0}
+						<div class="t">Start your template plan</div>
+						<p>Tap an exercise from your template plan below.</p>
+					{:else}
+						<div class="t">Add your first exercise</div>
+						<p>Use the search below or tap a quick pick from your recent sessions.</p>
+					{/if}
+				</div>
+			</Card>
+		{:else}
+			<div class="ex-list">
+				{#each $currentSession.exercises as ex (ex.id)}
+					<SessionExercise
+						exercise={ex}
+						isOpen={$openExerciseIds.includes(ex.id)}
+						disabled={$loading}
+						lastTime={c.getLastTimeForExercise(ex.name)}
+						onToggle={() => c.toggleExercise(ex.id)}
+						onDelete={() => c.removeExercise(ex.id)}
+						onMarkDone={() => c.markExerciseDone(ex.id)}
+						onAddSet={(p) =>
+							c.addSet(ex.id, p.reps, p.weight, p.weightLeft, p.weightRight, p.durationSeconds)}
+						onUpdateNotes={(n) => c.updateExerciseNotes(ex.id, n)}
+						onAddSetting={(k, v) => c.addExerciseSetting(ex.id, k, v)}
+						onRemoveSetting={(id) => c.removeExerciseSetting(ex.id, id)}
+						onUpdateSetting={(id, k, v) => c.updateExerciseSetting(ex.id, id, k, v)}
+						onTogglePerSideWeight={(e) => c.toggleExercisePerSideWeight(ex.id, e)}
+						onToggleSplitWeight={(e) => c.toggleExerciseSplitWeight(ex.id, e)}
+						onUpdateTracking={(t) => c.updateExerciseTracking(ex.id, t)}
+					/>
+				{/each}
+			</div>
+		{/if}
+
+		<ExerciseComposer
+			bind:query={$exerciseQuery}
+			suggestions={$suggestions}
+			templatePicks={$plannedTemplateExercises}
+			quickPicks={$quickPicks}
+			disabled={$loading}
+			onAdd={(name) => c.addExercise(name)}
+			onAddTemplateExercise={(id) => c.startPlannedTemplateExercise(id)}
+		/>
+	{/if}
+
+	<RecentSessions
+		sessions={$recentSessions}
+		canAdd={Boolean($currentSession) && !$loading}
+		disabled={$loading || !$currentSession}
+		onAddExercise={(p) =>
+			c.addExercise(p.name, {
+				perSideWeight: p.perSideWeight,
+				splitWeight: p.splitWeight,
+				tracksReps: p.tracksReps,
+				tracksTime: p.tracksTime,
+				tracksWeight: p.tracksWeight,
+				settings: p.settings
+			})}
+	/>
+
+	<EndSessionModal
+		open={$endModalOpen}
+		bind:notes={$endNotes}
+		bind:mood={$endMood}
+		disabled={$loading}
+		onCancel={() => endModalOpen.set(false)}
+		onSubmit={c.submitEndSession}
+	/>
+</div>
 
 <style>
 	.page {
-		max-width: 720px;
-		margin: 0 auto;
-		padding: 24px 18px 120px;
 		display: flex;
 		flex-direction: column;
-		gap: 16px;
+		gap: 14px;
 	}
 
-	.page-head {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding-bottom: 6px;
+	.notes-label {
+		display: block;
 	}
-	.brand {
-		display: flex;
-		align-items: center;
-		gap: 10px;
+	.lbl {
+		font: 700 10px/1 'Onest', system-ui, sans-serif;
+		letter-spacing: 0.18em;
+		text-transform: uppercase;
+		color: var(--ink-soft);
 	}
-	.logo {
-		width: 32px;
-		height: 32px;
-		border-radius: 9px;
-		background: linear-gradient(135deg, var(--clay-2), var(--clay));
-		color: white;
-		display: grid;
-		place-items: center;
-		font: 800 13px/1 'Onest', system-ui, sans-serif;
-		box-shadow: 0 4px 10px -3px rgba(255, 94, 31, 0.55);
+	textarea {
+		margin-top: 8px;
+		width: 100%;
+		min-height: 56px;
+		resize: vertical;
+		background: transparent;
+		border: 0;
+		outline: 0;
+		color: var(--ink);
+		font: 500 14px/1.45 'Onest', system-ui, sans-serif;
 	}
-	.name {
-		font: 800 17px/1 'Onest', system-ui, sans-serif;
-		letter-spacing: -0.01em;
+
+	.muted {
+		opacity: 0.7;
+		font: 500 13px/1.4 'Onest', system-ui, sans-serif;
 	}
-	.ver {
-		font: 600 11px/1 'Onest', system-ui, sans-serif;
+
+	.empty {
+		text-align: center;
+		padding: 14px 0;
+	}
+	.empty .t {
+		font: 800 18px/1 'Onest', system-ui, sans-serif;
+		letter-spacing: -0.015em;
+	}
+	.empty p {
+		margin: 6px 0 0;
+		font: 500 13px/1.5 'Onest', system-ui, sans-serif;
 		color: var(--ink-soft);
 	}
 
-	.hero-stats {
+	.ex-list {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+	}
+
+	.t-grid {
+		margin-top: 4px;
 		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
+		grid-template-columns: 1fr 1fr;
 		gap: 8px;
 	}
-	.cell {
-		background: color-mix(in oklab, var(--on-deep) 7%, transparent);
-		border: 1px solid color-mix(in oklab, var(--on-deep) 12%, transparent);
-		border-radius: 12px;
-		padding: 12px 14px;
-	}
-	.k {
-		font: 700 10px/1 'Onest', system-ui, sans-serif;
-		letter-spacing: 0.18em;
-		text-transform: uppercase;
-		color: var(--on-deep-soft);
-	}
-	.v {
-		margin-top: 6px;
-		font: 800 22px/1 'Onest', system-ui, sans-serif;
-		letter-spacing: -0.025em;
-		font-variant-numeric: tabular-nums;
-		color: var(--on-deep);
-	}
-
-	.sub {
-		margin: 16px 0 8px;
-		font: 700 10px/1 'Onest', system-ui, sans-serif;
-		letter-spacing: 0.18em;
-		text-transform: uppercase;
-		color: var(--ink-soft);
-	}
-	.sub:first-of-type {
-		margin-top: 8px;
-	}
-
-	.row {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 10px;
-		align-items: center;
-	}
-
-	.aside {
-		margin: 10px 0 0;
-		font: italic 400 12px/1.4 'Instrument Serif';
-		color: var(--ink-soft);
-	}
-	.aside :global(code) {
-		font: 700 11px/1 'JetBrains Mono', monospace;
-		padding: 2px 6px;
-		border-radius: 5px;
+	.t-card {
+		text-align: left;
 		background: var(--card-3);
-		color: var(--clay-text);
 		border: 1px solid var(--line);
+		border-radius: 14px;
+		padding: 12px;
+		cursor: pointer;
+		color: inherit;
 	}
-
-	@media (min-width: 768px) {
-		.hero-stats {
-			grid-template-columns: repeat(4, minmax(0, 1fr));
-		}
+	.t-card:hover {
+		border-color: var(--clay);
+	}
+	.t-name {
+		font: 800 14px/1.1 'Onest', system-ui, sans-serif;
+	}
+	.t-count {
+		margin-top: 4px;
+		font: 500 12px/1 'Onest', system-ui, sans-serif;
+		color: var(--ink-soft);
 	}
 </style>
