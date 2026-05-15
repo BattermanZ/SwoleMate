@@ -393,14 +393,14 @@
   .stepper-pill .step:hover { background: rgba(24,19,13,0.05); color: var(--ink); }
   .stepper-pill .step:active { background: var(--ink); color: var(--card); }
   .stepper-pill .v-wrap {
-    display: flex; align-items: baseline; justify-content: center; gap: 3px;
-    min-width: 0; padding: 0 2px;
+    display: flex; align-items: baseline; justify-content: center; gap: 4px;
+    min-width: 0; padding: 0 4px;
   }
-  .stepper-pill input {
-    background: transparent; border: 0; outline: 0; padding: 0;
+  .stepper-pill .value {
     font: 800 22px/1 'Onest'; color: var(--ink);
     font-variant-numeric: tabular-nums; letter-spacing: -0.03em;
-    text-align: center; min-width: 0; width: 100%;
+    /* sit as a content-sized inline-block so flex justify-center centers
+       the (value + unit) group rather than stretching the value cell */
   }
   .stepper-pill .unit {
     font: 600 12px/1 'Onest'; color: var(--ink-soft);
@@ -528,7 +528,7 @@
   }
   .session-card .meta { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
   .session-card .meta .day { font: 800 16px/1 'Onest'; }
-  .session-card .meta .mood { font: 400 18px/1 'Onest'; }
+  .session-card .meta .mood { font: 400 14px/1 'Onest'; opacity: 0.85; }
   .session-card .meta .time { font: 500 12px/1 'Onest'; color: var(--ink-soft); }
   .session-card .notes { margin-top: 6px; font: italic 400 13px/1.4 'Instrument Serif'; color: var(--ink-2); }
   .session-card .ex-mini {
@@ -833,7 +833,7 @@
                 <label>Reps</label>
                 <div class="stepper-pill">
                   <button class="step" type="button" aria-label="Decrease reps">−</button>
-                  <div class="v-wrap"><input type="text" inputmode="numeric" pattern="[0-9]*" value="8" /></div>
+                  <div class="v-wrap"><span class="value">8</span></div>
                   <button class="step" type="button" aria-label="Increase reps">+</button>
                 </div>
               </div>
@@ -841,7 +841,7 @@
                 <label>Weight</label>
                 <div class="stepper-pill">
                   <button class="step" type="button" aria-label="Decrease weight">−</button>
-                  <div class="v-wrap"><input type="text" inputmode="decimal" value="105" /><span class="unit">kg</span></div>
+                  <div class="v-wrap"><span class="value">105</span><span class="unit">kg</span></div>
                   <button class="step" type="button" aria-label="Increase weight">+</button>
                 </div>
               </div>
