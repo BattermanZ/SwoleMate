@@ -1,374 +1,120 @@
-@config '../tailwind.config.js';
-
 @import 'tailwindcss';
 
-@import '@skeletonlabs/skeleton';
-@import '@skeletonlabs/skeleton-svelte';
-@import '@skeletonlabs/skeleton/themes/rocket';
+/* ── SwoleMate design system tokens ──────────────────────────────────
+   Full spec: docs/design-system.html
+   Light is the default; dark mode is activated by adding `data-theme="dark"`
+   to <html>. We also keep the legacy `.dark` class working so any existing
+   logic that toggles it during the migration stays functional. */
 
-/* Restore a few Skeleton v2 token pairings that changed in v4 (e.g. 50-900 vs 50-950). */
 :root {
-	--color-surface-50-900: var(--color-surface-50);
-	--color-surface-100-800: var(--color-surface-100);
-	--mobile-nav-safe-bottom: max(0.25rem, calc(env(safe-area-inset-bottom) - 1rem));
-	--mobile-nav-row-height: 3.25rem;
+	--bg: #f3ece1;
+	--bg-2: #ebe2d2;
+	--card: #fbf6ec;
+	--card-2: #f6efe1;
+	--card-3: #f1e8d4;
+	--ink: #18130d;
+	--ink-2: #443c30;
+	--ink-soft: #847562;
+	--ink-dim: #b2a892;
+	--line: #e5dccb;
+	--line-2: #d6cab0;
+	--sage: #4f7d54;
+	--success: #4f7d54;
+	--warn: #c87f1a;
+	--clay: #ff5e1f;
+	--clay-2: #ff7a2a;
+	--clay-deep: #c83a05;
+	--clay-text: #c83a05;
+	--gold: #d5a23a;
+	--surface-deep: #18130d;
+	--on-deep: #f3ece1;
+	--on-deep-soft: rgba(243, 236, 225, 0.55);
+	--on-deep-dim: rgba(243, 236, 225, 0.12);
+	--on-deep-line: rgba(243, 236, 225, 0.18);
+	--shadow-card: rgba(60, 40, 20, 0.18);
+	--shadow-strong: rgba(60, 40, 20, 0.35);
+	--shadow-soft: rgba(60, 40, 20, 0.15);
+	--bg-glow-1: #f7efde;
+	--bg-glow-2: #ead7c4;
+
+	/* iOS safe-area helpers — referenced by the app shell */
+	--sat: env(safe-area-inset-top);
+	--sab: env(safe-area-inset-bottom);
+	--sal: env(safe-area-inset-left);
+	--sar: env(safe-area-inset-right);
 }
 
+:root[data-theme='dark'],
 html.dark {
-	--color-surface-50-900: var(--color-surface-900);
-	--color-surface-100-800: var(--color-surface-800);
+	--bg: #1a1410;
+	--bg-2: #221c16;
+	--card: #251e16;
+	--card-2: #2b231a;
+	--card-3: #2f2619;
+	--ink: #f3ece1;
+	--ink-2: #d4c8b0;
+	--ink-soft: #978a72;
+	--ink-dim: #5a4f42;
+	--line: #362c22;
+	--line-2: #463a2c;
+	--sage: #6fa074;
+	--success: #6fa074;
+	--warn: #e0a460;
+	--clay: #ff7a3d;
+	--clay-2: #ff924d;
+	--clay-deep: #c83a05;
+	--clay-text: #ff924d;
+	--gold: #e3b64f;
+	--surface-deep: #100c08;
+	--on-deep: #f3ece1;
+	--on-deep-soft: rgba(243, 236, 225, 0.55);
+	--on-deep-dim: rgba(243, 236, 225, 0.12);
+	--on-deep-line: rgba(243, 236, 225, 0.18);
+	--shadow-card: rgba(0, 0, 0, 0.4);
+	--shadow-strong: rgba(0, 0, 0, 0.6);
+	--shadow-soft: rgba(0, 0, 0, 0.3);
+	--bg-glow-1: #2a1d12;
+	--bg-glow-2: #1f1611;
 }
 
-/* Many Skeleton tokens use `light-dark()` which keys off `color-scheme`. */
-html {
-	color-scheme: light;
-}
-
-html.dark {
+:root[data-theme='dark'] {
 	color-scheme: dark;
 }
 
-[data-theme='rocket'] {
-	--base-font-family:
-		ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
-		Arial, 'Apple Color Emoji', 'Segoe UI Emoji';
-	--heading-font-family:
-		ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
-		Arial, 'Apple Color Emoji', 'Segoe UI Emoji';
-	--heading-font-weight: 700;
-	--heading-letter-spacing: -0.005em;
-	--body-background-color: var(--color-surface-50);
-	--body-background-color-dark: var(--color-surface-950);
+/* ── Base reset ────────────────────────────────────────────────────── */
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
 }
 
-/* Global readability defaults */
+html {
+	min-height: 100%;
+	height: -webkit-fill-available;
+}
+
 body {
-	text-rendering: optimizeLegibility;
+	margin: 0;
+	min-height: 100vh;
+	min-height: -webkit-fill-available;
+	font-family: 'Onest', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+	color: var(--ink);
+	background:
+		radial-gradient(900px 600px at 0% 0%, var(--bg-glow-1) 0%, transparent 60%),
+		radial-gradient(900px 600px at 100% 100%, var(--bg-glow-2) 0%, transparent 55%),
+		var(--bg);
+	background-attachment: fixed;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
+	text-rendering: optimizeLegibility;
+	transition: background-color 240ms ease;
 }
 
-.list-nav {
-	list-style: none;
-	margin: 0;
-	padding: 0;
-}
-
-.mobile-shell-header {
-	padding-top: env(safe-area-inset-top);
-	border-bottom: 1px solid color-mix(in oklab, var(--color-surface-950-50) 18%, transparent);
-	background-color: var(--color-surface-100-800);
-}
-
-.mobile-shell-header-row {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) auto;
-	align-items: center;
-	height: 3rem;
-	padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
-}
-
-.mobile-shell-brand {
-	display: inline-flex;
-	min-width: 0;
-	align-items: center;
-	gap: 0.5rem;
-	color: var(--color-surface-950-50);
-	text-decoration: none;
-}
-
-.mobile-shell-brand-icon {
-	flex: none;
-	font-size: 1.5rem;
-	line-height: 1;
-}
-
-.mobile-shell-brand-text {
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	font-size: 1.35rem;
-	font-weight: 800;
-	line-height: 1.1;
-}
-
-.mobile-shell-actions {
-	display: inline-flex;
-	align-items: center;
-	gap: 0.375rem;
-}
-
-.mobile-shell-action {
-	display: grid;
-	width: 2.25rem;
-	height: 2.25rem;
-	place-items: center;
-	border-radius: 999px;
-	color: var(--color-primary-700-300);
-	line-height: 1;
-}
-
-.app-content {
-	padding-bottom: calc(var(--mobile-nav-safe-bottom) + var(--mobile-nav-row-height) + 0.75rem);
-}
-
-@media (min-width: 768px) {
-	.app-content {
-		padding-bottom: 1rem;
-	}
-}
-
-.mobile-bottom-nav {
-	position: fixed;
-	right: 0;
-	bottom: 0;
-	left: 0;
-	z-index: 50;
-	display: block;
-	height: calc(var(--mobile-nav-row-height) + var(--mobile-nav-safe-bottom) + 0.5rem);
-	border-top: 1px solid color-mix(in oklab, var(--color-surface-950-50) 18%, transparent);
-	background-color: var(--color-surface-50-900);
-	padding: 0.25rem 0.5rem var(--mobile-nav-safe-bottom);
-	box-shadow: 0 -8px 24px color-mix(in oklab, var(--color-surface-950) 10%, transparent);
-}
-
-.mobile-bottom-nav .list-nav {
-	height: var(--mobile-nav-row-height);
-	align-items: center;
-}
-
-@media (min-width: 768px) {
-	.mobile-bottom-nav {
-		display: none;
-	}
-}
-
-.mobile-tab {
-	display: grid;
-	height: 3rem;
-	width: 100%;
-	place-items: center;
-	align-content: center;
-	gap: 0.0625rem;
-	border-radius: 0.625rem;
-	padding: 0.125rem 0.25rem;
-	color: color-mix(in oklab, var(--color-surface-950-50) 72%, transparent);
-	text-decoration: none;
-	transition:
-		background-color 180ms ease,
-		color 180ms ease,
-		transform 120ms ease;
-}
-
-.mobile-tab:active {
-	transform: scale(0.98);
-}
-
-.mobile-tab-active {
-	background-color: color-mix(in oklab, var(--color-primary-500) 12%, transparent);
-	color: var(--color-primary-700-300);
-}
-
-.mobile-tab-icon {
-	display: flex;
-	height: 1.25rem;
-	align-items: center;
-	justify-content: center;
-	font-size: 1rem;
-	line-height: 1;
-}
-
-.mobile-tab-label {
-	max-width: 100%;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	font-size: 0.6875rem;
-	font-weight: 700;
-	line-height: 1rem;
-}
-
-html.dark .variant-ghost {
-	background-color: color-mix(in oklab, var(--color-surface-950) 20%, transparent) !important;
-}
-
-html.dark .variant-soft {
-	background-color: color-mix(in oklab, var(--color-surface-950) 30%, transparent) !important;
-}
-
-/* Compatibility aliases for legacy Skeleton v2 class names used throughout the app. */
-@utility variant-filled {
-	@apply preset-filled;
-}
-@utility variant-filled-surface {
-	@apply preset-filled;
-}
-@utility variant-filled-primary {
-	@apply preset-filled-primary-500;
-}
-@utility variant-filled-secondary {
-	@apply preset-filled-secondary-500;
-}
-@utility variant-filled-tertiary {
-	@apply preset-filled-tertiary-500;
-}
-@utility variant-filled-success {
-	@apply preset-filled-success-500;
-}
-@utility variant-filled-warning {
-	@apply preset-filled-warning-500;
-}
-@utility variant-filled-error {
-	@apply preset-filled-error-500;
-}
-
-@utility variant-soft {
-	@apply preset-tonal;
-}
-@utility variant-soft-primary {
-	@apply preset-tonal-primary;
-}
-@utility variant-soft-secondary {
-	@apply preset-tonal-secondary;
-}
-@utility variant-soft-tertiary {
-	@apply preset-tonal-tertiary;
-}
-@utility variant-soft-success {
-	@apply preset-tonal-success;
-}
-@utility variant-soft-warning {
-	@apply preset-tonal-warning;
-}
-@utility variant-soft-error {
-	@apply preset-tonal-error;
-}
-@utility variant-soft-surface {
-	@apply preset-tonal-surface;
-}
-
-/* Contrast helpers for interactive pills (buttons/badges/chips). */
-.btn[class*='variant-filled-'],
-.badge[class*='variant-filled-'],
-.chip[class*='variant-filled-'] {
-	border: 1px solid color-mix(in oklab, currentColor 22%, transparent);
-	box-shadow:
-		0 1px 0 color-mix(in oklab, var(--color-surface-950-50) 18%, transparent),
-		0 10px 24px color-mix(in oklab, var(--color-surface-950) 14%, transparent);
-}
-
-.btn.variant-soft,
-.btn.variant-soft-primary,
-.btn.variant-soft-secondary,
-.btn.variant-soft-tertiary,
-.btn.variant-soft-success,
-.btn.variant-soft-warning,
-.btn.variant-soft-error,
-.btn.variant-soft-surface,
-.badge.variant-soft,
-.chip.variant-soft {
-	border: 1px solid color-mix(in oklab, var(--color-surface-950-50) 16%, transparent);
-}
-
-/* Increase contrast for the neutral "soft" variant (used for secondary actions + inline setting badges). */
-.btn.variant-soft,
-.badge.variant-soft,
-.chip.variant-soft {
-	background-color: color-mix(in oklab, var(--color-surface-950) 10%, var(--color-surface-50));
-	color: var(--color-surface-950);
-}
-
-html.dark .btn.variant-soft,
-html.dark .badge.variant-soft,
-html.dark .chip.variant-soft {
-	background-color: color-mix(in oklab, var(--color-surface-50) 10%, var(--color-surface-900));
-	color: var(--color-surface-50);
-}
-
-/* Add a little more character to accent-filled controls. */
-.btn.variant-filled-primary,
-.badge.variant-filled-primary,
-.chip.variant-filled-primary {
-	background-image: linear-gradient(
-		135deg,
-		color-mix(in oklab, var(--color-primary-500) 92%, white),
-		color-mix(in oklab, var(--color-primary-600) 92%, black)
-	);
-}
-
-.btn.variant-filled-secondary,
-.badge.variant-filled-secondary,
-.chip.variant-filled-secondary {
-	background-image: linear-gradient(
-		135deg,
-		color-mix(in oklab, var(--color-secondary-500) 92%, white),
-		color-mix(in oklab, var(--color-secondary-600) 92%, black)
-	);
-}
-
-.btn.variant-filled-tertiary,
-.badge.variant-filled-tertiary,
-.chip.variant-filled-tertiary {
-	background-image: linear-gradient(
-		135deg,
-		color-mix(in oklab, var(--color-tertiary-500) 92%, white),
-		color-mix(in oklab, var(--color-tertiary-600) 92%, black)
-	);
-}
-
-html.dark .btn.variant-filled-primary,
-html.dark .badge.variant-filled-primary,
-html.dark .chip.variant-filled-primary,
-html.dark .btn.variant-filled-secondary,
-html.dark .badge.variant-filled-secondary,
-html.dark .chip.variant-filled-secondary,
-html.dark .btn.variant-filled-tertiary,
-html.dark .badge.variant-filled-tertiary,
-html.dark .chip.variant-filled-tertiary {
-	filter: saturate(1.05) brightness(1.05);
-}
-
-/* v2 "ghost" and "glass" variants were custom-ish; approximate them as user-generated presets. */
-@utility variant-ghost {
-	background-color: transparent;
-}
-@utility variant-ghost-primary {
-	@apply text-primary-500;
-	@variant hover {
-		@apply preset-tonal-primary;
-	}
-}
-
-@utility variant-glass-surface {
-	@apply preset-tonal-surface;
-	background-color: color-mix(in oklab, var(--color-surface-50-950) 75%, transparent);
-	backdrop-filter: blur(12px);
-	-webkit-backdrop-filter: blur(12px);
-}
-
-/* Legacy token utility aliases (v2) -> v4 theme colors. */
-.bg-surface-50-900-token {
-	background-color: var(--color-surface-50-900);
-}
-.bg-surface-100-800-token {
-	background-color: var(--color-surface-100-800);
-}
-
-/* Global form ergonomics */
-input[type='number']::-webkit-inner-spin-button,
-input[type='number']::-webkit-outer-spin-button {
-	appearance: none;
-	margin: 0;
-}
-input[type='number'] {
-	appearance: textfield;
-	-moz-appearance: textfield;
-}
-
-/* Prevent iOS zoom on focus */
+/* Prevent iOS zoom on focus for form inputs */
 @media (pointer: coarse) {
-	input[type='number'],
-	input[type='text'],
+	input,
+	select,
 	textarea {
 		font-size: 16px;
 	}

@@ -5,11 +5,11 @@
 		<link rel="icon" href="%sveltekit.assets%/favicon.png" />
 		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 
-		<!-- PWA meta tags -->
+		<!-- PWA meta -->
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 		<meta name="apple-mobile-web-app-title" content="SwoleMate" />
-		<meta name="theme-color" content="#1d4ed8" />
+		<meta name="theme-color" content="#f3ece1" />
 
 		<!-- PWA icons -->
 		<link rel="apple-touch-icon" href="%sveltekit.assets%/pwa-192.png" />
@@ -19,6 +19,15 @@
 		<!-- PWA manifest -->
 		<link rel="manifest" href="%sveltekit.assets%/manifest.json" />
 
+		<!-- Fonts (preconnect + display=swap to avoid FOUT-blocking) -->
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			rel="stylesheet"
+			href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800;900&family=Instrument+Serif:ital@0;1&display=swap"
+		/>
+
+		<!-- Theme bootstrap — runs before paint to avoid flash -->
 		<script>
 			(() => {
 				try {
@@ -26,73 +35,17 @@
 					const prefersDark =
 						window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
 					const dark = stored ? stored === 'dark' : prefersDark;
-					document.documentElement.classList.toggle('dark', dark);
-					document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+					if (dark) {
+						document.documentElement.setAttribute('data-theme', 'dark');
+						document.documentElement.classList.add('dark');
+					}
 				} catch {}
 			})();
 		</script>
 
-		<style>
-			/* Handle iOS safe areas */
-			:root {
-				--sat: env(safe-area-inset-top);
-				--sab: env(safe-area-inset-bottom);
-				--sal: env(safe-area-inset-left);
-				--sar: env(safe-area-inset-right);
-			}
-
-			html {
-				min-height: 100%;
-				height: -webkit-fill-available;
-			}
-
-			body {
-				min-height: 100vh;
-				min-height: -webkit-fill-available;
-				margin: 0;
-				padding: 0;
-				display: flex;
-				flex-direction: column;
-				height: 100%;
-			}
-
-			/* Ensure content starts below the status bar */
-			.app-shell-header {
-				padding-top: env(safe-area-inset-top);
-				padding-left: max(1rem, env(safe-area-inset-left));
-				padding-right: max(1rem, env(safe-area-inset-right));
-			}
-
-			.app-content {
-				padding-left: max(1rem, env(safe-area-inset-left));
-				padding-right: max(1rem, env(safe-area-inset-right));
-				flex: 1;
-				display: flex;
-				flex-direction: column;
-				min-height: 0;
-			}
-
-			/* Fix for drawer positioning */
-			.drawer-content {
-				padding-top: env(safe-area-inset-top);
-				padding-bottom: env(safe-area-inset-bottom);
-				padding-right: env(safe-area-inset-right);
-				height: 100vh;
-				height: -webkit-fill-available;
-			}
-
-			/* Fix for iOS height */
-			.app-shell {
-				display: flex;
-				flex-direction: column;
-				min-height: 100vh;
-				min-height: -webkit-fill-available;
-			}
-		</style>
-
 		%sveltekit.head%
 	</head>
-	<body data-sveltekit-preload-data="hover" data-theme="rocket">
+	<body data-sveltekit-preload-data="hover">
 		<div style="display: contents">%sveltekit.body%</div>
 	</body>
 </html>
