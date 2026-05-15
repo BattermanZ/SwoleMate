@@ -31,16 +31,24 @@ describe('progress charting helpers', () => {
 		expect(sqliteWeekKeyToTimestamp('not-a-week')).toBeNull();
 	});
 
-	it('reads theme defaults and reacts to dark mode class', () => {
+	it('reads theme and reacts to dark mode (via class or data-theme)', () => {
 		document.documentElement.classList.remove('dark');
+		document.documentElement.removeAttribute('data-theme');
 		let theme = readTheme();
 		expect(theme.isDark).toBe(false);
-		expect(theme.text).toBe('#0f172a');
+		// Default fallback for --ink-2 in light mode (jsdom has no real CSS vars resolved).
+		expect(theme.text).toBe('#443c30');
 
 		document.documentElement.classList.add('dark');
 		theme = readTheme();
 		expect(theme.isDark).toBe(true);
-		expect(theme.text).toBe('#e2e8f0');
+		expect(theme.text).toBe('#d4c8b0');
+
+		document.documentElement.classList.remove('dark');
+		document.documentElement.setAttribute('data-theme', 'dark');
+		theme = readTheme();
+		expect(theme.isDark).toBe(true);
+		document.documentElement.removeAttribute('data-theme');
 	});
 
 	it('observes class changes on documentElement', async () => {

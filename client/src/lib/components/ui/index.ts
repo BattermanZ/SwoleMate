@@ -11,3 +11,6 @@ export { default as PageHero } from './PageHero.svelte';
 export { default as SegmentedTabs } from './SegmentedTabs.svelte';
 export { default as BottomNav } from './BottomNav.svelte';
 export type { NavItem } from './BottomNav.svelte';
+export { default as MetricTile } from './MetricTile.svelte';
+export { default as PRRow } from './PRRow.svelte';
+export { default as RPill } from './RPill.svelte';

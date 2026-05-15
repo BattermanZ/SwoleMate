@@ -69,19 +69,24 @@ function resolveCssVarColor(varName: string, fallback: string): string {
 }
 
 export function readTheme(): ChartTheme {
-	const isDark = document.documentElement.classList.contains('dark');
+	const root = document.documentElement;
+	const isDark =
+		root.getAttribute('data-theme') === 'dark' || root.classList.contains('dark');
 
 	return {
 		isDark,
-		text: isDark ? '#e2e8f0' : '#0f172a',
-		mutedText: isDark ? 'rgba(226, 232, 240, 0.72)' : 'rgba(15, 23, 42, 0.65)',
-		grid: isDark ? 'rgba(148, 163, 184, 0.22)' : 'rgba(15, 23, 42, 0.12)',
-		primary: resolveCssVarColor('--color-primary-500', '#0ea5e9'),
-		secondary: resolveCssVarColor('--color-secondary-500', '#14b8a6'),
-		tertiary: resolveCssVarColor('--color-tertiary-500', '#f59e0b'),
-		success: resolveCssVarColor('--color-success-500', '#22c55e'),
-		warning: resolveCssVarColor('--color-warning-500', '#f59e0b'),
-		error: resolveCssVarColor('--color-error-500', '#ef4444')
+		// Map to design-system tokens. ink-2 reads as strong body text in both modes;
+		// secondary trend lines use --ink directly via resolveCssVarColor below.
+		text: resolveCssVarColor('--ink-2', isDark ? '#d4c8b0' : '#443c30'),
+		mutedText: resolveCssVarColor('--ink-soft', isDark ? '#978a72' : '#847562'),
+		grid: isDark ? 'rgba(151, 138, 114, 0.28)' : 'rgba(132, 117, 98, 0.28)',
+		primary: resolveCssVarColor('--clay', isDark ? '#ff7a3d' : '#ff5e1f'),
+		// secondary = ink itself: dark-on-light, cream-on-dark — used for overlay trend lines
+		secondary: resolveCssVarColor('--ink', isDark ? '#f3ece1' : '#18130d'),
+		tertiary: resolveCssVarColor('--gold', isDark ? '#e3b64f' : '#d5a23a'),
+		success: resolveCssVarColor('--sage', isDark ? '#6fa074' : '#4f7d54'),
+		warning: resolveCssVarColor('--warn', isDark ? '#e0a460' : '#c87f1a'),
+		error: resolveCssVarColor('--clay-text', isDark ? '#ff924d' : '#c83a05')
 	};
 }
 
@@ -156,6 +161,11 @@ export function sqliteWeekKeyToTimestamp(weekKey: string): number | null {
 
 export function observeTheme(onChange: () => void): MutationObserver {
 	const observer = new MutationObserver(() => onChange());
-	observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+	// Watch BOTH legacy .dark class and the new data-theme attribute so charts re-render
+	// regardless of which trigger flipped.
+	observer.observe(document.documentElement, {
+		attributes: true,
+		attributeFilter: ['class', 'data-theme']
+	});
 	return observer;
 }
