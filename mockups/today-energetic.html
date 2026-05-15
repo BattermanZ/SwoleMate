@@ -410,6 +410,30 @@
     transform: translateY(3px);
   }
   .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+
+  /* split-L/R layout: Reps spans both cols, then Left|Right, then commit */
+  .add-set-form.split-lr {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 10px;
+  }
+  .add-set-form.split-lr .field-reps { grid-column: 1 / -1; }
+
+  /* mode-preview mini-cards */
+  .mode-preview {
+    background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+    padding: 14px; box-shadow: 0 4px 12px -8px rgba(60,40,20,0.15);
+  }
+  .mode-preview + .mode-preview { margin-top: 12px; }
+  .mode-preview .mp-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+    padding-bottom: 10px; border-bottom: 1px dashed var(--line); margin-bottom: 12px;
+  }
+  .mode-preview .mp-title { font: 800 14px/1 'Onest'; letter-spacing: -0.01em; }
+  .mode-preview .mp-title em {
+    font: italic 400 13px/1 'Instrument Serif'; color: var(--ink-soft);
+    margin-left: 4px; font-weight: 400; letter-spacing: 0;
+  }
+  .mode-preview .mp-eg { font: italic 400 12px/1 'Instrument Serif'; color: var(--ink-soft); }
   .timer-controls { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
   .btn-soft { background: var(--bg-2); border: 0; padding: 8px 12px; border-radius: 999px; font: 700 11px/1 'Onest'; color: var(--ink-2); cursor: pointer; }
   .btn-ghost { background: transparent; border: 1px solid var(--line); padding: 8px 12px; border-radius: 999px; font: 700 11px/1 'Onest'; color: var(--ink-2); cursor: pointer; }
@@ -869,6 +893,114 @@
             <button class="mark-done">✓ Mark done</button>
           </footer>
         </article>
+
+        <!-- ─── INPUT FORM · 3 WEIGHT MODES ─────────────────────── -->
+        <span class="anno">Add-set form · 3 weight modes</span>
+
+        <!-- Standard mode -->
+        <div class="mode-preview">
+          <div class="mp-head">
+            <div class="mp-title">Standard <em>— one weight value</em></div>
+            <div class="mp-eg">e.g. Bench, Squat</div>
+          </div>
+          <div class="tracking">
+            <span class="chk on"><span class="box"></span>Reps</span>
+            <span class="chk on"><span class="box"></span>Weight</span>
+            <span class="chk"><span class="box"></span>Per-side</span>
+          </div>
+          <div class="add-set-form" style="margin-top:14px">
+            <div class="field">
+              <label>Reps</label>
+              <div class="stepper-pill">
+                <button class="step" type="button">−</button>
+                <div class="v-wrap"><span class="value">8</span></div>
+                <button class="step" type="button">+</button>
+              </div>
+            </div>
+            <div class="field">
+              <label>Weight</label>
+              <div class="stepper-pill">
+                <button class="step" type="button">−</button>
+                <div class="v-wrap"><span class="value">105</span><span class="unit">kg</span></div>
+                <button class="step" type="button">+</button>
+              </div>
+            </div>
+            <button class="commit-set">▶ Log set</button>
+          </div>
+        </div>
+
+        <!-- Per-side mode -->
+        <div class="mode-preview">
+          <div class="mp-head">
+            <div class="mp-title">Per-side <em>— one value × both sides</em></div>
+            <div class="mp-eg">e.g. DB Row, DB Press</div>
+          </div>
+          <div class="tracking">
+            <span class="chk on"><span class="box"></span>Reps</span>
+            <span class="chk on"><span class="box"></span>Weight</span>
+            <span class="chk on"><span class="box"></span>Per-side</span>
+          </div>
+          <div class="add-set-form" style="margin-top:14px">
+            <div class="field">
+              <label>Reps</label>
+              <div class="stepper-pill">
+                <button class="step" type="button">−</button>
+                <div class="v-wrap"><span class="value">8</span></div>
+                <button class="step" type="button">+</button>
+              </div>
+            </div>
+            <div class="field">
+              <label>Per side · kg</label>
+              <div class="stepper-pill">
+                <button class="step" type="button">−</button>
+                <div class="v-wrap"><span class="value">22.5</span></div>
+                <button class="step" type="button">+</button>
+              </div>
+            </div>
+            <button class="commit-set">▶ Log set</button>
+          </div>
+        </div>
+
+        <!-- Split L/R mode -->
+        <div class="mode-preview">
+          <div class="mp-head">
+            <div class="mp-title">Split L/R <em>— separate values per side</em></div>
+            <div class="mp-eg">e.g. Bulgarian SS</div>
+          </div>
+          <div class="tracking">
+            <span class="chk on"><span class="box"></span>Reps</span>
+            <span class="chk on"><span class="box"></span>Weight</span>
+            <span class="chk on"><span class="box"></span>Per-side</span>
+            <span class="chk on"><span class="box"></span>Split L/R</span>
+          </div>
+          <div class="add-set-form split-lr" style="margin-top:14px">
+            <div class="field field-reps">
+              <label>Reps</label>
+              <div class="stepper-pill">
+                <button class="step" type="button">−</button>
+                <div class="v-wrap"><span class="value">8</span></div>
+                <button class="step" type="button">+</button>
+              </div>
+            </div>
+            <div class="field">
+              <label>Left</label>
+              <div class="stepper-pill">
+                <button class="step" type="button">−</button>
+                <div class="v-wrap"><span class="value">27.5</span><span class="unit">kg</span></div>
+                <button class="step" type="button">+</button>
+              </div>
+            </div>
+            <div class="field">
+              <label>Right</label>
+              <div class="stepper-pill">
+                <button class="step" type="button">−</button>
+                <div class="v-wrap"><span class="value">22.5</span><span class="unit">kg</span></div>
+                <button class="step" type="button">+</button>
+              </div>
+            </div>
+            <button class="commit-set">▶ Log set</button>
+          </div>
+        </div>
 
         <!-- ─── COLLAPSED · DONE EXERCISE ───────────────────────── -->
         <span class="anno">Exercise · collapsed · done state</span>
