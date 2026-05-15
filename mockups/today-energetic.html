@@ -539,6 +539,10 @@
     display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: start;
   }
   .session-card .ex-mini .name { font: 800 14px/1 'Onest'; }
+  .session-card .ex-mini .name .mode-tag {
+    font: italic 400 12px/1 'Instrument Serif'; color: var(--ink-soft);
+    font-weight: 400; letter-spacing: 0; margin-left: 4px;
+  }
   .session-card .ex-mini .setbadges { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
   .session-card .ex-mini .setbadges .b { font: 700 9px/1 'Onest'; letter-spacing: 0.08em; padding: 4px 7px; background: var(--bg-2); border-radius: 999px; color: var(--ink-2); }
   .session-card .ex-mini .pills { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
@@ -1002,6 +1006,18 @@
             </div>
             <button class="add-prev">Add →</button>
           </div>
+          <div class="ex-mini">
+            <div>
+              <div class="name">DB Row <span class="mode-tag">· per-side</span></div>
+              <div class="pills">
+                <!-- 3 identical per-side sets: 8 reps × 22.5kg/side -->
+                <span class="spill xs"><span class="count">3×</span><span class="reps">8×</span><span class="weight" style="--w:60%">22.5kg/side</span></span>
+                <!-- back-off heavier single -->
+                <span class="spill xs"><span class="reps">6×</span><span class="weight" style="--w:85%">25kg/side</span></span>
+              </div>
+            </div>
+            <button class="add-prev">Add →</button>
+          </div>
         </article>
 
         <article class="session-card">
@@ -1018,6 +1034,21 @@
                 <span class="spill xs"><span class="reps">5×</span><span class="weight" style="--w:62%">120kg</span></span>
                 <span class="spill xs"><span class="reps">5×</span><span class="weight" style="--w:85%">140kg</span></span>
               </div>
+            </div>
+            <button class="add-prev">Add →</button>
+          </div>
+          <div class="ex-mini">
+            <div>
+              <div class="name">Bulgarian Split Squat <span class="mode-tag">· split L/R</span></div>
+              <div class="pills">
+                <!-- L=R equal → renders 25kg/side -->
+                <span class="spill xs"><span class="reps">8×</span><span class="weight" style="--w:78%">25kg/side</span></span>
+                <!-- L≠R → renders 27.5/22.5kg -->
+                <span class="spill xs"><span class="reps">8×</span><span class="weight" style="--w:85%">27.5/22.5kg</span></span>
+                <!-- L≠R, lighter overall -->
+                <span class="spill xs"><span class="reps">6×</span><span class="weight" style="--w:38%">25/22.5kg</span></span>
+              </div>
+              <div class="ex-notes">Notes: right side weak again; back off and even out next time.</div>
             </div>
             <button class="add-prev">Add →</button>
           </div>
