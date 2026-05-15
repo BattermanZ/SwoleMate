@@ -393,19 +393,21 @@
   .stepper-pill .step:hover { background: rgba(24,19,13,0.05); color: var(--ink); }
   .stepper-pill .step:active { background: var(--ink); color: var(--card); }
   .stepper-pill .v-wrap {
-    display: flex; align-items: baseline; justify-content: center; gap: 4px;
+    /* center value+unit group both horizontally AND vertically inside the pill */
+    display: flex; align-items: center; justify-content: center; gap: 4px;
     min-width: 0; padding: 0 4px;
   }
   .stepper-pill .value {
     font: 800 22px/1 'Onest'; color: var(--ink);
     font-variant-numeric: tabular-nums; letter-spacing: -0.03em;
-    /* sit as a content-sized inline-block so flex justify-center centers
-       the (value + unit) group rather than stretching the value cell */
+    /* content-sized so the flex container can center the (value+unit) group */
   }
   .stepper-pill .unit {
     font: 600 12px/1 'Onest'; color: var(--ink-soft);
     letter-spacing: 0.04em; text-transform: lowercase;
     flex: none;
+    /* nudge down so the unit's optical baseline aligns with the value */
+    transform: translateY(3px);
   }
   .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .timer-controls { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
@@ -557,13 +559,15 @@
   .end-modal h3 { margin: 0; text-align: center; font: 800 20px/1 'Onest'; letter-spacing: -0.015em; }
   .end-modal p { text-align: center; margin: 4px 0 14px; font: 500 13px/1.4 'Onest'; color: var(--ink-soft); }
   .moods { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-  .mood {
+  /* scope mood-card styles to the end-modal picker so the bare `.mood`
+     selector doesn't leak into <span class="mood"> in session-cards */
+  .moods .mood {
     padding: 14px 0; border-radius: 14px; border: 1.5px solid var(--line);
     background: var(--card-3); font: 400 32px/1 'Onest'; text-align: center; cursor: pointer;
     transition: transform 120ms ease;
   }
-  .mood:active { transform: scale(0.97); }
-  .mood.selected {
+  .moods .mood:active { transform: scale(0.97); }
+  .moods .mood.selected {
     background: linear-gradient(180deg, var(--clay-2), var(--clay));
     border-color: var(--clay-deep); color: white;
     box-shadow: 0 12px 26px -10px rgba(255,94,31,0.55);
