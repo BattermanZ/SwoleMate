@@ -1,0 +1,1835 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#f3ece1" />
+<title>SwoleMate · Design System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800;900&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  /* ── Energetic palette — same tokens as the mockups ───────────────── */
+  :root {
+    --bg: #f3ece1;
+    --bg-2: #ebe2d2;
+    --card: #fbf6ec;
+    --card-2: #f6efe1;
+    --card-3: #f1e8d4;
+    --ink: #18130d;
+    --ink-2: #443c30;
+    --ink-soft: #847562;
+    --ink-dim: #b2a892;
+    --line: #e5dccb;
+    --line-2: #d6cab0;
+    --sage: #4f7d54;
+    --success: #4f7d54;
+    --warn: #c87f1a;
+    --clay: #ff5e1f;
+    --clay-2: #ff7a2a;
+    --clay-deep: #c83a05;
+    --clay-text: #c83a05;
+    --gold: #d5a23a;
+    --surface-deep: #18130d;
+    --on-deep: #f3ece1;
+    --on-deep-soft: rgba(243, 236, 225, 0.55);
+    --on-deep-dim: rgba(243, 236, 225, 0.12);
+    --on-deep-line: rgba(243, 236, 225, 0.18);
+    --shadow-card: rgba(60, 40, 20, 0.18);
+    --shadow-strong: rgba(60, 40, 20, 0.35);
+    --shadow-soft: rgba(60, 40, 20, 0.15);
+    --bg-glow-1: #f7efde;
+    --bg-glow-2: #ead7c4;
+  }
+  :root[data-theme="dark"] {
+    --bg: #1a1410;
+    --bg-2: #221c16;
+    --card: #251e16;
+    --card-2: #2b231a;
+    --card-3: #2f2619;
+    --ink: #f3ece1;
+    --ink-2: #d4c8b0;
+    --ink-soft: #978a72;
+    --ink-dim: #5a4f42;
+    --line: #362c22;
+    --line-2: #463a2c;
+    --sage: #6fa074;
+    --success: #6fa074;
+    --warn: #e0a460;
+    --clay: #ff7a3d;
+    --clay-2: #ff924d;
+    --clay-deep: #c83a05;
+    --clay-text: #ff924d;
+    --gold: #e3b64f;
+    --surface-deep: #100c08;
+    --on-deep: #f3ece1;
+    --on-deep-soft: rgba(243, 236, 225, 0.55);
+    --on-deep-dim: rgba(243, 236, 225, 0.12);
+    --on-deep-line: rgba(243, 236, 225, 0.18);
+    --shadow-card: rgba(0, 0, 0, 0.4);
+    --shadow-strong: rgba(0, 0, 0, 0.6);
+    --shadow-soft: rgba(0, 0, 0, 0.3);
+    --bg-glow-1: #2a1d12;
+    --bg-glow-2: #1f1611;
+  }
+  :root[data-theme="dark"] { color-scheme: dark; }
+
+  /* ── Document-level layout ───────────────────────────────────────── */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    min-height: 100dvh;
+    background:
+      radial-gradient(900px 600px at 0% 0%, var(--bg-glow-1) 0%, transparent 60%),
+      radial-gradient(900px 600px at 100% 100%, var(--bg-glow-2) 0%, transparent 55%),
+      var(--bg);
+    color: var(--ink);
+    font-family: 'Onest', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    transition: background-color 240ms ease;
+  }
+
+  /* ── Top bar ─────────────────────────────────────────────────────── */
+  .topbar {
+    position: sticky; top: 0; z-index: 30;
+    background: color-mix(in oklab, var(--bg) 88%, transparent);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar-inner {
+    max-width: 1400px; margin: 0 auto;
+    padding: 14px 24px;
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .brand .logo {
+    width: 32px; height: 32px; border-radius: 9px; flex: none;
+    background: linear-gradient(135deg, var(--clay-2), var(--clay));
+    color: white; display: grid; place-items: center;
+    font: 800 13px/1 'Onest';
+    box-shadow: 0 4px 10px -3px rgba(255,94,31,0.55);
+  }
+  .brand .title {
+    font: 800 17px/1.1 'Onest'; letter-spacing: -0.01em;
+  }
+  .brand .title small {
+    display: block; font: italic 400 12px/1 'Instrument Serif'; color: var(--ink-soft); margin-top: 3px;
+  }
+  .top-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+  .top-actions a, .top-actions button {
+    border: 1px solid var(--line); background: var(--card);
+    color: var(--ink-2); padding: 8px 12px; border-radius: 999px;
+    font: 700 12px/1 'Onest'; cursor: pointer; text-decoration: none;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .top-actions a:hover, .top-actions button:hover { border-color: var(--clay); color: var(--clay-text); }
+  .top-actions .icon-btn { padding: 8px; width: 36px; height: 36px; justify-content: center; }
+  .theme-toggle .ico-sun { display: none; }
+  .theme-toggle .ico-moon { display: inline-block; }
+  [data-theme="dark"] .theme-toggle .ico-sun { display: inline-block; }
+  [data-theme="dark"] .theme-toggle .ico-moon { display: none; }
+
+  /* ── Layout grid: sidebar + main ─────────────────────────────────── */
+  .layout {
+    max-width: 1400px; margin: 0 auto;
+    display: grid; grid-template-columns: 240px minmax(0, 1fr);
+    gap: 36px; padding: 32px 24px 80px;
+  }
+  @media (max-width: 880px) {
+    .layout { grid-template-columns: 1fr; gap: 16px; padding: 20px 18px 60px; }
+    .sidebar { position: static; max-height: none; }
+  }
+
+  /* ── Sidebar TOC ─────────────────────────────────────────────────── */
+  .sidebar {
+    position: sticky; top: 86px; max-height: calc(100dvh - 110px); overflow-y: auto;
+    padding-right: 8px;
+  }
+  .sidebar h3 {
+    margin: 18px 0 6px; font: 700 10px/1 'Onest'; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+  .sidebar h3:first-child { margin-top: 0; }
+  .sidebar a {
+    display: block; padding: 7px 10px; border-radius: 8px;
+    font: 600 13px/1.2 'Onest'; color: var(--ink-2); text-decoration: none;
+  }
+  .sidebar a:hover { background: var(--card); color: var(--clay-text); }
+  .sidebar a.active { background: color-mix(in oklab, var(--clay) 10%, var(--card)); color: var(--clay-text); }
+
+  /* ── Main ────────────────────────────────────────────────────────── */
+  main { min-width: 0; }
+
+  /* Hero intro */
+  .intro {
+    background: var(--surface-deep); color: var(--on-deep);
+    border-radius: 28px; padding: 34px 36px;
+    position: relative; overflow: hidden;
+    box-shadow: 0 24px 48px -16px var(--shadow-strong);
+    margin-bottom: 28px;
+  }
+  .intro::before {
+    content: ""; position: absolute; top: -150px; right: -120px; width: 360px; height: 360px;
+    border-radius: 50%; background: radial-gradient(circle, rgba(255,94,31,0.5), transparent 65%);
+  }
+  .intro::after {
+    content: ""; position: absolute; bottom: -160px; left: -100px; width: 320px; height: 320px;
+    border-radius: 50%; background: radial-gradient(circle, rgba(213,162,58,0.35), transparent 65%);
+  }
+  .intro .kicker {
+    font: 700 11px/1 'Onest'; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--clay-2); position: relative;
+  }
+  .intro h1 {
+    margin: 12px 0 0; font: 800 40px/1.02 'Onest'; letter-spacing: -0.025em; position: relative;
+  }
+  .intro h1 em {
+    font: italic 400 40px/1.02 'Instrument Serif'; color: var(--clay-2);
+  }
+  .intro p {
+    margin: 14px 0 0; font: 500 15px/1.5 'Onest'; color: var(--on-deep-soft); max-width: 60ch; position: relative;
+  }
+  .intro .meta {
+    margin-top: 18px; position: relative; display: flex; flex-wrap: wrap; gap: 8px;
+  }
+  .intro .meta span {
+    font: 700 11px/1 'Onest'; letter-spacing: 0.06em;
+    padding: 7px 12px; border-radius: 999px;
+    background: color-mix(in oklab, var(--on-deep) 7%, transparent);
+    border: 1px solid var(--on-deep-line);
+    color: var(--on-deep);
+  }
+  .intro .meta span b { color: var(--clay-2); margin-right: 4px; }
+
+  /* Section headers */
+  section.doc { margin-top: 56px; scroll-margin-top: 100px; }
+  section.doc:first-of-type { margin-top: 8px; }
+  section.doc > h2 {
+    margin: 0 0 4px; font: 800 28px/1.05 'Onest'; letter-spacing: -0.025em;
+  }
+  section.doc > h2 em {
+    font: italic 400 24px/1.05 'Instrument Serif'; color: var(--ink-soft); font-weight: 400;
+    letter-spacing: 0; margin-left: 6px;
+  }
+  section.doc > p.lede {
+    margin: 0 0 24px; font: 500 15px/1.55 'Onest'; color: var(--ink-2); max-width: 64ch;
+  }
+
+  /* Sub-sections inside docs */
+  section.doc h3.sub {
+    margin: 32px 0 12px; font: 800 18px/1 'Onest'; letter-spacing: -0.015em;
+  }
+  section.doc h3.sub em {
+    font: italic 400 15px/1 'Instrument Serif'; color: var(--ink-soft); font-weight: 400; margin-left: 4px;
+    letter-spacing: 0;
+  }
+  section.doc h4.sub {
+    margin: 22px 0 10px; font: 700 11px/1 'Onest'; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+
+  section.doc p {
+    margin: 0 0 14px; font: 500 14px/1.55 'Onest'; color: var(--ink-2); max-width: 64ch;
+  }
+  section.doc p code, section.doc li code {
+    font: 700 12.5px/1 'JetBrains Mono'; padding: 2px 6px; border-radius: 5px;
+    background: var(--card-3); color: var(--clay-text); border: 1px solid var(--line);
+  }
+  section.doc ul { padding-left: 18px; margin: 0 0 14px; }
+  section.doc ul li { margin: 4px 0; font: 500 14px/1.5 'Onest'; color: var(--ink-2); }
+
+  /* ── Token swatch grid ───────────────────────────────────────────── */
+  .swatch-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px;
+  }
+  .swatch {
+    background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+    overflow: hidden; box-shadow: 0 4px 12px -8px var(--shadow-soft);
+  }
+  .swatch .sample {
+    height: 90px; border-bottom: 1px solid var(--line);
+    display: flex; align-items: flex-end; justify-content: space-between;
+    padding: 10px 12px; gap: 6px;
+  }
+  .swatch .sample .vlabel {
+    font: 700 9px/1 'JetBrains Mono'; letter-spacing: 0.06em; padding: 3px 6px;
+    background: color-mix(in oklab, var(--bg) 80%, transparent); color: var(--ink-2);
+    border-radius: 4px;
+  }
+  .swatch .meta { padding: 10px 12px; }
+  .swatch .name {
+    font: 800 13px/1 'JetBrains Mono'; letter-spacing: -0.01em; color: var(--ink);
+  }
+  .swatch .role {
+    margin-top: 4px; font: 500 11px/1.4 'Onest'; color: var(--ink-soft);
+  }
+
+  /* Tokens that show a surface */
+  .swatch.surface .sample { background: var(--surface, var(--bg)); }
+  .swatch.surface .sample .vlabel.lite { background: rgba(255,255,255,0.85); color: #18130d; }
+  .swatch.surface .sample .vlabel.dim  { background: rgba(0,0,0,0.6); color: #f3ece1; }
+
+  /* Tokens that show a text color (rendering glyph) */
+  .swatch.text .sample {
+    background: var(--text-bg, var(--card-3));
+    align-items: center; justify-content: center; padding: 0;
+  }
+  .swatch.text .sample .glyph {
+    font: 800 38px/1 'Onest'; letter-spacing: -0.03em; color: var(--text-color, var(--ink));
+  }
+  .swatch.text .sample.deep { background: var(--surface-deep); }
+
+  /* Tokens that show a line/border */
+  .swatch.line .sample {
+    background: var(--card); display: grid; place-items: center; padding: 0;
+  }
+  .swatch.line .sample .rule {
+    width: 80%; height: var(--rule-thickness, 1px); background: var(--rule, var(--line));
+  }
+
+  /* Tokens that show shadow */
+  .swatch.shadow .sample {
+    background: var(--bg); padding: 18px; display: grid; place-items: center;
+  }
+  .swatch.shadow .sample .box {
+    width: 80px; height: 40px; border-radius: 10px; background: var(--card);
+    border: 1px solid var(--line);
+    box-shadow: 0 8px 18px -10px var(--demo-shadow, var(--shadow-card));
+  }
+
+  /* ── Type specimen ───────────────────────────────────────────────── */
+  .type-list { display: grid; gap: 10px; }
+  .type-row {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 14px 18px; display: grid;
+    grid-template-columns: 140px minmax(0, 1fr) auto; gap: 14px; align-items: center;
+  }
+  .type-row .meta { min-width: 0; }
+  .type-row .meta .label {
+    font: 700 10px/1 'Onest'; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-soft);
+  }
+  .type-row .meta .spec {
+    margin-top: 4px; font: 600 12px/1.3 'JetBrains Mono'; color: var(--ink-2);
+  }
+  .type-row .sample { min-width: 0; overflow: hidden; }
+  .type-row .role { font: italic 400 12px/1.3 'Instrument Serif'; color: var(--ink-soft); text-align: right; }
+
+  /* ── Component card ──────────────────────────────────────────────── */
+  .cmp {
+    background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+    overflow: hidden; box-shadow: 0 6px 18px -10px var(--shadow-card);
+    margin: 14px 0 32px;
+  }
+  .cmp .head {
+    padding: 14px 18px; display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  .cmp .head .title {
+    font: 800 17px/1 'Onest'; letter-spacing: -0.01em;
+  }
+  .cmp .head .title em {
+    font: italic 400 13px/1 'Instrument Serif'; color: var(--ink-soft); margin-left: 4px; font-weight: 400;
+    letter-spacing: 0;
+  }
+  .cmp .head .role {
+    font: 600 11px/1.4 'Onest'; color: var(--ink-soft);
+    text-align: right; max-width: 36ch;
+  }
+
+  .cmp .preview {
+    padding: 24px; background:
+      radial-gradient(600px 300px at 50% 0%, var(--bg-glow-1) 0%, transparent 80%),
+      var(--bg);
+    border-bottom: 1px solid var(--line);
+  }
+  .cmp .preview.deep {
+    background: radial-gradient(circle at 30% 0%, rgba(255,94,31,0.2), transparent 60%), var(--surface-deep);
+  }
+  .cmp .preview.tight { padding: 18px; }
+  .cmp .preview-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: center; }
+  .cmp .preview-stack { display: flex; flex-direction: column; gap: 10px; }
+
+  .cmp .body { padding: 16px 18px; }
+  .cmp .body .label {
+    font: 700 10px/1 'Onest'; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-soft);
+    margin-bottom: 8px;
+  }
+  .cmp .body p {
+    margin: 0 0 10px; font: 500 13px/1.5 'Onest'; color: var(--ink-2); max-width: 70ch;
+  }
+  .cmp .body ul {
+    margin: 0 0 10px; padding-left: 18px;
+  }
+  .cmp .body ul li {
+    font: 500 13px/1.5 'Onest'; color: var(--ink-2); margin: 3px 0;
+  }
+  .cmp .body ul li b { color: var(--ink); }
+  .cmp .body ul li code { font: 700 12px/1 'JetBrains Mono'; color: var(--clay-text); padding: 1px 5px; background: var(--card-3); border-radius: 4px; border: 1px solid var(--line); }
+
+  /* Code blocks */
+  pre.code {
+    margin: 8px 0 0; padding: 14px 16px; border-radius: 12px;
+    background: var(--surface-deep); color: var(--on-deep);
+    font: 500 12px/1.6 'JetBrains Mono'; overflow-x: auto;
+    border: 1px solid color-mix(in oklab, var(--on-deep) 10%, transparent);
+  }
+  pre.code .tag { color: var(--clay-2); }
+  pre.code .attr { color: var(--gold); }
+  pre.code .str { color: #b2d18f; }
+  pre.code .com { color: rgba(243,236,225,0.45); font-style: italic; }
+
+  /* Do/Don't blocks */
+  .ddrow {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+    margin-top: 10px;
+  }
+  @media (max-width: 720px) { .ddrow { grid-template-columns: 1fr; } }
+  .dd {
+    padding: 12px 14px; border-radius: 12px;
+    border: 1px solid var(--line);
+  }
+  .dd.do { background: color-mix(in oklab, var(--sage) 8%, var(--card)); border-color: color-mix(in oklab, var(--sage) 25%, var(--line)); }
+  .dd.dont { background: color-mix(in oklab, var(--clay) 8%, var(--card)); border-color: color-mix(in oklab, var(--clay) 25%, var(--line)); }
+  .dd .k { font: 800 10px/1 'Onest'; letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 6px; }
+  .dd.do .k { color: var(--sage); }
+  .dd.dont .k { color: var(--clay-text); }
+  .dd p { margin: 0; font: 500 12.5px/1.45 'Onest'; color: var(--ink-2); }
+
+  /* ── Inline live demos (drop-in copies of component CSS) ─────────── */
+  /* Each component below mirrors the CSS from today-energetic.html /
+     progress-energetic.html so the spec page can show real renders.
+     Implementation guidance refers to these same selectors. */
+
+  /* App bar (live demo) */
+  .demo-appbar {
+    width: 100%; max-width: 360px;
+    padding: 12px 16px 10px; display: flex; align-items: center; justify-content: space-between;
+    background: color-mix(in oklab, var(--bg) 82%, transparent); backdrop-filter: blur(12px);
+    border: 1px solid var(--line); border-radius: 14px;
+    gap: 8px;
+  }
+  .demo-appbar .brnd { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .demo-appbar .brnd .logo {
+    width: 30px; height: 30px; border-radius: 9px; flex: none;
+    background: linear-gradient(135deg, var(--clay-2), var(--clay));
+    color: white; display: grid; place-items: center; font: 800 12px/1 'Onest';
+    box-shadow: 0 4px 10px -3px rgba(255,94,31,0.55);
+  }
+  .demo-appbar .brnd .name { font: 800 17px/1 'Onest'; letter-spacing: -0.01em; }
+  .demo-appbar .icns { display: flex; gap: 2px; }
+  .demo-appbar .icn-btn {
+    width: 34px; height: 34px; border-radius: 999px;
+    background: transparent; border: 0; color: var(--ink-2);
+    display: grid; place-items: center; cursor: pointer;
+  }
+
+  /* Buttons */
+  .btn-primary {
+    padding: 14px 22px; border: 0; border-radius: 999px;
+    background: linear-gradient(180deg, var(--clay-2), var(--clay)); color: white;
+    font: 800 14px/1 'Onest';
+    box-shadow: 0 14px 28px -10px rgba(255,94,31,0.55), inset 0 -3px 0 var(--clay-deep);
+    cursor: pointer;
+  }
+  .btn-soft {
+    padding: 13px 18px; border-radius: 999px; border: 0;
+    background: var(--bg-2); color: var(--ink-2); font: 700 13px/1 'Onest'; cursor: pointer;
+  }
+  .btn-ghost {
+    padding: 12px 16px; border-radius: 999px;
+    background: transparent; color: var(--ink-soft); border: 1px solid var(--line);
+    font: 700 12px/1 'Onest'; cursor: pointer;
+  }
+  .btn-ink {
+    padding: 12px 18px; border: 0; border-radius: 999px;
+    background: var(--ink); color: var(--card); font: 700 13px/1 'Onest';
+    cursor: pointer;
+  }
+  .btn-success {
+    padding: 12px 18px; border: 0; border-radius: 999px; color: white; cursor: pointer;
+    background: linear-gradient(180deg, #5e9264, var(--sage));
+    font: 800 13px/1 'Onest';
+    box-shadow: 0 8px 18px -6px rgba(79,125,84,0.5);
+  }
+  .icn-btn-demo {
+    width: 38px; height: 38px; border-radius: 10px; border: 0;
+    background: var(--bg-2); color: var(--ink-soft); font: 700 14px/1 'Onest'; cursor: pointer;
+    display: grid; place-items: center;
+  }
+
+  /* Spill (segmented set pill) */
+  .spill {
+    display: inline-flex; align-items: stretch; overflow: hidden;
+    border-radius: 999px;
+    border: 1px solid color-mix(in oklab, var(--ink) 10%, transparent);
+    box-shadow: 0 4px 10px -4px var(--shadow-soft);
+    font: 800 12px/1 'Onest'; font-variant-numeric: tabular-nums;
+  }
+  .spill > span {
+    padding: 7px 10px; display: inline-flex; align-items: center;
+    border-left: 1px solid color-mix(in oklab, var(--ink) 10%, transparent);
+    white-space: nowrap;
+  }
+  .spill > span:first-child { border-left: 0; }
+  .spill .count { background: var(--gold); color: #fff; padding: 7px 11px; }
+  .spill .reps { background: var(--bg-2); color: var(--ink-2); }
+  .spill .duration { background: rgba(255,122,42,0.2); color: var(--clay-text); }
+  .spill .weight { background: color-mix(in oklab, var(--clay) var(--w, 60%), var(--bg-2)); color: var(--ink); }
+  .spill .weight.bw { background: color-mix(in oklab, var(--ink) 14%, var(--bg-2)); }
+  .spill.pr { border-color: var(--gold); box-shadow: 0 6px 14px -4px color-mix(in oklab, var(--gold) 55%, transparent); }
+  .spill.pr .weight::after { content: " ★"; color: var(--gold); margin-left: 3px; }
+
+  /* Stepper pill */
+  .stepper-pill {
+    display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px;
+    align-items: stretch; height: 52px; overflow: hidden;
+    background: var(--card-3); border: 1px solid var(--line); border-radius: 999px;
+    min-width: 180px;
+  }
+  .stepper-pill .step {
+    background: transparent; border: 0; padding: 0; cursor: pointer;
+    font: 800 22px/1 'Onest'; color: var(--ink-soft);
+    display: grid; place-items: center;
+  }
+  .stepper-pill .v-wrap {
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    min-width: 0; padding: 0 4px;
+  }
+  .stepper-pill .value {
+    font: 800 22px/1 'Onest'; color: var(--ink);
+    font-variant-numeric: tabular-nums; letter-spacing: -0.03em;
+  }
+  .stepper-pill .unit {
+    font: 600 12px/1 'Onest'; color: var(--ink-soft); transform: translateY(3px);
+    letter-spacing: 0.04em; text-transform: lowercase; flex: none;
+  }
+
+  /* Tracking chk */
+  .chk {
+    display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px;
+    background: var(--bg-2); border: 1px solid transparent; border-radius: 999px;
+    font: 700 11px/1 'Onest'; color: var(--ink-2); cursor: pointer;
+  }
+  .chk.on { background: var(--ink); color: var(--card); }
+  .chk .box { width: 14px; height: 14px; border: 1.5px solid var(--ink-dim); border-radius: 4px; display: grid; place-items: center; }
+  .chk.on .box { background: var(--clay); border-color: var(--clay); }
+  .chk.on .box::after { content: ""; width: 5px; height: 9px; border-right: 2px solid white; border-bottom: 2px solid white; transform: rotate(45deg) translate(-1px,-1px); display: block; }
+
+  /* Chip */
+  .chip {
+    font: 700 11px/1 'Onest'; padding: 5px 8px; border-radius: 8px;
+    background: var(--bg-2); color: var(--ink-2);
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+
+  /* Badge */
+  .badge {
+    font: 700 9px/1 'Onest'; letter-spacing: 0.16em; text-transform: uppercase;
+    padding: 5px 8px; border-radius: 999px; display: inline-flex; align-items: center; gap: 4px;
+  }
+  .badge.done { background: color-mix(in oklab, var(--sage) 22%, var(--card)); color: var(--sage); }
+  .badge.live { background: var(--clay); color: white; }
+  .badge.live::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: white; animation: pulse 1s ease-in-out infinite; }
+  .badge.soft { background: var(--bg-2); color: var(--ink-2); }
+
+  @keyframes pulse { 50% { opacity: 0.3; transform: scale(0.85); } }
+
+  /* Cards / surfaces */
+  .demo-card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+    padding: 14px 16px; box-shadow: 0 4px 12px -8px var(--shadow-card);
+    min-width: 220px;
+  }
+  .demo-card .title { font: 800 14px/1 'Onest'; letter-spacing: -0.01em; }
+  .demo-card .meta { margin-top: 6px; font: 500 12px/1.4 'Onest'; color: var(--ink-soft); }
+
+  /* Hero mini */
+  .demo-hero {
+    background: var(--surface-deep); color: var(--on-deep);
+    border-radius: 22px; padding: 20px 22px;
+    position: relative; overflow: hidden;
+    box-shadow: 0 14px 32px -12px var(--shadow-strong);
+    max-width: 340px;
+  }
+  .demo-hero::before {
+    content: ""; position: absolute; top: -90px; right: -80px; width: 220px; height: 220px;
+    border-radius: 50%; background: radial-gradient(circle, rgba(255,94,31,0.5), transparent 65%);
+  }
+  .demo-hero::after {
+    content: ""; position: absolute; bottom: -100px; left: -60px; width: 200px; height: 200px;
+    border-radius: 50%; background: radial-gradient(circle, rgba(213,162,58,0.32), transparent 65%);
+  }
+  .demo-hero .kicker {
+    font: 700 10px/1 'Onest'; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--clay-2); position: relative;
+  }
+  .demo-hero h3 { margin: 8px 0 0; font: 800 22px/1.05 'Onest'; letter-spacing: -0.02em; position: relative; }
+  .demo-hero h3 em { font: italic 400 22px/1 'Instrument Serif'; color: var(--clay-2); }
+
+  /* PR flash */
+  .demo-pr-flash {
+    padding: 12px 14px; border-radius: 16px;
+    background: linear-gradient(95deg, var(--clay) 0%, var(--clay-2) 60%, var(--gold) 100%);
+    color: #fff; max-width: 340px;
+    display: grid; grid-template-columns: 38px 1fr auto; align-items: center; gap: 12px;
+    box-shadow: 0 14px 32px -10px rgba(255,94,31,0.5);
+    position: relative; overflow: hidden;
+  }
+  .demo-pr-flash::after {
+    content: ""; position: absolute; inset: -50% -20% auto auto; width: 180px; height: 180px;
+    background: radial-gradient(circle, rgba(255,255,255,0.35), transparent 60%);
+  }
+  .demo-pr-flash .icn { width: 38px; height: 38px; border-radius: 12px; background: rgba(255,255,255,0.18); display: grid; place-items: center; font: 800 19px/1 'Onest'; }
+  .demo-pr-flash .k { font: 700 10px/1 'Onest'; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(255,255,255,0.85); }
+  .demo-pr-flash .v { font: italic 400 17px/1.1 'Instrument Serif'; margin-top: 4px; }
+  .demo-pr-flash .v b { font-style: normal; font-family: 'Onest'; font-weight: 800; }
+
+  /* Notice */
+  .demo-notice {
+    padding: 12px 14px; background: var(--card); border: 1px solid var(--line);
+    border-radius: 14px; display: flex; align-items: center; gap: 10px;
+    font: 500 13px/1.35 'Onest'; color: var(--ink-2);
+    box-shadow: 0 4px 12px -8px var(--shadow-card); max-width: 340px;
+  }
+  .demo-notice .icn {
+    flex: none; width: 22px; height: 22px; border-radius: 7px;
+    background: color-mix(in oklab, var(--sage) 18%, transparent); color: var(--sage);
+    display: grid; place-items: center; font: 800 13px/1 'Onest';
+  }
+  .demo-notice em { color: var(--ink-soft); font-style: normal; font-weight: 500; }
+
+  /* Tabs (segmented) */
+  .demo-tabs {
+    background: var(--card); border: 1px solid var(--line); border-radius: 999px;
+    padding: 4px; display: inline-grid; grid-template-columns: repeat(3, 1fr); gap: 2px;
+    min-width: 280px;
+  }
+  .demo-tabs button {
+    border: 0; background: transparent; padding: 10px 16px;
+    font: 700 12px/1 'Onest'; letter-spacing: 0.06em; color: var(--ink-soft); cursor: pointer;
+    border-radius: 999px;
+  }
+  .demo-tabs button.active {
+    background: linear-gradient(180deg, var(--clay-2), var(--clay)); color: white;
+    box-shadow: 0 6px 14px -4px rgba(255,94,31,0.4);
+  }
+
+  /* Exercise picker */
+  .demo-picker {
+    background: var(--card-3); border: 1px solid var(--line); border-radius: 14px;
+    padding: 4px 4px 4px 16px;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    cursor: pointer; min-width: 260px;
+  }
+  .demo-picker .picked { font: 800 15px/1.1 'Onest'; letter-spacing: -0.01em; color: var(--ink); }
+  .demo-picker .picked small { display: block; font: 500 11px/1 'Onest'; color: var(--ink-soft); margin-top: 4px; font-weight: 500; }
+  .demo-picker .open {
+    width: 40px; height: 40px; border-radius: 12px; border: 0;
+    background: var(--ink); color: var(--card); font: 800 14px/1 'Onest';
+    display: grid; place-items: center; flex: none;
+  }
+
+  /* Period metric tile */
+  .demo-metric {
+    position: relative; overflow: hidden;
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; padding: 10px 12px 10px 16px;
+    min-width: 150px;
+  }
+  .demo-metric::before {
+    content: ""; position: absolute; top: 8px; bottom: 8px; left: 0; width: 3px; border-radius: 0 3px 3px 0;
+    background: var(--rail, var(--clay));
+  }
+  .demo-metric .k { font: 700 9px/1 'Onest'; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-soft); }
+  .demo-metric .v { margin-top: 5px; font: 800 19px/1 'Onest'; letter-spacing: -0.02em; }
+  .demo-metric .v small { font: 500 10px/1 'Onest'; color: var(--ink-soft); margin-left: 2px; font-weight: 600; }
+  .demo-metric .delta { margin-top: 3px; font: 600 10px/1 'Onest'; color: var(--ink-soft); }
+  .demo-metric .delta.up { color: var(--sage); }
+  .demo-metric .delta.down { color: var(--clay-text); }
+
+  /* PR row mini */
+  .demo-prrow {
+    position: relative; overflow: hidden;
+    background: var(--card-3); border: 1px solid var(--line);
+    border-radius: 14px; padding: 12px 14px 12px 18px; min-width: 320px;
+  }
+  .demo-prrow::before {
+    content: ""; position: absolute; top: 10px; bottom: 10px; left: 0; width: 3px; border-radius: 0 3px 3px 0;
+    background: var(--gold);
+  }
+  .demo-prrow .ex-name { font: 800 14px/1 'Onest'; letter-spacing: -0.01em; }
+  .demo-prrow .body { margin-top: 6px; font: 500 13px/1.4 'Onest'; color: var(--ink-2); display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; }
+  .demo-prrow .pr-tag {
+    font: 700 9px/1 'Onest'; letter-spacing: 0.15em; text-transform: uppercase;
+    padding: 4px 8px; border-radius: 999px; white-space: nowrap;
+    background: color-mix(in oklab, var(--gold) 24%, var(--card)); color: var(--clay-text);
+    border: 1px solid color-mix(in oklab, var(--gold) 40%, var(--line));
+  }
+  .demo-prrow .new-v { font: 800 16px/1 'Onest'; color: var(--ink); letter-spacing: -0.015em; }
+
+  /* Input field demo */
+  .demo-input {
+    background: var(--card-3); border: 1px solid var(--line); border-radius: 10px;
+    padding: 11px 12px; font: 500 14px/1.2 'Onest'; color: var(--ink); outline: 0;
+    min-width: 220px;
+  }
+  .demo-textarea {
+    background: var(--card-3); border: 1px solid var(--line); border-radius: 10px;
+    padding: 11px 12px; font: 500 14px/1.45 'Onest'; color: var(--ink); outline: 0;
+    min-height: 72px; min-width: 280px; resize: vertical;
+  }
+
+  /* Mini bottom nav demo */
+  .demo-nav {
+    background: color-mix(in oklab, var(--card) 92%, transparent); backdrop-filter: blur(14px);
+    border-radius: 28px; border: 1px solid var(--line);
+    padding: 6px; display: grid; grid-template-columns: repeat(5, 1fr); align-items: center;
+    box-shadow: 0 16px 32px -10px var(--shadow-card);
+    width: 100%; max-width: 360px;
+  }
+  .demo-nav a { display: grid; place-items: center; gap: 4px; color: var(--ink-soft); text-decoration: none; font: 700 10px/1 'Onest'; padding: 8px 0; }
+  .demo-nav a .pill-nav { width: 30px; height: 30px; border-radius: 16px; display: grid; place-items: center; background: var(--bg-2); }
+  .demo-nav a.active { color: var(--clay); }
+  .demo-nav a.active .pill-nav { background: var(--clay); color: white; box-shadow: 0 6px 14px -6px var(--clay); }
+
+  /* Skeleton mapping table */
+  .table {
+    width: 100%; border-collapse: separate; border-spacing: 0;
+    border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+    background: var(--card);
+  }
+  .table th, .table td {
+    padding: 10px 14px; text-align: left; font: 500 13px/1.4 'Onest';
+    border-bottom: 1px solid var(--line);
+  }
+  .table th {
+    background: var(--card-3); font-weight: 800; letter-spacing: 0.05em; color: var(--ink-2);
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.15em;
+  }
+  .table tr:last-child td { border-bottom: 0; }
+  .table td code {
+    font: 700 12px/1 'JetBrains Mono'; padding: 2px 6px; border-radius: 4px;
+    background: var(--card-3); color: var(--clay-text); border: 1px solid var(--line);
+    white-space: nowrap;
+  }
+
+  /* Footer */
+  footer.page {
+    max-width: 1400px; margin: 60px auto 40px; padding: 0 24px;
+    display: flex; justify-content: space-between; align-items: center; gap: 16px;
+    border-top: 1px solid var(--line); padding-top: 24px;
+    font: 500 12px/1.5 'Onest'; color: var(--ink-soft);
+  }
+  footer.page a { color: var(--ink-2); }
+
+</style>
+</head>
+<body>
+
+  <!-- ─── TOP BAR ──────────────────────────────────────────────────── -->
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="logo">SM</span>
+        <div class="title">SwoleMate <small>design system · v0.1 · 2026-05-15</small></div>
+      </div>
+      <div class="top-actions">
+        <a href="../mockups/today-energetic.html">↗ Today mockup</a>
+        <a href="../mockups/progress-energetic.html">↗ Progress mockup</a>
+        <button class="icon-btn theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+          <svg class="ico-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <svg class="ico-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ─── LAYOUT ─────────────────────────────────────────────────── -->
+  <div class="layout">
+
+    <!-- Sidebar TOC -->
+    <aside class="sidebar">
+      <h3>Foundations</h3>
+      <a href="#color" class="active">Color tokens</a>
+      <a href="#typography">Typography</a>
+      <a href="#spacing">Spacing &amp; radius</a>
+      <a href="#elevation">Elevation</a>
+      <a href="#motion">Motion</a>
+
+      <h3>Components</h3>
+      <a href="#app-shell">App shell</a>
+      <a href="#hero">Hero card</a>
+      <a href="#pr-flash">PR flash banner</a>
+      <a href="#notice">Notice banner</a>
+      <a href="#tabs">Tabs (segmented)</a>
+      <a href="#bottom-nav">Bottom nav</a>
+
+      <h3>Surfaces</h3>
+      <a href="#card">Card / section</a>
+      <a href="#metric">Metric tile</a>
+      <a href="#period-card">Period card</a>
+      <a href="#pr-row">PR row</a>
+      <a href="#session-card">Session card</a>
+
+      <h3>Pills &amp; data</h3>
+      <a href="#spill">Spill (set pill)</a>
+      <a href="#rpill">Rep PR pill</a>
+      <a href="#chip">Chips &amp; badges</a>
+
+      <h3>Forms</h3>
+      <a href="#input">Text input</a>
+      <a href="#stepper">Stepper pill</a>
+      <a href="#chk">Tracking toggle</a>
+      <a href="#picker">Picker</a>
+
+      <h3>Buttons</h3>
+      <a href="#buttons">All variants</a>
+
+      <h3>Data viz</h3>
+      <a href="#charts">Chart card</a>
+
+      <h3>Reference</h3>
+      <a href="#skeleton-map">Skeleton mapping</a>
+      <a href="#migration">Migration plan</a>
+    </aside>
+
+    <!-- Main -->
+    <main>
+
+      <!-- ─── INTRO HERO ─────────────────────────────────────────── -->
+      <section class="intro">
+        <div class="kicker">► Design system · v0.1</div>
+        <h1>Warm, loud, <em>built for the gym.</em></h1>
+        <p>
+          A focused design language for SwoleMate: warm cream surfaces, a hot-clay accent,
+          gold for records, sage for progress, and one always-dark hero surface for live
+          moments. Two themes that share the same vocabulary. Every token, component, and
+          state lives on this page as a real rendering — not a screenshot.
+        </p>
+        <div class="meta">
+          <span><b>Stack</b> Svelte 5 · SvelteKit · Tailwind v4 · Skeleton v4 (replacing theme)</span>
+          <span><b>Surfaces</b> Today · Progress · History · Templates · Settings</span>
+          <span><b>Voice</b> Onest + Instrument Serif</span>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <!-- FOUNDATIONS · COLOR                                         -->
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <section class="doc" id="color">
+        <h2>Color <em>— tokens</em></h2>
+        <p class="lede">
+          Every color is a CSS variable defined on <code>:root</code> for light and
+          <code>:root[data-theme="dark"]</code> for dark. Components never hardcode
+          hex values; they reach for tokens. Implementation-wise, drop the token
+          block into <code>app.css</code> to override Skeleton's <code>:root</code>
+          and ride the existing variant-* shims through the transition.
+        </p>
+
+        <h3 class="sub">Surfaces <em>— the canvas tones</em></h3>
+        <div class="swatch-grid">
+          <div class="swatch surface" style="--surface: var(--bg);">
+            <div class="sample"><span class="vlabel lite">#f3ece1</span><span class="vlabel dim">#1a1410</span></div>
+            <div class="meta"><div class="name">--bg</div><div class="role">Page background. Warm cream / deep brown.</div></div>
+          </div>
+          <div class="swatch surface" style="--surface: var(--bg-2);">
+            <div class="sample"><span class="vlabel lite">#ebe2d2</span><span class="vlabel dim">#221c16</span></div>
+            <div class="meta"><div class="name">--bg-2</div><div class="role">Subtle variant of bg — used for chips, recessed wells.</div></div>
+          </div>
+          <div class="swatch surface" style="--surface: var(--card);">
+            <div class="sample"><span class="vlabel lite">#fbf6ec</span><span class="vlabel dim">#251e16</span></div>
+            <div class="meta"><div class="name">--card</div><div class="role">Default card surface — sits 1 level above page.</div></div>
+          </div>
+          <div class="swatch surface" style="--surface: var(--card-2);">
+            <div class="sample"><span class="vlabel lite">#f6efe1</span><span class="vlabel dim">#2b231a</span></div>
+            <div class="meta"><div class="name">--card-2</div><div class="role">Nested card / composer band inside a card.</div></div>
+          </div>
+          <div class="swatch surface" style="--surface: var(--card-3);">
+            <div class="sample"><span class="vlabel lite">#f1e8d4</span><span class="vlabel dim">#2f2619</span></div>
+            <div class="meta"><div class="name">--card-3</div><div class="role">Input / pill / inset surface within a card.</div></div>
+          </div>
+          <div class="swatch surface" style="--surface: var(--surface-deep);">
+            <div class="sample"><span class="vlabel dim">#18130d</span><span class="vlabel dim">#100c08</span></div>
+            <div class="meta"><div class="name">--surface-deep</div><div class="role"><b>Always-dark</b> — hero, live row, timer overlay. Stays dark in both modes.</div></div>
+          </div>
+        </div>
+
+        <h3 class="sub">Text <em>— ink, glyph, on-deep</em></h3>
+        <div class="swatch-grid">
+          <div class="swatch text" style="--text-color: var(--ink); --text-bg: var(--bg);">
+            <div class="sample"><span class="glyph">Aa</span></div>
+            <div class="meta"><div class="name">--ink</div><div class="role">Primary text. Inverts to cream in dark mode.</div></div>
+          </div>
+          <div class="swatch text" style="--text-color: var(--ink-2); --text-bg: var(--bg);">
+            <div class="sample"><span class="glyph">Aa</span></div>
+            <div class="meta"><div class="name">--ink-2</div><div class="role">Secondary text — body copy, captions with weight.</div></div>
+          </div>
+          <div class="swatch text" style="--text-color: var(--ink-soft); --text-bg: var(--bg);">
+            <div class="sample"><span class="glyph">Aa</span></div>
+            <div class="meta"><div class="name">--ink-soft</div><div class="role">Muted — labels, helper text, meta. Watch contrast on tinted bgs.</div></div>
+          </div>
+          <div class="swatch text" style="--text-color: var(--ink-dim); --text-bg: var(--bg);">
+            <div class="sample"><span class="glyph">Aa</span></div>
+            <div class="meta"><div class="name">--ink-dim</div><div class="role">Disabled / placeholder / unfocused dots.</div></div>
+          </div>
+          <div class="swatch text deep" style="--text-color: var(--on-deep);">
+            <div class="sample deep"><span class="glyph">Aa</span></div>
+            <div class="meta"><div class="name">--on-deep</div><div class="role">Text on <code>--surface-deep</code>. Always cream.</div></div>
+          </div>
+          <div class="swatch text deep" style="--text-color: rgba(243,236,225,0.55);">
+            <div class="sample deep"><span class="glyph">Aa</span></div>
+            <div class="meta"><div class="name">--on-deep-soft</div><div class="role">Muted text on deep surface (kicker meta, sub-labels).</div></div>
+          </div>
+        </div>
+
+        <h3 class="sub">Accent <em>— clay, gold, sage, warn</em></h3>
+        <div class="swatch-grid">
+          <div class="swatch surface" style="--surface: var(--clay);">
+            <div class="sample"><span class="vlabel lite">#ff5e1f</span><span class="vlabel dim">#ff7a3d</span></div>
+            <div class="meta"><div class="name">--clay</div><div class="role">Primary accent. CTAs, live state, PR cell heatmap.</div></div>
+          </div>
+          <div class="swatch surface" style="--surface: var(--clay-2);">
+            <div class="sample"><span class="vlabel lite">#ff7a2a</span><span class="vlabel dim">#ff924d</span></div>
+            <div class="meta"><div class="name">--clay-2</div><div class="role">Lighter clay — gradient top, hero kicker color.</div></div>
+          </div>
+          <div class="swatch surface" style="--surface: var(--clay-deep);">
+            <div class="sample"><span class="vlabel dim">#c83a05</span><span class="vlabel dim">#c83a05</span></div>
+            <div class="meta"><div class="name">--clay-deep</div><div class="role"><b>Shadow / depth</b> only. Inset bottom edge on CTAs. Same in both modes.</div></div>
+          </div>
+          <div class="swatch surface" style="--surface: var(--clay-text);">
+            <div class="sample"><span class="vlabel dim">#c83a05</span><span class="vlabel dim">#ff924d</span></div>
+            <div class="meta"><div class="name">--clay-text</div><div class="role"><b>Emphasis text</b> in clay. Flips brighter in dark for legibility.</div></div>
+          </div>
+          <div class="swatch surface" style="--surface: var(--gold);">
+            <div class="sample"><span class="vlabel dim">#d5a23a</span><span class="vlabel dim">#e3b64f</span></div>
+            <div class="meta"><div class="name">--gold</div><div class="role">Records, PR star, count segment on spill pills.</div></div>
+          </div>
+          <div class="swatch surface" style="--surface: var(--sage);">
+            <div class="sample"><span class="vlabel dim">#4f7d54</span><span class="vlabel dim">#6fa074</span></div>
+            <div class="meta"><div class="name">--sage</div><div class="role">Success / done / monthly volume bars / good mood.</div></div>
+          </div>
+          <div class="swatch surface" style="--surface: var(--warn);">
+            <div class="sample"><span class="vlabel dim">#c87f1a</span><span class="vlabel dim">#e0a460</span></div>
+            <div class="meta"><div class="name">--warn</div><div class="role">Caution rail (time-related metrics, neutral mood).</div></div>
+          </div>
+        </div>
+
+        <h3 class="sub">Lines <em>— hairlines &amp; rules</em></h3>
+        <div class="swatch-grid">
+          <div class="swatch line" style="--rule: var(--line);">
+            <div class="sample"><span class="rule"></span></div>
+            <div class="meta"><div class="name">--line</div><div class="role">Card borders, hairlines, table rows.</div></div>
+          </div>
+          <div class="swatch line" style="--rule: var(--line-2); --rule-thickness: 2px;">
+            <div class="sample"><span class="rule"></span></div>
+            <div class="meta"><div class="name">--line-2</div><div class="role">Stronger rule — segmented control borders, secondary period card top.</div></div>
+          </div>
+        </div>
+
+        <h3 class="sub">Shadows <em>— elevation tokens</em></h3>
+        <div class="swatch-grid">
+          <div class="swatch shadow" style="--demo-shadow: var(--shadow-soft);">
+            <div class="sample"><span class="box"></span></div>
+            <div class="meta"><div class="name">--shadow-soft</div><div class="role">Pill, chip, hairline elevation.</div></div>
+          </div>
+          <div class="swatch shadow" style="--demo-shadow: var(--shadow-card);">
+            <div class="sample"><span class="box"></span></div>
+            <div class="meta"><div class="name">--shadow-card</div><div class="role">Default card lift.</div></div>
+          </div>
+          <div class="swatch shadow" style="--demo-shadow: var(--shadow-strong);">
+            <div class="sample"><span class="box"></span></div>
+            <div class="meta"><div class="name">--shadow-strong</div><div class="role">Hero, modal, device chrome.</div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <!-- FOUNDATIONS · TYPOGRAPHY                                    -->
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <section class="doc" id="typography">
+        <h2>Typography <em>— two families, eight roles</em></h2>
+        <p class="lede">
+          <b>Onest</b> is the workhorse — body, labels, headings, numbers. <b>Instrument Serif</b>
+          appears in italic for accent text (kickers, taglines, copy that should feel personal).
+          <b>JetBrains Mono</b> is used only for code samples in this spec; production app uses
+          tabular-nums on Onest for everything numeric.
+        </p>
+
+        <h3 class="sub">Type roles</h3>
+        <div class="type-list">
+          <div class="type-row">
+            <div class="meta"><div class="label">Display</div><div class="spec">Onest 800 · 28-40px · -0.025em</div></div>
+            <div class="sample"><div style="font: 800 30px/1.05 'Onest'; letter-spacing: -0.025em;">Push day, <em style="font: italic 400 30px/1 'Instrument Serif'; color: var(--clay-text);">going off.</em></div></div>
+            <div class="role">Hero h1 · page titles</div>
+          </div>
+          <div class="type-row">
+            <div class="meta"><div class="label">Heading L</div><div class="spec">Onest 800 · 22px · -0.02em</div></div>
+            <div class="sample"><div style="font: 800 22px/1 'Onest'; letter-spacing: -0.02em;">Exercise focus</div></div>
+            <div class="role">Section h2 · panel title</div>
+          </div>
+          <div class="type-row">
+            <div class="meta"><div class="label">Heading M</div><div class="spec">Onest 800 · 17px · -0.015em</div></div>
+            <div class="sample"><div style="font: 800 17px/1 'Onest'; letter-spacing: -0.015em;">Bench Press</div></div>
+            <div class="role">Card h3 · exercise name</div>
+          </div>
+          <div class="type-row">
+            <div class="meta"><div class="label">Big Number</div><div class="spec">Onest 800 · 24-32px · tnum</div></div>
+            <div class="sample"><div style="font: 800 24px/1 'Onest'; letter-spacing: -0.025em; font-variant-numeric: tabular-nums;">42:18</div></div>
+            <div class="role">Stats · timer · stepper value</div>
+          </div>
+          <div class="type-row">
+            <div class="meta"><div class="label">Body</div><div class="spec">Onest 500 · 14px · 1.5 lh</div></div>
+            <div class="sample"><div style="font: 500 14px/1.5 'Onest';">Recent work compared with the previous matching period.</div></div>
+            <div class="role">Card descriptions · paragraphs</div>
+          </div>
+          <div class="type-row">
+            <div class="meta"><div class="label">Italic accent</div><div class="spec">Instrument Serif 400i · 13-22px</div></div>
+            <div class="sample"><div style="font: italic 400 16px/1.3 'Instrument Serif'; color: var(--ink-soft);">— last 30 days</div></div>
+            <div class="role">Kicker subtitles · em flourish</div>
+          </div>
+          <div class="type-row">
+            <div class="meta"><div class="label">Label</div><div class="spec">Onest 700 · 10-11px · 0.18em · UPPER</div></div>
+            <div class="sample"><div style="font: 700 10px/1 'Onest'; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-soft);">All-time max</div></div>
+            <div class="role">Stat labels · section kickers · table headers</div>
+          </div>
+          <div class="type-row">
+            <div class="meta"><div class="label">Mono / tnum</div><div class="spec">Onest 800 · tabular-nums</div></div>
+            <div class="sample"><div style="font: 800 18px/1 'Onest'; font-variant-numeric: tabular-nums;">105 · 102.5 · 100.0</div></div>
+            <div class="role">All weights/reps/durations · alignment matters</div>
+          </div>
+        </div>
+
+        <h4 class="sub">Implementation</h4>
+        <pre class="code"><span class="com">/* Add to app.html &lt;head&gt; */</span>
+<span class="tag">&lt;link</span> <span class="attr">rel</span>=<span class="str">"preconnect"</span> <span class="attr">href</span>=<span class="str">"https://fonts.googleapis.com"</span><span class="tag">&gt;</span>
+<span class="tag">&lt;link</span> <span class="attr">rel</span>=<span class="str">"preconnect"</span> <span class="attr">href</span>=<span class="str">"https://fonts.gstatic.com"</span> <span class="attr">crossorigin</span><span class="tag">&gt;</span>
+<span class="tag">&lt;link</span> <span class="attr">href</span>=<span class="str">"https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&amp;family=Instrument+Serif:ital@0;1&amp;display=swap"</span> <span class="attr">rel</span>=<span class="str">"stylesheet"</span><span class="tag">&gt;</span>
+
+<span class="com">/* Override Skeleton's `--base-font-family` and `--heading-font-family` in app.css */</span>
+[data-theme=<span class="str">'rocket'</span>] {
+  --base-font-family: <span class="str">'Onest'</span>, system-ui, sans-serif;
+  --heading-font-family: <span class="str">'Onest'</span>, system-ui, sans-serif;
+  --heading-font-weight: 800;
+  --heading-letter-spacing: -0.02em;
+}</pre>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <!-- SPACING & RADIUS                                            -->
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <section class="doc" id="spacing">
+        <h2>Spacing <em>— and radius</em></h2>
+        <p class="lede">
+          We avoid an explicit T-shirt scale because Tailwind already supplies one.
+          The values below are the ones actually used across the mockups. Reach for
+          them by habit, but go custom when the design wants it.
+        </p>
+
+        <h3 class="sub">Spacing scale</h3>
+        <table class="table">
+          <thead><tr><th>Token</th><th>Value</th><th>Where used</th></tr></thead>
+          <tbody>
+            <tr><td><code>--sp-1</code></td><td>4px</td><td>Sub-stepper gap, pill internal padding</td></tr>
+            <tr><td><code>--sp-2</code></td><td>6px</td><td>Set-pill chip gap, button icon gap</td></tr>
+            <tr><td><code>--sp-3</code></td><td>8px</td><td>Stat grid gap, badge gap, form row gap</td></tr>
+            <tr><td><code>--sp-4</code></td><td>10–12px</td><td>Card internal padding small, button padding</td></tr>
+            <tr><td><code>--sp-5</code></td><td>14–16px</td><td>Card internal padding default</td></tr>
+            <tr><td><code>--sp-6</code></td><td>18–22px</td><td>Hero internal padding · panel padding</td></tr>
+            <tr><td><code>--sp-7</code></td><td>24–32px</td><td>Section spacing</td></tr>
+          </tbody>
+        </table>
+
+        <h3 class="sub">Radius scale</h3>
+        <table class="table">
+          <thead><tr><th>Value</th><th>Where</th></tr></thead>
+          <tbody>
+            <tr><td><code>4px</code></td><td>Sharp accents (settings X buttons, optional)</td></tr>
+            <tr><td><code>10px</code></td><td>Inputs, settings rows, exercise actions</td></tr>
+            <tr><td><code>12–14px</code></td><td>Pill steppers internal · notice banner · session row</td></tr>
+            <tr><td><code>18–22px</code></td><td>Cards · session cards · panels</td></tr>
+            <tr><td><code>28px</code></td><td>Hero card · bottom nav</td></tr>
+            <tr><td><code>999px</code></td><td>All pills, chips, badges, primary CTA, segmented control</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <!-- ELEVATION                                                   -->
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <section class="doc" id="elevation">
+        <h2>Elevation <em>— three steps</em></h2>
+        <p class="lede">
+          One shadow vocabulary, three levels. Each token carries its own warm-brown
+          (light) → near-black (dark) color, so a card looks correctly elevated in both
+          themes without per-component overrides.
+        </p>
+        <ul>
+          <li><b>shadow-soft</b> — chips, pills, hairline lift on the smallest elements.</li>
+          <li><b>shadow-card</b> — default card depth. Most surfaces use this.</li>
+          <li><b>shadow-strong</b> — hero, modals, device chrome, anything you want to feel "above the page".</li>
+        </ul>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <!-- MOTION                                                      -->
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <section class="doc" id="motion">
+        <h2>Motion <em>— quiet, with two heroes</em></h2>
+        <p class="lede">
+          Most of the app uses no motion. Three named animations carry the design language:
+        </p>
+        <ul>
+          <li><b>breathe</b> — <code>transform: scale(1) ↔ scale(1.03)</code> over <code>4s ease-in-out infinite</code>.
+            Used on the consistency ring and timer dial — gives the active session a heartbeat.</li>
+          <li><b>pulse</b> — opacity + scale over <code>1s steps(2)</code> infinite. Live status dots, LIVE badges.</li>
+          <li><b>drift</b> — <code>translate(20px, -10px) scale(1.05)</code> over <code>12–14s ease-in-out alternate</code>.
+            The two orb glows inside the hero card. Slow enough to be ambient, not distracting.</li>
+        </ul>
+        <p>
+          Transition timings: <code>120ms</code> for hover/press, <code>180–240ms</code> for theme change.
+          Never animate page layout. Reduce-motion users get pulse + drift stopped automatically (TODO: wire <code>prefers-reduced-motion</code>).
+        </p>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <!-- COMPONENT · APP SHELL                                       -->
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <section class="doc" id="app-shell">
+        <h2>App shell <em>— top bar</em></h2>
+        <p class="lede">
+          The mobile-first top bar carries brand, theme toggle, and logout. Sticky, lightly
+          frosted, sits over the page background with backdrop-blur. Replaces the existing
+          dual mobile/desktop AppBar split in <code>+layout.svelte</code> with one component.
+        </p>
+
+        <div class="cmp">
+          <div class="head">
+            <div class="title">AppBar <em>— sticky, frosted</em></div>
+            <div class="role">brand + theme toggle + logout</div>
+          </div>
+          <div class="preview">
+            <div class="demo-appbar">
+              <div class="brnd">
+                <span class="logo">SM</span>
+                <span class="name">SwoleMate</span>
+              </div>
+              <div class="icns">
+                <button class="icn-btn" aria-label="Theme">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+                </button>
+                <button class="icn-btn" aria-label="Log out">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="body">
+            <div class="label">Anatomy</div>
+            <ul>
+              <li><b>Logo block</b> — <code>30×30</code> rounded square, clay gradient + shadow, "SM" wordmark inside.</li>
+              <li><b>Brand text</b> — Onest 800 17px, ellipsis on overflow.</li>
+              <li><b>Actions</b> — 34×34 icon buttons, transparent until pressed (<code>:active</code> uses <code>--bg-2</code>).</li>
+              <li><b>Background</b> — <code>color-mix(in oklab, var(--bg) 82%, transparent)</code> + <code>backdrop-filter: blur(12px)</code>.</li>
+            </ul>
+            <div class="label">HTML</div>
+<pre class="code"><span class="tag">&lt;header</span> <span class="attr">class</span>=<span class="str">"appbar"</span><span class="tag">&gt;</span>
+  <span class="tag">&lt;div</span> <span class="attr">class</span>=<span class="str">"brand"</span><span class="tag">&gt;</span>
+    <span class="tag">&lt;span</span> <span class="attr">class</span>=<span class="str">"logo"</span><span class="tag">&gt;</span>SM<span class="tag">&lt;/span&gt;</span>
+    <span class="tag">&lt;span</span> <span class="attr">class</span>=<span class="str">"name"</span><span class="tag">&gt;</span>SwoleMate<span class="tag">&lt;/span&gt;</span>
+  <span class="tag">&lt;/div&gt;</span>
+  <span class="tag">&lt;div</span> <span class="attr">class</span>=<span class="str">"actions"</span><span class="tag">&gt;</span>
+    <span class="tag">&lt;button</span> <span class="attr">class</span>=<span class="str">"icon-btn theme-toggle"</span><span class="tag">&gt;</span>...<span class="tag">&lt;/button&gt;</span>
+    <span class="tag">&lt;button</span> <span class="attr">class</span>=<span class="str">"icon-btn"</span><span class="tag">&gt;</span>...<span class="tag">&lt;/button&gt;</span>
+  <span class="tag">&lt;/div&gt;</span>
+<span class="tag">&lt;/header&gt;</span></pre>
+            <div class="ddrow">
+              <div class="dd do">
+                <div class="k">Do</div>
+                <p>Keep a max of two icon actions. Hide secondary actions behind the "More" tab in the bottom nav.</p>
+              </div>
+              <div class="dd dont">
+                <div class="k">Don't</div>
+                <p>Don't put the LIVE pill here — the hero kicker already says "Session live · 42 min in". Redundant + cramps the bar.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── HERO CARD ──────────────────────────────────────────── -->
+      <section class="doc" id="hero">
+        <h2>Hero card <em>— always-dark spotlight</em></h2>
+        <p class="lede">
+          The signature surface of the app. Dark ink background with two slow-drifting glow orbs
+          (clay + gold), bright kicker label, large italic-serif headline, optional content
+          (timer ring, consistency ring, stats grid). One per route, always at the top.
+        </p>
+
+        <div class="cmp">
+          <div class="head">
+            <div class="title">PageHero <em>— variants: timer · consistency · plain</em></div>
+            <div class="role">Today, Progress, History headers</div>
+          </div>
+          <div class="preview deep">
+            <div class="demo-hero">
+              <div class="kicker">► Session live · 42 min in</div>
+              <h3>Push day, <em>going off.</em></h3>
+            </div>
+          </div>
+          <div class="body">
+            <div class="label">Anatomy</div>
+            <ul>
+              <li><b>Background</b> — <code>var(--surface-deep)</code>. Stays dark in both modes.</li>
+              <li><b>Orb 1</b> — top-right, <code>320px</code>, clay radial gradient at 55% alpha, <code>drift 12s</code>.</li>
+              <li><b>Orb 2</b> — bottom-left, <code>300px</code>, gold radial at 35% alpha, <code>drift 14s alternate-reverse</code>.</li>
+              <li><b>Kicker</b> — clay-2, uppercase, 0.22em letter-spacing.</li>
+              <li><b>Headline</b> — Onest 800 28px + Instrument Serif italic em (clay-2 color).</li>
+              <li><b>Padding</b> — 22px all around. Border-radius 28px.</li>
+            </ul>
+            <div class="label">Variants</div>
+            <ul>
+              <li><b>Timer hero</b> (Today, session active) — adds a 150px breathing ring + 2×2 stats below.</li>
+              <li><b>Consistency hero</b> (Progress) — same ring slot, value is "days trained / window".</li>
+              <li><b>Plain hero</b> (other routes) — just kicker + headline + maybe one CTA.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── PR FLASH ───────────────────────────────────────────── -->
+      <section class="doc" id="pr-flash">
+        <h2>PR flash <em>— the celebration banner</em></h2>
+        <p class="lede">
+          Whenever a session set produces a personal record, render this above the hero on the
+          Today screen and in any place that surfaces "you just hit a PR". One per session.
+        </p>
+        <div class="cmp">
+          <div class="head">
+            <div class="title">PRFlash <em>— gradient banner</em></div>
+            <div class="role">Renders ONLY when a PR landed this session</div>
+          </div>
+          <div class="preview">
+            <div class="demo-pr-flash">
+              <div class="icn">⚡</div>
+              <div class="body">
+                <div class="k">New personal record</div>
+                <div class="v">Bench <b>105 kg × 8</b> — +2.5kg</div>
+              </div>
+              <div style="font: 800 22px/1 'Onest';">→</div>
+            </div>
+          </div>
+          <div class="body">
+            <div class="label">Anatomy</div>
+            <ul>
+              <li><b>Gradient</b> — <code>clay → clay-2 → gold</code> at 95°, with a soft radial highlight overlay.</li>
+              <li><b>Icon slot</b> — <code>46×46</code> rounded square, white at 18% alpha.</li>
+              <li><b>Tap target</b> — entire banner is clickable → opens the PR detail.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── NOTICE BANNER ──────────────────────────────────────── -->
+      <section class="doc" id="notice">
+        <h2>Notice banner <em>— passive status</em></h2>
+        <p class="lede">
+          Sync state, offline mode, "session saved locally". Card-styled with a tinted icon block.
+          Uses sage / warn / clay tints depending on intent.
+        </p>
+        <div class="cmp">
+          <div class="head">
+            <div class="title">NoticeBanner</div>
+            <div class="role">Sync state · offline · informational</div>
+          </div>
+          <div class="preview">
+            <div class="demo-notice">
+              <span class="icn">↻</span>
+              Session saved locally. <em>2 changes pending sync</em>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── TABS (SEGMENTED) ───────────────────────────────────── -->
+      <section class="doc" id="tabs">
+        <h2>Tabs <em>— segmented control</em></h2>
+        <p class="lede">
+          Used for Progress's Overview / Exercise / Trends switch and Records's All-time / Recent. Pill-shape
+          shell with a gradient-clay active pill that slides between positions.
+        </p>
+        <div class="cmp">
+          <div class="head">
+            <div class="title">SegmentedTabs <em>— 2–3 positions</em></div>
+            <div class="role">Two or three is the max for a single segmented control</div>
+          </div>
+          <div class="preview">
+            <div class="demo-tabs">
+              <button class="active">Overview</button>
+              <button>Exercise</button>
+              <button>Trends</button>
+            </div>
+          </div>
+          <div class="body">
+            <div class="ddrow">
+              <div class="dd do">
+                <div class="k">Do</div>
+                <p>Use for mutually exclusive view modes within one screen. Animate the active pill's position when changing.</p>
+              </div>
+              <div class="dd dont">
+                <div class="k">Don't</div>
+                <p>Don't use for navigation between routes (use bottom nav instead) or for filters (use chips/select).</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── BOTTOM NAV ─────────────────────────────────────────── -->
+      <section class="doc" id="bottom-nav">
+        <h2>Bottom nav <em>— 4 primary + More</em></h2>
+        <p class="lede">
+          Phone-first primary nav. 5 columns: Today, Plans, History, Progress, More. The active
+          tab gets a clay pill on its icon and clay text label. The "More" tab opens a sheet
+          for Settings / Admin / Backups / Help.
+        </p>
+        <div class="cmp">
+          <div class="head">
+            <div class="title">BottomNav</div>
+            <div class="role">Fixed-position, blurred, sits 14px from screen bottom</div>
+          </div>
+          <div class="preview">
+            <nav class="demo-nav">
+              <a class="active" href="#"><span class="pill-nav">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 21s-7-4.5-7-11a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 6.5-7 11-7 11z"/></svg>
+              </span>Today</a>
+              <a href="#"><span class="pill-nav">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 9h16"/></svg>
+              </span>Plans</a>
+              <a href="#"><span class="pill-nav">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+              </span>History</a>
+              <a href="#"><span class="pill-nav">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19h16"/><path d="M6 16l4-5 4 3 5-7"/></svg>
+              </span>Progress</a>
+              <a href="#"><span class="pill-nav">⋯</span>More</a>
+            </nav>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <!-- SURFACES                                                    -->
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <section class="doc" id="card">
+        <h2>Card / Section <em>— the base surface</em></h2>
+        <p class="lede">
+          Every panel on every screen is a card. <code>var(--card)</code> background,
+          <code>var(--line)</code> border, 18–22px radius, <code>--shadow-card</code> lift.
+          Inside: a head (h2 + lede), then body content. Replace Skeleton's
+          <code>card variant-glass-surface</code> usage everywhere.
+        </p>
+        <div class="cmp">
+          <div class="head">
+            <div class="title">Card</div>
+            <div class="role">Default surface for panels &amp; sections</div>
+          </div>
+          <div class="preview">
+            <div class="demo-card">
+              <div class="title">Records <em style="font: italic 400 13px/1 'Instrument Serif'; color: var(--ink-soft); margin-left: 4px;">— milestones</em></div>
+              <div class="meta">All-time PRs that ever stood, plus rolling 90-day bests.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- METRIC TILE -->
+      <section class="doc" id="metric">
+        <h2>Metric tile <em>— rail-coloured stat</em></h2>
+        <p class="lede">
+          Small stat boxes used in period cards and exercise focus stats. Each has a colored left
+          rail (3px wide) indicating the metric family.
+        </p>
+        <div class="cmp">
+          <div class="head">
+            <div class="title">MetricTile <em>— 4 rail colors</em></div>
+            <div class="role">Rail = clay (primary) · warn (time) · sage (volume) · gold (records)</div>
+          </div>
+          <div class="preview">
+            <div class="preview-row">
+              <div class="demo-metric" style="--rail: var(--clay);"><div class="k">Workouts</div><div class="v">18</div><div class="delta up">+ 4</div></div>
+              <div class="demo-metric" style="--rail: var(--warn);"><div class="k">Time</div><div class="v">15:36<small>h</small></div><div class="delta up">+ 1h 12m</div></div>
+              <div class="demo-metric" style="--rail: var(--sage);"><div class="k">Volume</div><div class="v">82,140<small>kg</small></div><div class="delta up">+ 8,420</div></div>
+              <div class="demo-metric" style="--rail: var(--gold);"><div class="k">Records</div><div class="v">6 <small>PRs</small></div><div class="delta">9 recent bests</div></div>
+            </div>
+          </div>
+          <div class="body">
+            <div class="label">Anatomy</div>
+            <ul>
+              <li><b>Rail</b> — 3px wide left edge, <code>top: 8px; bottom: 8px</code>, <code>border-radius: 0 3px 3px 0</code>.</li>
+              <li><b>Label (k)</b> — 9px Onest 700 uppercase, 0.18em.</li>
+              <li><b>Value (v)</b> — 18–24px Onest 800, tabular-nums.</li>
+              <li><b>Delta</b> — sage when positive, clay-text when negative, ink-soft when neutral.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- PR ROW -->
+      <section class="doc" id="pr-row">
+        <h2>PR row <em>— record entry</em></h2>
+        <p class="lede">
+          Each row in the Records feed. Gold rail + gold "All-time PR" tag for permanent records,
+          sage rail + sage "Recent best" tag for 90-day rolling bests.
+        </p>
+        <div class="cmp">
+          <div class="head">
+            <div class="title">PRRow <em>— 5 PR types</em></div>
+            <div class="role">Max weight · Estimated 1RM · Rep PR · Timed duration · Single-set volume</div>
+          </div>
+          <div class="preview">
+            <div class="demo-prrow">
+              <div style="display: flex; align-items: baseline; justify-content: space-between;">
+                <div class="ex-name">Bench Press</div>
+                <span style="font: 700 10px/1 'Onest'; color: var(--ink-soft); border: 1px solid var(--line); background: var(--card); padding: 4px 9px; border-radius: 999px;">Tue · 14 May</span>
+              </div>
+              <div class="body">
+                <span class="pr-tag">All-time PR</span>
+                <span style="font-weight: 700;">Max weight</span>
+                <span class="new-v">105.0 kg</span>
+                <span style="color: var(--ink-soft); font-style: italic; font-family: 'Instrument Serif'; font-size: 13px;">from <b style="font-style: normal; font-family: 'Onest'; font-weight: 700;">102.5 kg</b></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <!-- PILLS & DATA                                                -->
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <section class="doc" id="spill">
+        <h2>Spill <em>— segmented set pill</em></h2>
+        <p class="lede">
+          Replaces the production <code>SetPillsHybrid.svelte</code>. A horizontally-segmented
+          capsule rendering 1 set (or N grouped identical sets) as: optional count, optional reps,
+          optional duration, optional weight. Weight cell color-mixes with intensity based on
+          the relative load within the group (the <code>--w</code> CSS var).
+        </p>
+
+        <div class="cmp">
+          <div class="head">
+            <div class="title">Spill <em>— variants</em></div>
+            <div class="role">Order: count? · reps? · duration? · weight?</div>
+          </div>
+          <div class="preview">
+            <div class="preview-row">
+              <span class="spill"><span class="reps">10×</span><span class="weight" style="--w:38%">100kg</span></span>
+              <span class="spill"><span class="reps">9×</span><span class="weight" style="--w:62%">102.5kg</span></span>
+              <span class="spill pr"><span class="reps">8×</span><span class="weight" style="--w:85%">105kg</span></span>
+            </div>
+            <div class="preview-row" style="margin-top: 12px;">
+              <span class="spill"><span class="count">3×</span><span class="reps">8×</span><span class="weight" style="--w:62%">22.5kg/side</span></span>
+              <span class="spill"><span class="reps">6×</span><span class="weight" style="--w:85%">27.5/22.5kg</span></span>
+              <span class="spill"><span class="count">2×</span><span class="reps">10×</span><span class="weight bw">BW</span></span>
+              <span class="spill"><span class="count">3×</span><span class="duration">0:30</span></span>
+            </div>
+          </div>
+          <div class="body">
+            <div class="label">Segments</div>
+            <ul>
+              <li><b>count</b> — gold bg, white text. Only when ≥2 identical sets are grouped.</li>
+              <li><b>reps</b> — bg-2 neutral. The "× reps" portion ("8×").</li>
+              <li><b>duration</b> — clay-tinted 20% bg, clay-text. Used for timed sets ("0:30").</li>
+              <li><b>weight</b> — color-mixes with clay using <code>--w</code> intensity (38–85% recommended).</li>
+              <li><b>weight.bw</b> — neutral ink-tinted variant for bodyweight reps.</li>
+              <li><b>.pr modifier</b> — gold border + glow + " ★" suffix appended via <code>::after</code>.</li>
+            </ul>
+            <div class="label">Sizes</div>
+            <ul>
+              <li><b>default</b> — 12px font, 7×10 padding. Use in expanded exercise card.</li>
+              <li><b>.xs</b> — 10.5px font, 5×8 padding. Use in dense list contexts (Past 2 Sessions, Last Time recap).</li>
+            </ul>
+            <div class="label">Grouping logic (port from existing SetPillsHybrid.svelte)</div>
+            <p>
+              Sets group by key <code>`${reps}:${duration}:${weight}`</code>. Identical sets collapse into
+              one pill with a count prefix. Non-matching sets get separate pills. Intensity scale uses
+              total weight within the group: <code>0.38 + ((total - min) / (max - min)) × 0.47</code>.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- RPILL -->
+      <section class="doc" id="rpill">
+        <h2>Rep PR pill <em>— rep · weight</em></h2>
+        <p class="lede">
+          Used in the Exercise focus panel's "Rep PRs" band. Same DNA as Spill but always 2 segments
+          (reps + weight) and the weight cell is saturated clay (not intensity-scaled).
+        </p>
+        <div class="cmp">
+          <div class="head">
+            <div class="title">RPill</div>
+            <div class="role">Always reps + weight · no count · saturated weight</div>
+          </div>
+          <div class="preview">
+            <div class="preview-row" style="justify-content: flex-start;">
+              <span class="spill"><span class="reps">1 rep</span><span class="weight" style="--w:75%">110 kg</span></span>
+              <span class="spill"><span class="reps">3 reps</span><span class="weight" style="--w:75%">107.5 kg</span></span>
+              <span class="spill"><span class="reps">5 reps</span><span class="weight" style="--w:75%">107.5 kg</span></span>
+              <span class="spill"><span class="reps">8 reps</span><span class="weight" style="--w:75%">105 kg</span></span>
+              <span class="spill"><span class="reps">10 reps</span><span class="weight" style="--w:75%">95 kg</span></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CHIPS & BADGES -->
+      <section class="doc" id="chip">
+        <h2>Chips &amp; badges <em>— inline status</em></h2>
+        <p class="lede">
+          Small, single-shape inline tokens. Three families:
+          <b>chip</b> (filter values, settings: "grip: pronated"), <b>badge</b> (state markers: Done, Live, In progress),
+          and the segmented pills above which are their own family.
+        </p>
+        <div class="cmp">
+          <div class="head">
+            <div class="title">Chips &amp; badges</div>
+            <div class="role">Soft chip · status badge · live badge with dot</div>
+          </div>
+          <div class="preview">
+            <div class="preview-row">
+              <span class="chip">grip: pronated</span>
+              <span class="chip">rom: full</span>
+              <span class="chip">+2</span>
+              <span class="badge done">Done</span>
+              <span class="badge live">In progress</span>
+              <span class="badge soft">Edit</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <!-- FORMS                                                       -->
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <section class="doc" id="input">
+        <h2>Text input <em>— card-3 surface</em></h2>
+        <p class="lede">
+          Inputs sit on <code>--card-3</code> with a hairline border that goes clay on focus. 10px
+          radius, 14px font. Use the same shell for <code>&lt;input&gt;</code>, <code>&lt;select&gt;</code>,
+          and <code>&lt;textarea&gt;</code> (textarea adds <code>min-height</code> + <code>resize: vertical</code>).
+        </p>
+        <div class="cmp">
+          <div class="head">
+            <div class="title">Input · Textarea</div>
+            <div class="role">Same shell, two heights</div>
+          </div>
+          <div class="preview">
+            <div class="preview-stack">
+              <input class="demo-input" placeholder="Bench angle" />
+              <textarea class="demo-textarea" placeholder="Cues, tempo, how it felt…"></textarea>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- STEPPER -->
+      <section class="doc" id="stepper">
+        <h2>Stepper pill <em>— numeric input</em></h2>
+        <p class="lede">
+          All numeric inputs in the live session log (reps, weight, time, per-side, left/right) use this
+          unified component. Centered value (with optional unit suffix), <code>−</code> and <code>+</code>
+          as integrated end segments. 52px tall, full pill radius.
+        </p>
+        <div class="cmp">
+          <div class="head">
+            <div class="title">StepperPill</div>
+            <div class="role">Reps · Weight · Per side · Left · Right</div>
+          </div>
+          <div class="preview">
+            <div class="preview-row">
+              <div class="stepper-pill">
+                <button class="step" type="button">−</button>
+                <div class="v-wrap"><span class="value">8</span></div>
+                <button class="step" type="button">+</button>
+              </div>
+              <div class="stepper-pill">
+                <button class="step" type="button">−</button>
+                <div class="v-wrap"><span class="value">105</span><span class="unit">kg</span></div>
+                <button class="step" type="button">+</button>
+              </div>
+            </div>
+          </div>
+          <div class="body">
+            <div class="label">Implementation notes</div>
+            <ul>
+              <li>The <b>value</b> is a content-sized inline element (not a fixed-width input). Wrap value + unit in
+                <code>.v-wrap</code> (flex justify-center) so the group centers regardless of digit count.</li>
+              <li>For real input behavior: use <code>&lt;input&gt;</code> with <code>field-sizing: content</code>
+                (Chromium) and a fallback fixed-width on Safari/Firefox.</li>
+              <li><b>Per-side mode</b> drops the unit suffix and uses the label "Per side · kg" instead — "kg / side"
+                doesn't fit in the pill at 390px.</li>
+              <li><b>Split L/R</b> uses two stepper-pills side by side, Reps spans full width on a row above.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- TRACKING CHK -->
+      <section class="doc" id="chk">
+        <h2>Tracking toggle <em>— on / off</em></h2>
+        <p class="lede">
+          Per-exercise toggles: Reps / Time / Weight / Per-side / Split L/R + Use last. Pill-shaped,
+          neutral when off (bg-2), inverted (ink bg + cream text + clay checkbox) when on.
+        </p>
+        <div class="cmp">
+          <div class="head">
+            <div class="title">Chk</div>
+            <div class="role">Pill-shaped checkbox toggle</div>
+          </div>
+          <div class="preview">
+            <div class="preview-row">
+              <span class="chk on"><span class="box"></span>Reps</span>
+              <span class="chk"><span class="box"></span>Time</span>
+              <span class="chk on"><span class="box"></span>Weight</span>
+              <span class="chk"><span class="box"></span>Per-side</span>
+              <span class="chk on"><span class="box"></span>Split L/R</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PICKER -->
+      <section class="doc" id="picker">
+        <h2>Picker <em>— select-as-button</em></h2>
+        <p class="lede">
+          Replaces native <code>&lt;select&gt;</code> for the exercise focus picker. Button-shaped with title +
+          meta line + ink-filled chevron button. On tap, opens a bottom-sheet with search and a virtualized list.
+        </p>
+        <div class="cmp">
+          <div class="head">
+            <div class="title">Picker</div>
+            <div class="role">Exercise focus, future filter selects</div>
+          </div>
+          <div class="preview">
+            <button class="demo-picker">
+              <div class="picked">Bench Press
+                <small>Heavy · barbell · 38 sessions</small>
+              </div>
+              <span class="open">▾</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <!-- BUTTONS                                                     -->
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <section class="doc" id="buttons">
+        <h2>Buttons <em>— five variants</em></h2>
+        <p class="lede">
+          One primary, three secondaries, one celebratory. The primary CTA is the gradient clay pill;
+          it's reserved for the single most important action on a screen (Log set, End session, Submit).
+        </p>
+        <div class="cmp">
+          <div class="head">
+            <div class="title">Button library</div>
+            <div class="role">Variants in order of visual weight</div>
+          </div>
+          <div class="preview">
+            <div class="preview-row">
+              <button class="btn-primary">▶ Log set 4 of 5</button>
+              <button class="btn-success">✓ Mark done</button>
+              <button class="btn-ink">Sync now</button>
+              <button class="btn-soft">Collapse</button>
+              <button class="btn-ghost">Use template</button>
+              <button class="icn-btn-demo">✕</button>
+            </div>
+          </div>
+          <div class="body">
+            <div class="label">When to use what</div>
+            <ul>
+              <li><b>btn-primary</b> — exactly one per screen state. Gradient + inset-shadow gives weight.</li>
+              <li><b>btn-success</b> — sage gradient. Mark done, confirm-positive flows.</li>
+              <li><b>btn-ink</b> — high-contrast utility action. Sync, Refresh, "Add" within forms.</li>
+              <li><b>btn-soft</b> — secondary action, never standalone. Collapse, Cancel within a card.</li>
+              <li><b>btn-ghost</b> — tertiary. Outline-only, low weight. Use template, secondary refresh.</li>
+              <li><b>icn-btn</b> — icon-only actions: delete, toggle, close. Always pair with <code>aria-label</code>.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <!-- CHARTS                                                      -->
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <section class="doc" id="charts">
+        <h2>Charts <em>— Chart.js theme integration</em></h2>
+        <p class="lede">
+          The mockup uses static SVG for chart previews. In production, charts go through
+          <code>chart.js</code> (already a dep) with theme integration via <code>lib/progress/charting.ts</code>'s
+          existing <code>ChartTheme</code> + <code>observeTheme</code> helpers. Two universal rules:
+        </p>
+        <ul>
+          <li><b>Series 1 (primary)</b> uses <code>--clay</code> with a vertical gradient fill (clay-2 top, clay 60% bottom).</li>
+          <li><b>Series 2 (overlay trend / secondary)</b> uses <code>--ink</code> stroke + dots, so it reads against any underlying fill in both modes.</li>
+          <li><b>Bar value labels</b> ALWAYS sit above bars, with a card-bg halo via <code>paint-order: stroke; stroke: var(--card); stroke-width: 3px</code>.</li>
+          <li><b>Grid lines</b> use <code>color-mix(in oklab, var(--ink-soft) 28%, transparent)</code> — readable in both modes.</li>
+          <li><b>Axis labels</b> use Onest 700 10px in <code>--ink-2</code>.</li>
+          <li><b>Yax notes</b> use Instrument Serif italic 12px in <code>--ink-2</code> with bold <code>--ink</code> inline values.</li>
+        </ul>
+
+        <h3 class="sub">ChartTheme mapping</h3>
+        <table class="table">
+          <thead><tr><th>charting.ts key</th><th>Mapping</th></tr></thead>
+          <tbody>
+            <tr><td><code>text</code></td><td><code>var(--ink-2)</code></td></tr>
+            <tr><td><code>mutedText</code></td><td><code>var(--ink-soft)</code></td></tr>
+            <tr><td><code>grid</code></td><td><code>color-mix(--ink-soft 28%, transparent)</code></td></tr>
+            <tr><td><code>primary</code></td><td><code>var(--clay)</code></td></tr>
+            <tr><td><code>secondary</code></td><td><code>var(--ink)</code> · for trend overlays</td></tr>
+            <tr><td><code>tertiary</code></td><td><code>var(--gold)</code> · for PR markers</td></tr>
+            <tr><td><code>success</code></td><td><code>var(--sage)</code></td></tr>
+            <tr><td><code>warning</code></td><td><code>var(--warn)</code></td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <!-- SKELETON MAPPING                                            -->
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <section class="doc" id="skeleton-map">
+        <h2>Skeleton mapping <em>— transition layer</em></h2>
+        <p class="lede">
+          The app currently rides Skeleton v4's "rocket" theme. We don't have to rip it out — we
+          override its CSS variables and keep its primitives until each route is ported. The
+          mapping below tells devs which Skeleton class to grep-replace as routes migrate.
+        </p>
+        <table class="table">
+          <thead><tr><th>Token (design system)</th><th>Skeleton equivalent</th><th>Migration note</th></tr></thead>
+          <tbody>
+            <tr><td><code>--clay</code></td><td><code>--color-primary-500</code></td><td>Override in <code>[data-theme='rocket']</code></td></tr>
+            <tr><td><code>--clay-2</code></td><td><code>--color-primary-400</code></td><td>Override</td></tr>
+            <tr><td><code>--clay-deep</code></td><td><code>--color-primary-700</code></td><td>Override; keep darker in both modes</td></tr>
+            <tr><td><code>--gold</code></td><td><code>--color-tertiary-500</code></td><td>Override</td></tr>
+            <tr><td><code>--sage</code></td><td><code>--color-success-500</code></td><td>Override</td></tr>
+            <tr><td><code>--warn</code></td><td><code>--color-warning-500</code></td><td>Override</td></tr>
+            <tr><td><code>--ink</code></td><td><code>--color-surface-950-50</code></td><td>Skeleton already flips this; we just redefine the value</td></tr>
+            <tr><td><code>--bg</code></td><td><code>--body-background-color</code></td><td>Same</td></tr>
+            <tr><td><b>Card</b></td><td><code>card variant-glass-surface</code></td><td>Replace with <code>.card</code> class from this system</td></tr>
+            <tr><td><b>Primary CTA</b></td><td><code>btn variant-filled-primary</code></td><td>Replace with <code>.btn-primary</code></td></tr>
+            <tr><td><b>Soft button</b></td><td><code>btn variant-soft</code></td><td>Replace with <code>.btn-soft</code></td></tr>
+            <tr><td><b>Spill pill</b></td><td><code>SetPillsHybrid.svelte</code></td><td>Refactor to use <code>.spill</code> classes (keep the grouping logic)</td></tr>
+            <tr><td><b>Stepper</b></td><td>Stack of <code>&lt;input&gt;</code> + buttons</td><td>New <code>StepperPill.svelte</code> component</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <!-- MIGRATION PLAN                                              -->
+      <!-- ═══════════════════════════════════════════════════════════ -->
+      <section class="doc" id="migration">
+        <h2>Migration plan <em>— ordered, low-risk</em></h2>
+        <p class="lede">
+          Each step is independently shippable. The app never enters a half-migrated state where one
+          screen looks "new" and another looks broken. We end Skeleton's grip on the visual layer
+          gradually while keeping its primitives (modals, popovers) working.
+        </p>
+
+        <h3 class="sub">Step 1 · Tokens + fonts (1 day)</h3>
+        <ul>
+          <li>Drop the token block into <code>client/src/app.css</code> under <code>[data-theme='rocket']</code>.</li>
+          <li>Add Onest + Instrument Serif preconnect + stylesheet to <code>app.html</code>.</li>
+          <li>Update Skeleton font tokens (<code>--base-font-family</code>, <code>--heading-font-family</code>).</li>
+          <li>Replace meta <code>theme-color</code> in <code>app.html</code> with <code>#f3ece1</code> (light) — flip via JS on theme change.</li>
+          <li>Define the dark palette under <code>[data-theme='rocket'].dark</code> (rides existing dark-class toggle).</li>
+        </ul>
+        <p>
+          <b>Verify</b>: every existing screen should look "warmer" but otherwise functionally identical. No structural changes.
+        </p>
+
+        <h3 class="sub">Step 2 · Core components (2–3 days)</h3>
+        <ul>
+          <li>Build <code>lib/components/ui/</code>: <code>Card</code>, <code>Spill</code>, <code>StepperPill</code>, <code>Chk</code>, <code>Chip</code>, <code>Badge</code>, <code>Btn</code> (with variant prop).</li>
+          <li>Refactor <code>SetPillsHybrid.svelte</code> to use <code>.spill</code> markup (keep grouping logic intact).</li>
+          <li>Add a <code>PageHero</code> component with variants: <code>timer</code> · <code>consistency</code> · <code>plain</code>.</li>
+          <li>Add <code>SegmentedTabs</code> and migrate <code>ProgressTabs.svelte</code> to use it.</li>
+          <li>Add <code>BottomNav</code> and migrate the mobile-bottom-nav markup from <code>+layout.svelte</code>.</li>
+        </ul>
+
+        <h3 class="sub">Step 3 · Port Today (2–3 days)</h3>
+        <ul>
+          <li>Replace <code>routes/+page.svelte</code>'s inline utilities with the new components.</li>
+          <li>Replace the <code>SessionExercise.svelte</code> add-set form with three StepperPill instances per mode.</li>
+          <li>Wire the live PR flash banner above the hero.</li>
+        </ul>
+
+        <h3 class="sub">Step 4 · Port Progress + chart theme (2–3 days)</h3>
+        <ul>
+          <li>Update <code>lib/progress/charting.ts</code>'s <code>readTheme()</code> to emit the new <code>ChartTheme</code> values (see mapping above).</li>
+          <li>Replace inline metric grids with <code>MetricTile</code>.</li>
+          <li>Replace <code>RecentPrFeed</code>'s record rows with <code>PRRow</code>.</li>
+          <li>Replace <code>ExerciseFocusPanel</code>'s stat trio with <code>MetricTile</code> and rep pills with <code>RPill</code>.</li>
+        </ul>
+
+        <h3 class="sub">Step 5 · Port the rest + cleanup (2 days)</h3>
+        <ul>
+          <li>History · Templates · Settings · Admin · Backups · Help — mostly card-and-form pages.</li>
+          <li>Delete the v2 compat shims from <code>app.css</code> once nothing references them.</li>
+          <li>Migrate the codebase to Svelte 5 runes in the same pass (separate PR series).</li>
+        </ul>
+
+        <h3 class="sub">Risks &amp; mitigations</h3>
+        <ul>
+          <li><b>Chart.js theme observer</b> already watches the <code>.dark</code> class. Verify it still fires when we add the <code>data-theme</code> attribute — patch the observer to watch both.</li>
+          <li><b>Form sizing on Safari/Firefox</b>: <code>field-sizing: content</code> isn't universal. Use the span-with-input-overlay pattern in StepperPill until it lands.</li>
+          <li><b>Existing modals</b> (EndSessionModal, EditWorkoutTimesModal) need focus-trap + Escape handler — track in a separate accessibility PR.</li>
+        </ul>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ─── FOOTER ──────────────────────────────────────────────────── -->
+  <footer class="page">
+    <div>SwoleMate design system · v0.1 · 2026-05-15</div>
+    <div><a href="../mockups/index.html">← back to mockups gallery</a></div>
+  </footer>
+
+  <script>
+    (function () {
+      const root = document.documentElement;
+      const KEY = 'swolemate-mockup-theme';
+      function apply(theme) {
+        if (theme === 'dark') root.setAttribute('data-theme', 'dark');
+        else root.removeAttribute('data-theme');
+      }
+      let stored = null;
+      try { stored = localStorage.getItem(KEY); } catch (e) {}
+      if (stored === 'dark' || stored === 'light') apply(stored);
+      else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) apply('dark');
+      document.addEventListener('DOMContentLoaded', function () {
+        const btn = document.getElementById('theme-toggle');
+        if (btn) btn.addEventListener('click', function () {
+          const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+          apply(next);
+          try { localStorage.setItem(KEY, next); } catch (e) {}
+        });
+        // sidebar active link tracking
+        const links = Array.from(document.querySelectorAll('.sidebar a'));
+        const targets = links.map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean);
+        function setActive() {
+          const y = window.scrollY + 120;
+          let activeIdx = 0;
+          for (let i = 0; i < targets.length; i++) {
+            if (targets[i].offsetTop <= y) activeIdx = i;
+          }
+          links.forEach((a, i) => a.classList.toggle('active', i === activeIdx));
+        }
+        window.addEventListener('scroll', setActive, { passive: true });
+        setActive();
+      });
+    })();
+  </script>
+</body>
+</html>
