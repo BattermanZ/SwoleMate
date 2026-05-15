@@ -247,8 +247,9 @@
 
   .hero-actions { margin-top: 14px; display: grid; grid-template-columns: 1fr 2fr; gap: 8px; position: relative; }
   .hero-actions .cancel {
-    padding: 14px; border-radius: 14px; border: 1px solid rgba(243,236,225,0.18);
-    background: rgba(243,236,225,0.06); color: var(--bg);
+    padding: 14px; border-radius: 14px; border: 1px solid var(--on-deep-line);
+    background: color-mix(in oklab, var(--on-deep) 6%, transparent);
+    color: var(--on-deep);
     font: 700 13px/1 'Onest';
   }
   .hero-actions .end {
