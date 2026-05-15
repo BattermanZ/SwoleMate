@@ -174,24 +174,23 @@
 
   .stat-grid {
     position: relative;
-    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px;
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
   }
   .stat-grid .cell {
     background: rgba(243,236,225,0.07); border: 1px solid rgba(243,236,225,0.12);
-    border-radius: 12px; padding: 9px 10px; min-width: 0;
+    border-radius: 12px; padding: 12px 14px; min-width: 0;
+    display: flex; flex-direction: column; gap: 6px;
   }
   .stat-grid .k {
-    font: 700 9px/1 'Onest'; letter-spacing: 0.16em; text-transform: uppercase;
+    font: 700 10px/1 'Onest'; letter-spacing: 0.18em; text-transform: uppercase;
     color: rgba(243,236,225,0.55);
-    white-space: nowrap; overflow: hidden; text-overflow: clip;
   }
-  .stat-grid .k .unit { color: rgba(243,236,225,0.4); font-weight: 600; margin-left: 3px; }
   .stat-grid .v {
-    margin-top: 6px; font: 800 17px/1 'Onest'; letter-spacing: -0.025em;
-    font-variant-numeric: tabular-nums; white-space: nowrap;
-    overflow: hidden; text-overflow: clip;
+    font: 800 24px/1 'Onest'; letter-spacing: -0.025em;
+    font-variant-numeric: tabular-nums;
+    display: flex; align-items: baseline; gap: 4px;
   }
-  .stat-grid .v small { font: 500 9.5px/1 'Onest'; color: rgba(243,236,225,0.55); margin-left: 2px; font-weight: 600; }
+  .stat-grid .v small { font: 500 11px/1 'Onest'; color: rgba(243,236,225,0.55); font-weight: 600; }
 
   .hero-actions { margin-top: 14px; display: grid; grid-template-columns: 1fr 2fr; gap: 8px; position: relative; }
   .hero-actions .cancel {
@@ -670,10 +669,10 @@
             </div>
             <div class="stats-wrap">
               <div class="stat-grid">
-                <div class="cell"><div class="k">Exer.</div><div class="v">4<small>/5</small></div></div>
-                <div class="cell"><div class="k">Sets</div><div class="v">18</div></div>
-                <div class="cell"><div class="k">Vol. <span class="unit">kg</span></div><div class="v">4,820</div></div>
-                <div class="cell"><div class="k">PRs</div><div class="v" style="color:var(--clay-2)">1<small>★</small></div></div>
+                <div class="cell"><div class="k">Exercises</div><div class="v">4<small>/ 5</small></div></div>
+                <div class="cell"><div class="k">Sets done</div><div class="v">18</div></div>
+                <div class="cell"><div class="k">Volume</div><div class="v">4,820<small>kg</small></div></div>
+                <div class="cell"><div class="k">Records</div><div class="v" style="color:var(--clay-2)">1<small>★</small></div></div>
               </div>
             </div>
           </div>
