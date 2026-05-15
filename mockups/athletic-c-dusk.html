@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#2a1d12" />
+<title>SwoleMate · Soft Athletic — C · Dusk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #ebdcc4;
+    --bg-2: #e3d0b1;
+    --card: #f1e5cc;
+    --card-2: #e8d8ba;
+    --ink: #2a1d12;
+    --ink-2: #4d3823;
+    --ink-soft: #7a5e3f;
+    --line: #c9b48d;
+    --line-2: #b89f72;
+    --ember: #b6562a;
+    --ember-2: #d4733a;
+    --gold: #d99340;
+    --shade: #5a3a20;
+    --green: #6a7f3a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    min-height: 100dvh; display: grid; place-items: center; padding: 24px;
+    background:
+      radial-gradient(1000px 700px at 20% 0%, #d9b87c 0%, transparent 60%),
+      radial-gradient(900px 700px at 100% 100%, #b87432 0%, transparent 60%),
+      #b89358;
+    font-family: 'Onest', system-ui, sans-serif; color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  .device {
+    width: 100%; max-width: 420px; aspect-ratio: 390/844;
+    background: var(--bg); padding: 14px; border-radius: 48px;
+    box-shadow: 0 0 0 1.5px #8a6a3a, 0 0 0 14px var(--ink), 0 40px 80px rgba(60,30,10,0.5);
+    position: relative; overflow: hidden;
+  }
+  .screen {
+    height: 100%; width: 100%; border-radius: 34px;
+    background: linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
+    overflow: hidden; display: flex; flex-direction: column; position: relative;
+  }
+  .notch { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); width: 120px; height: 28px; background: var(--ink); border-radius: 14px; z-index: 3; }
+  .statusbar { padding: 14px 24px 4px; display: flex; justify-content: space-between; font: 600 12px/1 'Onest'; color: var(--ink-soft); position: relative; z-index: 2; }
+  .statusbar .live { color: var(--ember); display: inline-flex; align-items: center; gap: 6px; }
+  .statusbar .live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ember); }
+
+  main { flex: 1; padding: 6px 18px 96px; overflow-y: auto; position: relative; z-index: 2; }
+
+  .top { display: flex; align-items: baseline; justify-content: space-between; padding: 8px 0 14px; }
+  .top .left { font: italic 400 18px/1 'Instrument Serif'; color: var(--shade); }
+  .top .left b { font-style: normal; font-weight: 700; font-family: 'Onest'; color: var(--ink); }
+  .top .right { font: 600 11px/1 'Onest'; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-soft); }
+
+  /* Deep moody hero */
+  .hero {
+    background: linear-gradient(155deg, #3a2415 0%, #2a1d12 55%, #1a0f06 100%);
+    color: var(--bg); border-radius: 28px;
+    padding: 24px 22px 22px; position: relative; overflow: hidden;
+    box-shadow: 0 30px 60px -20px rgba(40,20,5,0.55);
+  }
+  .hero::before {
+    content: ""; position: absolute; top: -80px; right: -80px; width: 280px; height: 280px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(217,147,64,0.5), transparent 65%);
+  }
+  .hero::after {
+    content: ""; position: absolute; bottom: -100px; left: -60px; width: 240px; height: 240px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(182,86,42,0.4), transparent 65%);
+  }
+  .hero .kicker { font: 600 10px/1 'Onest'; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ember-2); position: relative; }
+  .hero h1 {
+    margin: 8px 0 0; font: italic 400 30px/1.05 'Instrument Serif'; letter-spacing: -0.005em;
+    color: var(--bg); position: relative;
+  }
+  .hero h1 b { font-style: normal; font-weight: 800; font-family: 'Onest'; color: var(--gold); letter-spacing: -0.025em; }
+
+  .timer-row { margin-top: 22px; display: grid; grid-template-columns: 144px 1fr; gap: 16px; align-items: center; position: relative; }
+  .ring { width: 144px; height: 144px; position: relative; }
+  .ring svg { transform: rotate(-90deg); }
+  .ring .center { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
+  .ring .big { font: 800 30px/1 'Onest'; letter-spacing: -0.03em; color: var(--bg); font-variant-numeric: tabular-nums; }
+  .ring .small { font: italic 400 13px/1 'Instrument Serif'; color: rgba(235,220,196,0.65); margin-top: 4px; }
+
+  .timer-row .right .k { font: 700 10px/1 'Onest'; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(235,220,196,0.55); }
+  .timer-row .right .v { font: 800 36px/1 'Onest'; letter-spacing: -0.03em; margin-top: 6px; color: var(--bg); font-variant-numeric: tabular-nums; }
+  .timer-row .right .v small { font: 500 14px/1 'Onest'; color: rgba(235,220,196,0.55); margin-left: 4px; }
+  .timer-row .right .sub { margin-top: 6px; font: italic 400 13px/1.3 'Instrument Serif'; color: var(--gold); }
+
+  .chips { display: flex; gap: 8px; margin-top: 18px; position: relative; }
+  .chip {
+    background: rgba(235,220,196,0.1); border: 1px solid rgba(235,220,196,0.18);
+    border-radius: 999px; padding: 8px 14px; font: 600 12px/1 'Onest'; color: var(--bg);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+  .chip.ember .dot { background: var(--ember-2); }
+  .chip.gold .dot { background: var(--gold); }
+
+  /* Exercise — paper-on-paper warmth */
+  .ex-card {
+    margin-top: 16px; background: var(--card); border-radius: 22px;
+    padding: 18px; border: 1px solid var(--line);
+    box-shadow: 0 10px 24px -12px rgba(60,30,10,0.25);
+  }
+  .ex-head { display: flex; align-items: center; justify-content: space-between; }
+  .ex-name { font: 800 19px/1 'Onest'; letter-spacing: -0.01em; color: var(--ink); }
+  .ex-name small { display: block; font: italic 400 13px/1 'Instrument Serif'; color: var(--ink-soft); margin-top: 4px; }
+  .prog-pills { display: flex; gap: 4px; }
+  .prog-pills span { width: 10px; height: 22px; border-radius: 5px; background: var(--bg-2); }
+  .prog-pills span.done { background: var(--shade); }
+  .prog-pills span.live { background: var(--ember); animation: pulse 1.5s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.4; } }
+
+  .sets-list { margin-top: 14px; }
+  .s-row { display: grid; grid-template-columns: 28px 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px dashed var(--line); }
+  .s-row:last-child { border-bottom: 0; }
+  .s-row .n { width: 26px; height: 26px; border-radius: 50%; background: var(--bg-2); color: var(--ink-soft); display: grid; place-items: center; font: 700 11px/1 'Onest'; }
+  .s-row .body { font: 600 15px/1 'Onest'; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .s-row .body .w { color: var(--ink); font-weight: 700; }
+  .s-row .right { font: 500 12px/1 'Onest'; color: var(--ink-soft); }
+  .s-row.done .n { background: var(--shade); color: var(--card); }
+  .s-row.pr { background: linear-gradient(90deg, rgba(217,147,64,0.16), transparent 70%); margin: 0 -8px; padding: 12px 8px; border-radius: 12px; border-bottom: 0; }
+  .s-row.pr .n { background: var(--gold); color: var(--ink); }
+  .s-row.pr .body .w { color: var(--ember); }
+  .s-row.pr .right { color: var(--ember); font-weight: 700; }
+  .s-row.live { background: var(--ink); margin: 8px -8px 0; padding: 14px 8px; border-radius: 14px; border-bottom: 0; color: var(--bg); }
+  .s-row.live .n { background: var(--ember); color: white; }
+  .s-row.live .body { color: var(--gold); }
+  .s-row.live .right { color: rgba(235,220,196,0.6); }
+
+  /* Composer */
+  .compose { margin-top: 14px; background: var(--card-2); border-radius: 20px; padding: 16px; border: 1px solid var(--line); }
+  .compose .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .field { background: var(--card); border-radius: 16px; padding: 12px; border: 1px solid var(--line); }
+  .field label { font: 700 10px/1 'Onest'; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-soft); }
+  .field .v { margin-top: 6px; font: 800 30px/1 'Onest'; letter-spacing: -0.03em; display: flex; align-items: baseline; gap: 4px; font-variant-numeric: tabular-nums; color: var(--ink); }
+  .field .v .u { font: italic 400 14px/1 'Instrument Serif'; color: var(--ink-soft); }
+  .field .stepper { display: flex; gap: 6px; margin-top: 8px; }
+  .field .stepper button { flex: 1; height: 32px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--ink-2); font: 700 14px/1 'Onest'; }
+
+  .log-btn {
+    margin-top: 14px; width: 100%; padding: 20px; border: 0; border-radius: 999px;
+    background: linear-gradient(180deg, var(--ember-2), var(--ember));
+    color: white; font: 700 16px/1 'Onest';
+    box-shadow: 0 14px 30px -10px rgba(182,86,42,0.55), inset 0 -3px 0 #8a3a18;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+  }
+  .log-btn .arrow { font: italic 400 18px/1 'Instrument Serif'; }
+
+  /* Rest */
+  .rest {
+    margin-top: 14px; background: var(--card); border-radius: 22px; padding: 16px;
+    border: 1px solid var(--line); display: grid; grid-template-columns: 64px 1fr auto; gap: 14px; align-items: center;
+  }
+  .rest .ring-sm { width: 64px; height: 64px; position: relative; }
+  .rest .ring-sm .label { position: absolute; inset: 0; display: grid; place-items: center; font: 700 16px/1 'Onest'; color: var(--ember); font-variant-numeric: tabular-nums; }
+  .rest .copy .k { font: 700 10px/1 'Onest'; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-soft); }
+  .rest .copy .v { margin-top: 4px; font: italic 400 17px/1.2 'Instrument Serif'; color: var(--ink); }
+  .rest button { background: var(--ink); color: var(--bg); border: 0; border-radius: 999px; padding: 11px 14px; font: 700 12px/1 'Onest'; }
+
+  /* Nav */
+  nav.tabs {
+    position: absolute; left: 16px; right: 16px; bottom: 14px; height: 72px;
+    background: rgba(241,229,204,0.9); backdrop-filter: blur(14px);
+    border-radius: 28px; border: 1px solid var(--line);
+    display: grid; grid-template-columns: repeat(5, 1fr); align-items: center;
+    z-index: 4; box-shadow: 0 16px 32px -10px rgba(60,30,10,0.25);
+  }
+  nav.tabs a { display: grid; place-items: center; gap: 4px; color: var(--ink-soft); text-decoration: none; font: 600 10px/1 'Onest'; padding: 8px 0; }
+  nav.tabs a .pill { width: 28px; height: 28px; border-radius: 14px; display: grid; place-items: center; background: var(--bg-2); color: currentColor; }
+  nav.tabs a.active { color: var(--ember); }
+  nav.tabs a.active .pill { background: var(--ember); color: white; }
+
+  .home {
+    position: fixed; top: 20px; left: 20px;
+    color: var(--ink-2); font: 600 12px/1 'Onest'; text-decoration: none;
+    background: var(--card); padding: 10px 14px; border-radius: 999px; border: 1px solid var(--line);
+  }
+  @media (max-width: 480px) {
+    body { padding: 0; background: var(--bg); }
+    .device { max-width: 100%; aspect-ratio: auto; min-height: 100dvh; border-radius: 0; padding: 0; box-shadow: none; }
+    .screen { border-radius: 0; }
+    .notch { display: none; }
+    .home { top: 12px; left: 12px; }
+  }
+</style>
+</head>
+<body>
+  <a class="home" href="index.html">← gallery</a>
+  <div class="device">
+    <div class="notch"></div>
+    <div class="screen">
+      <div class="statusbar">
+        <span>7:42 pm</span>
+        <span class="live">session 042</span>
+      </div>
+      <main>
+        <div class="top">
+          <div class="left"><em>Push day,</em> <b>Tuesday.</b></div>
+          <div class="right">14 May · 042</div>
+        </div>
+
+        <section class="hero">
+          <div class="kicker">► forty-two minutes in</div>
+          <h1>The room is warm. <b>Bench is going.</b></h1>
+
+          <div class="timer-row">
+            <div class="ring">
+              <svg width="144" height="144" viewBox="0 0 144 144">
+                <circle cx="72" cy="72" r="64" stroke="rgba(235,220,196,0.12)" stroke-width="10" fill="none" />
+                <circle cx="72" cy="72" r="64" stroke="url(#g)" stroke-width="10" fill="none"
+                  stroke-dasharray="402" stroke-dashoffset="130" stroke-linecap="round" />
+                <defs>
+                  <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#d99340"/>
+                    <stop offset="100%" stop-color="#b6562a"/>
+                  </linearGradient>
+                </defs>
+              </svg>
+              <div class="center">
+                <div class="big">42:18</div>
+                <div class="small">elapsed</div>
+              </div>
+            </div>
+            <div class="right">
+              <div class="k">Volume today</div>
+              <div class="v">4,820<small>kg</small></div>
+              <div class="sub">+ 12% vs last push</div>
+            </div>
+          </div>
+
+          <div class="chips">
+            <div class="chip"><span class="dot"></span>18 sets</div>
+            <div class="chip ember"><span class="dot"></span>4 / 5 ex</div>
+            <div class="chip gold"><span class="dot"></span>1 PR ✦</div>
+          </div>
+        </section>
+
+        <section class="ex-card">
+          <div class="ex-head">
+            <div class="ex-name">Bench Press<small>— heavy, paused</small></div>
+            <div class="prog-pills">
+              <span class="done"></span><span class="done"></span><span class="done"></span><span class="live"></span><span></span>
+            </div>
+          </div>
+          <div class="sets-list">
+            <div class="s-row done"><span class="n">1</span><span class="body"><span class="w">100</span> kg × 10 reps</span><span class="right">7:18</span></div>
+            <div class="s-row done"><span class="n">2</span><span class="body"><span class="w">102.5</span> kg × 9 reps</span><span class="right">7:26</span></div>
+            <div class="s-row pr"><span class="n">3</span><span class="body"><span class="w">105.0</span> kg × 8 reps</span><span class="right">PR ✦</span></div>
+            <div class="s-row live"><span class="n">4</span><span class="body">Logging the next set…</span><span class="right">now</span></div>
+          </div>
+        </section>
+
+        <section class="compose">
+          <div class="row">
+            <div class="field">
+              <label>Weight</label>
+              <div class="v"><span>105</span><span class="u">kg</span></div>
+              <div class="stepper"><button>−</button><button>+</button></div>
+            </div>
+            <div class="field">
+              <label>Reps</label>
+              <div class="v"><span>8</span><span class="u">×</span></div>
+              <div class="stepper"><button>−</button><button>+</button></div>
+            </div>
+          </div>
+          <button class="log-btn"><span class="arrow">↳</span> Save set 4 of 5</button>
+        </section>
+
+        <section class="rest">
+          <div class="ring-sm">
+            <svg width="64" height="64" viewBox="0 0 64 64" style="transform:rotate(-90deg)">
+              <circle cx="32" cy="32" r="26" stroke="#c9b48d" stroke-width="5" fill="none"/>
+              <circle cx="32" cy="32" r="26" stroke="#b6562a" stroke-width="5" fill="none"
+                stroke-dasharray="163" stroke-dashoffset="55" stroke-linecap="round"/>
+            </svg>
+            <div class="label">63s</div>
+          </div>
+          <div class="copy">
+            <div class="k">Resting</div>
+            <div class="v">A minute more, then up.</div>
+          </div>
+          <button>Skip</button>
+        </section>
+      </main>
+      <nav class="tabs">
+        <a class="active" href="#"><span class="pill">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-4.5-7-11a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 6.5-7 11-7 11z"/></svg>
+        </span>Today</a>
+        <a href="#"><span class="pill">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 9h16"/></svg>
+        </span>Plans</a>
+        <a href="#"><span class="pill">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        </span>History</a>
+        <a href="#"><span class="pill">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19h16"/><path d="M6 16l4-5 4 3 5-7"/></svg>
+        </span>Progress</a>
+        <a href="#"><span class="pill">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="9" r="3.5"/><path d="M5 20c1-4 4-6 7-6s6 2 7 6"/></svg>
+        </span>You</a>
+      </nav>
+    </div>
+  </div>
+</body>
+</html>

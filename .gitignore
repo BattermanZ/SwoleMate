@@ -60,3 +60,6 @@ client/playwright-report/
 
 # backups
 server/backups/
+
+# mockup-only screenshot captures (local visual audits)
+mockups/.shots/

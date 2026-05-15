@@ -86,6 +86,9 @@
   .card.athletic .frame { background: radial-gradient(700px 400px at 70% 0%, #36281c, transparent 60%), #1c1611; }
   .card.japanese .frame { background: radial-gradient(700px 400px at 50% 0%, #3d3528, transparent 60%), #1f1c14; }
   .card.control .frame { background: repeating-linear-gradient(0deg, transparent 0 14px, rgba(255,80,40,0.04) 14px 15px), radial-gradient(700px 400px at 30% 0%, #2a1d12, transparent 60%), #15110a; }
+  .card.var-a .frame { background: radial-gradient(700px 400px at 50% 0%, #3a221a, transparent 60%), #1c1410; }
+  .card.var-b .frame { background: radial-gradient(700px 400px at 50% 0%, #2b261d, transparent 60%), #181612; }
+  .card.var-c .frame { background: radial-gradient(700px 400px at 50% 0%, #4a2b15, transparent 60%), #1a1108; }
 
   .card .meta { padding: 22px 22px 24px; display: flex; flex-direction: column; gap: 14px; flex: 1; }
   .card .row1 { display: flex; align-items: center; justify-content: space-between; }
@@ -114,6 +117,20 @@
   .card.athletic .open { background: linear-gradient(180deg, #d98a4f, #c66a3a); color: white; }
   .card.japanese .open { background: #c8331e; color: #f7f5ef; }
   .card.control .open { background: #e83a1e; color: #f3ecda; border-radius: 0; }
+  .card.var-a .open { background: #ff5e1f; color: #fff; }
+  .card.var-b .open { background: #1a1714; color: #fbf6ee; border-radius: 4px; }
+  .card.var-c .open { background: linear-gradient(180deg, #d4733a, #b6562a); color: #fff; }
+
+  /* Section break between directions and variants */
+  .section-break {
+    grid-column: 1 / -1; margin: 16px 0 4px;
+    display: flex; align-items: baseline; gap: 14px;
+    border-top: 1px solid var(--line); padding-top: 24px;
+  }
+  .section-break .label { font: 700 11px/1 'JetBrains Mono'; letter-spacing: 0.24em; color: var(--accent); text-transform: uppercase; }
+  .section-break h3 { margin: 0; font: italic 400 28px/1 'Instrument Serif'; color: var(--ink); letter-spacing: -0.01em; }
+  .section-break h3 .alt { font: 800 28px/1 'Onest'; color: var(--ink-mid); margin-left: 6px; font-style: normal; }
+  .section-break .right { margin-left: auto; font: 500 12px/1.4 'Onest'; color: var(--ink-mid); max-width: 36ch; text-align: right; }
 
   footer.page {
     max-width: 1280px; margin: 0 auto 60px; padding: 0 32px;
@@ -138,7 +155,7 @@
 </head>
 <body>
   <header class="page">
-    <div class="crumb">SwoleMate · Aesthetic Studies · 06 Directions</div>
+    <div class="crumb">SwoleMate · Aesthetic Studies · 06 Directions + 03 Variants</div>
     <h1>Six ways the app could <span class="alt">feel.</span></h1>
     <p>
       Each mockup shows the same moment — mid-session, set four of bench press,
@@ -319,6 +336,96 @@
         <div class="row2">
           <div class="fonts">Onest · Instrument Serif</div>
           <a class="open" href="athletic.html">Open full <span class="arr">→</span></a>
+        </div>
+      </div>
+    </article>
+
+    <div class="section-break">
+      <span class="label">▸ Soft athletic · variants</span>
+      <h3>Three pulls on the<span class="alt">favourite.</span></h3>
+      <div class="right">Same DNA, different intensities. Side-by-side at <a href="athletic.index.html" style="color:inherit">athletic.index.html</a>.</div>
+    </div>
+
+    <article class="card var-a">
+      <div class="frame">
+        <iframe src="athletic-a-energetic.html" title="Variant A · Energetic" loading="lazy" tabindex="-1"></iframe>
+      </div>
+      <div class="meta">
+        <div class="row1">
+          <span class="tag">▸ Variant A</span>
+          <span class="num">a.</span>
+        </div>
+        <h2>Energetic <em>— more punch</em></h2>
+        <div class="desc">
+          Same warm base, but the clay-orange is dialled to 11. Loud PR banner above the hero,
+          breathing timer ring, hot-orange CTAs. The page has more "going off" energy.
+        </div>
+        <div class="palette">
+          <span style="background:#f3ece1"></span>
+          <span style="background:#18130d"></span>
+          <span style="background:#ff5e1f"></span>
+          <span style="background:#ff7a2a"></span>
+          <span style="background:#d5a23a"></span>
+        </div>
+        <div class="row2">
+          <div class="fonts">Onest · Instrument Serif</div>
+          <a class="open" href="athletic-a-energetic.html">Open full <span class="arr">→</span></a>
+        </div>
+      </div>
+    </article>
+
+    <article class="card var-b">
+      <div class="frame">
+        <iframe src="athletic-b-restrained.html" title="Variant B · Restrained" loading="lazy" tabindex="-1"></iframe>
+      </div>
+      <div class="meta">
+        <div class="row1">
+          <span class="tag">▸ Variant B</span>
+          <span class="num">b.</span>
+        </div>
+        <h2>Restrained <em>— grown up</em></h2>
+        <div class="desc">
+          No dark hero card, no avatar, no pill chips. Light-on-light. Sharp 2–4px corners,
+          hairline rules, one signal color used in only three places per screen.
+        </div>
+        <div class="palette">
+          <span style="background:#fbf6ee"></span>
+          <span style="background:#e5dcc8"></span>
+          <span style="background:#847e72"></span>
+          <span style="background:#1a1714"></span>
+          <span style="background:#c66a3a"></span>
+        </div>
+        <div class="row2">
+          <div class="fonts">Onest · Instrument Serif</div>
+          <a class="open" href="athletic-b-restrained.html">Open full <span class="arr">→</span></a>
+        </div>
+      </div>
+    </article>
+
+    <article class="card var-c">
+      <div class="frame">
+        <iframe src="athletic-c-dusk.html" title="Variant C · Dusk" loading="lazy" tabindex="-1"></iframe>
+      </div>
+      <div class="meta">
+        <div class="row1">
+          <span class="tag">▸ Variant C</span>
+          <span class="num">c.</span>
+        </div>
+        <h2>Dusk <em>— moodier</em></h2>
+        <div class="desc">
+          Drop the white. Amber-cream base, terracotta accents, the hero is a deep ember-gradient
+          that feels like golden-hour. Premium, slower.
+        </div>
+        <div class="palette">
+          <span style="background:#ebdcc4"></span>
+          <span style="background:#2a1d12"></span>
+          <span style="background:#b6562a"></span>
+          <span style="background:#d99340"></span>
+          <span style="background:#5a3a20"></span>
+        </div>
+        <div class="row2">
+          <div class="fonts">Onest · Instrument Serif</div>
+          <a class="open" href="athletic-c-dusk.html">Open full <span class="arr">→</span></a>
         </div>
       </div>
     </article>
