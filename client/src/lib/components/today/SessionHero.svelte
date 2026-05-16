@@ -53,7 +53,7 @@
 	{/snippet}
 
 	<div class="timer-block">
-		<div class="ring">
+		<div class="session-ring">
 			<svg width="150" height="150" viewBox="0 0 150 150" aria-hidden="true">
 				<circle
 					cx="75"
@@ -135,7 +135,7 @@
 		width: 100%;
 		min-width: 0;
 	}
-	.ring {
+	.session-ring {
 		width: 150px;
 		height: 150px;
 		position: relative;

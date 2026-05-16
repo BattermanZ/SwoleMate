@@ -44,7 +44,7 @@
 	{#snippet sub()}Consistency ring is days trained ÷ days in window.{/snippet}
 
 	<div class="block">
-		<div class="ring">
+		<div class="progress-ring">
 			<svg width="150" height="150" viewBox="0 0 150 150" aria-hidden="true">
 				<circle
 					cx="75"
@@ -130,7 +130,7 @@
 		gap: 16px;
 		position: relative;
 	}
-	.ring {
+	.progress-ring {
 		width: 150px;
 		height: 150px;
 		position: relative;
