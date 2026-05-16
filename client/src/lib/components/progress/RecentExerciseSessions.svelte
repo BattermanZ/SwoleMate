@@ -65,10 +65,16 @@
 		gap: 10px;
 	}
 	.day {
-		font: 800 13px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 13px/1 'Onest',
+			system-ui,
+			sans-serif;
 	}
 	.time {
-		font: 600 11px/1 'Onest', system-ui, sans-serif;
+		font:
+			600 11px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 	}
 	.notes {
@@ -80,7 +86,10 @@
 		margin-top: 8px;
 	}
 	.empty {
-		font: 500 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			500 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 	}
 </style>

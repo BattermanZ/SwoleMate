@@ -85,18 +85,30 @@
 		background: linear-gradient(135deg, var(--bg-2), var(--card-3));
 		display: grid;
 		place-items: center;
-		font: 800 18px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 18px/1 'Onest',
+			system-ui,
+			sans-serif;
 	}
 	.t {
-		font: 800 14px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 14px/1 'Onest',
+			system-ui,
+			sans-serif;
 	}
 	.m {
 		margin-top: 4px;
-		font: 500 12px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			500 12px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 	}
 	.arr {
-		font: 800 18px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 18px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 	}
 </style>

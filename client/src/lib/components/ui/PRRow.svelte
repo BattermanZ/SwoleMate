@@ -30,7 +30,7 @@
 	this={onclick ? 'button' : 'article'}
 	class="row tone-{tone}"
 	type={onclick ? 'button' : undefined}
-	onclick={onclick}
+	{onclick}
 	role={onclick ? 'button' : undefined}
 	tabindex={onclick ? 0 : undefined}
 >
@@ -88,12 +88,18 @@
 		gap: 10px;
 	}
 	.ex {
-		font: 800 14px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 14px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: -0.01em;
 	}
 	.date {
 		flex: none;
-		font: 700 10px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 		border: 1px solid var(--line);
 		background: var(--card);
@@ -103,7 +109,10 @@
 
 	.body {
 		margin-top: 6px;
-		font: 500 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			500 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-2);
 		display: flex;
 		flex-wrap: wrap;
@@ -111,7 +120,10 @@
 		gap: 4px 6px;
 	}
 	.tag {
-		font: 700 9px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 9px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: 0.15em;
 		text-transform: uppercase;
 		padding: 4px 8px;
@@ -132,7 +144,10 @@
 		font-weight: 700;
 	}
 	.new {
-		font: 800 16px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 16px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink);
 		letter-spacing: -0.015em;
 		font-variant-numeric: tabular-nums;
@@ -151,7 +166,10 @@
 
 	.details {
 		margin-top: 6px;
-		font: 500 11px/1 'Onest', system-ui, sans-serif;
+		font:
+			500 11px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 		font-variant-numeric: tabular-nums;
 	}

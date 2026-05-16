@@ -48,7 +48,10 @@
 		border: 0;
 		background: transparent;
 		padding: 10px 16px;
-		font: 700 12px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 12px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: 0.06em;
 		color: var(--ink-soft);
 		cursor: pointer;

@@ -84,11 +84,7 @@
 				<div class="rep-head">
 					<h4>Rep PRs</h4>
 					{#if repSummary.length > 10}
-						<button
-							type="button"
-							class="show-all"
-							onclick={() => (showAllReps = !showAllReps)}
-						>
+						<button type="button" class="show-all" onclick={() => (showAllReps = !showAllReps)}>
 							{showAllReps ? 'Show less' : `Show all (${repSummary.length})`}
 						</button>
 					{/if}
@@ -104,11 +100,7 @@
 		{#if volumeStats.timed_records}
 			{@const t = volumeStats.timed_records}
 			<div class="timed">
-				<MetricTile
-					label="Longest set"
-					value={formatDuration(t.longest_set_seconds)}
-					rail="sage"
-				/>
+				<MetricTile label="Longest set" value={formatDuration(t.longest_set_seconds)} rail="sage" />
 				<MetricTile
 					label="Best session"
 					value={formatDuration(t.best_session_duration_seconds)}
@@ -147,7 +139,10 @@
 		border: 1px solid var(--line);
 		border-radius: 12px;
 		padding: 10px 36px 10px 14px;
-		font: 700 13px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 13px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink);
 		cursor: pointer;
 		max-width: 220px;
@@ -161,7 +156,10 @@
 	.caret {
 		position: absolute;
 		right: 12px;
-		font: 800 14px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 14px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 		pointer-events: none;
 	}
@@ -192,7 +190,10 @@
 	}
 	.rep-head h4 {
 		margin: 0;
-		font: 700 11px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 11px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: 0.18em;
 		text-transform: uppercase;
 		color: var(--ink-soft);
@@ -201,7 +202,10 @@
 		background: transparent;
 		border: 0;
 		padding: 4px 6px;
-		font: 700 11px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 11px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--clay-text);
 		cursor: pointer;
 	}
@@ -220,7 +224,10 @@
 	}
 
 	.err {
-		font: 600 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			600 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--clay-text);
 	}
 	.skel {
@@ -229,7 +236,10 @@
 		background: var(--card-3);
 	}
 	.empty {
-		font: 500 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			500 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 	}
 </style>

@@ -115,7 +115,10 @@
 	}
 	header h2 {
 		margin: 0;
-		font: 800 18px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 18px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: -0.015em;
 	}
 	header h2 em {
@@ -126,7 +129,10 @@
 	}
 	header p {
 		margin: 4px 0 0;
-		font: 500 12px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			500 12px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 	}
 
@@ -154,14 +160,23 @@
 		flex-wrap: wrap;
 	}
 	.day {
-		font: 800 16px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 16px/1 'Onest',
+			system-ui,
+			sans-serif;
 	}
 	.mood {
-		font: 400 14px/1 'Onest', system-ui, sans-serif;
+		font:
+			400 14px/1 'Onest',
+			system-ui,
+			sans-serif;
 		opacity: 0.85;
 	}
 	.time {
-		font: 500 12px/1 'Onest', system-ui, sans-serif;
+		font:
+			500 12px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 	}
 	.notes {
@@ -190,7 +205,10 @@
 		min-width: 0;
 	}
 	.name {
-		font: 800 14px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 14px/1 'Onest',
+			system-ui,
+			sans-serif;
 	}
 	.setbadges {
 		margin-top: 6px;

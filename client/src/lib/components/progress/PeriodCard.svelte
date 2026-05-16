@@ -125,7 +125,10 @@
 	}
 	h3 {
 		margin: 0;
-		font: 800 15px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 15px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: -0.01em;
 	}
 	.chip {
@@ -133,7 +136,10 @@
 		padding: 5px 10px;
 		border: 1px solid var(--line);
 		background: var(--card);
-		font: 700 10px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: 0.06em;
 		color: var(--ink-2);
 		white-space: nowrap;
@@ -152,7 +158,10 @@
 		margin-top: 12px;
 	}
 	.badge {
-		font: 700 10px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
 		padding: 6px 10px;
 		border-radius: 999px;
 		background: var(--card);
@@ -172,7 +181,10 @@
 
 	.empty {
 		margin-top: 12px;
-		font: 500 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			500 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 	}
 </style>

@@ -201,7 +201,6 @@
 	});
 
 	$effect(() => {
-		workoutStats;
 		render();
 	});
 </script>

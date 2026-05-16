@@ -66,7 +66,8 @@
 			exerciseTypes = await getExerciseTypes();
 			exerciseTypesLoaded = true;
 			const stored = localStorage.getItem('progress.selectedExercise');
-			selectedExercise = stored && exerciseTypes.includes(stored) ? stored : exerciseTypes[0] ?? '';
+			selectedExercise =
+				stored && exerciseTypes.includes(stored) ? stored : (exerciseTypes[0] ?? '');
 			return selectedExercise;
 		} catch (e) {
 			exerciseTypes = [];
@@ -143,9 +144,7 @@
 	let perWeekTrend = $derived(workoutStats?.workout_frequency.trend);
 	let avgDuration = $derived(Math.round(workoutStats?.average_duration_minutes ?? 0));
 	let avgDurationDelta = $derived(
-		workoutStats?.duration_trend !== undefined
-			? Math.round(workoutStats.duration_trend)
-			: undefined
+		workoutStats?.duration_trend !== undefined ? Math.round(workoutStats.duration_trend) : undefined
 	);
 	let last30Workouts = $derived(progressOverview?.last_30_days.workouts ?? 0);
 	// Consistency: days trained in last 30. We don't have that directly so approximate
@@ -155,13 +154,13 @@
 
 <div class="page">
 	<ProgressHero
-		consistencyDone={consistencyDone}
+		{consistencyDone}
 		consistencyWindow={30}
 		totalWorkouts={workoutStats?.total_workouts ?? 0}
-		perWeek={perWeek}
+		{perWeek}
 		perWeekDelta={perWeekTrend}
 		avgDurationMin={avgDuration}
-		avgDurationDelta={avgDurationDelta}
+		{avgDurationDelta}
 		focusExercise={selectedExercise || undefined}
 		loading={loadingOverall}
 		error={errorOverall}
@@ -229,12 +228,18 @@
 		background: var(--card-3);
 	}
 	.empty {
-		font: 500 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			500 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 		text-align: center;
 	}
 	.err {
-		font: 600 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			600 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--clay-text);
 	}
 </style>

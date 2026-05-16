@@ -50,7 +50,10 @@
 		display: flex;
 		align-items: center;
 		gap: 10px;
-		font: 500 13px/1.35 'Onest', system-ui, sans-serif;
+		font:
+			500 13px/1.35 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-2);
 	}
 	.ico {
@@ -60,7 +63,10 @@
 		border-radius: 7px;
 		display: grid;
 		place-items: center;
-		font: 800 13px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 13px/1 'Onest',
+			system-ui,
+			sans-serif;
 	}
 	.t-info .ico {
 		background: color-mix(in oklab, var(--sage) 18%, transparent);

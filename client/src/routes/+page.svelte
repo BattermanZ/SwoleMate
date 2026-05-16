@@ -189,6 +189,15 @@
 						onMarkDone={() => c.markExerciseDone(ex.id)}
 						onAddSet={(p) =>
 							c.addSet(ex.id, p.reps, p.weight, p.weightLeft, p.weightRight, p.durationSeconds)}
+						onUpdateSet={(setId, p) =>
+							c.updateSet(ex.id, setId, {
+								reps: p.reps,
+								weight: p.weight,
+								weightLeft: p.weightLeft,
+								weightRight: p.weightRight,
+								durationSeconds: p.durationSeconds
+							})}
+						onRemoveSet={(setId) => c.removeSet(ex.id, setId)}
 						onUpdateNotes={(n) => c.updateExerciseNotes(ex.id, n)}
 						onAddSetting={(k, v) => c.addExerciseSetting(ex.id, k, v)}
 						onRemoveSetting={(id) => c.removeExerciseSetting(ex.id, id)}
@@ -248,7 +257,10 @@
 		display: block;
 	}
 	.lbl {
-		font: 700 10px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: 0.18em;
 		text-transform: uppercase;
 		color: var(--ink-soft);
@@ -262,12 +274,18 @@
 		border: 0;
 		outline: 0;
 		color: var(--ink);
-		font: 500 14px/1.45 'Onest', system-ui, sans-serif;
+		font:
+			500 14px/1.45 'Onest',
+			system-ui,
+			sans-serif;
 	}
 
 	.muted {
 		opacity: 0.7;
-		font: 500 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			500 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 	}
 
 	.empty {
@@ -275,12 +293,18 @@
 		padding: 14px 0;
 	}
 	.empty .t {
-		font: 800 18px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 18px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: -0.015em;
 	}
 	.empty p {
 		margin: 6px 0 0;
-		font: 500 13px/1.5 'Onest', system-ui, sans-serif;
+		font:
+			500 13px/1.5 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 	}
 
@@ -309,11 +333,17 @@
 		border-color: var(--clay);
 	}
 	.t-name {
-		font: 800 14px/1.1 'Onest', system-ui, sans-serif;
+		font:
+			800 14px/1.1 'Onest',
+			system-ui,
+			sans-serif;
 	}
 	.t-count {
 		margin-top: 4px;
-		font: 500 12px/1 'Onest', system-ui, sans-serif;
+		font:
+			500 12px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 	}
 </style>

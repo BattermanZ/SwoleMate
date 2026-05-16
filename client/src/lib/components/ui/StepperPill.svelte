@@ -57,8 +57,8 @@
 		class="step"
 		aria-label="Decrease {label ?? 'value'}"
 		onclick={dec}
-		{disabled}
-	>−</button>
+		{disabled}>−</button
+	>
 	<div class="v-wrap">
 		<span class="value">{display}</span>
 		{#if unit}<span class="unit">{unit}</span>{/if}
@@ -68,8 +68,8 @@
 		class="step"
 		aria-label="Increase {label ?? 'value'}"
 		onclick={inc}
-		{disabled}
-	>+</button>
+		{disabled}>+</button
+	>
 </div>
 
 <style>
@@ -99,7 +99,10 @@
 		border: 0;
 		padding: 0;
 		cursor: pointer;
-		font: 800 22px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 22px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 		display: grid;
 		place-items: center;
@@ -128,13 +131,19 @@
 		padding: 0 4px;
 	}
 	.value {
-		font: 800 22px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 22px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink);
 		font-variant-numeric: tabular-nums;
 		letter-spacing: -0.03em;
 	}
 	.unit {
-		font: 600 12px/1 'Onest', system-ui, sans-serif;
+		font:
+			600 12px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 		letter-spacing: 0.04em;
 		text-transform: lowercase;

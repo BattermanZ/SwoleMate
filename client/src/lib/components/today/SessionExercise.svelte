@@ -29,6 +29,8 @@
 		onDelete?: () => void;
 		onMarkDone?: () => void;
 		onAddSet?: (payload: AddSetPayload) => void;
+		onUpdateSet?: (setId: number, payload: AddSetPayload) => void;
+		onRemoveSet?: (setId: number) => void;
 		onUpdateNotes?: (notes: string) => void;
 		onAddSetting?: (key: string, value: string) => void;
 		onRemoveSetting?: (id: string) => void;
@@ -47,6 +49,8 @@
 		onDelete,
 		onMarkDone,
 		onAddSet,
+		onUpdateSet,
+		onRemoveSet,
 		onUpdateNotes,
 		onAddSetting,
 		onRemoveSetting,
@@ -62,14 +66,11 @@
 	let setWeightLeft = $state(0);
 	let setWeightRight = $state(0);
 	let setDurationSeconds = $state(60);
-	let notesDraft = $state('');
+	let notesDraft = $derived(exercise.notes);
 	let newSettingKey = $state('');
 	let newSettingValue = $state('');
 	let editing = $state(false);
-
-	$effect(() => {
-		notesDraft = exercise.notes;
-	});
+	let editingSetId = $state<number | null>(null);
 
 	let locked = $derived(exercise.status === 'done' && !editing);
 
@@ -89,7 +90,25 @@
 		return `last ${last.weight}kg × ${last.reps}`;
 	});
 
-	function addSet() {
+	function setFormFromSet(set: SetLike & { id?: number }) {
+		if (typeof set.id === 'number') editingSetId = set.id;
+		setReps = set.reps;
+		setWeight = set.weight;
+		setWeightLeft = set.weightLeft ?? 0;
+		setWeightRight = set.weightRight ?? 0;
+		setDurationSeconds = set.durationSeconds ?? 60;
+	}
+
+	function resetSetForm() {
+		editingSetId = null;
+		setReps = 12;
+		setWeight = 0;
+		setWeightLeft = 0;
+		setWeightRight = 0;
+		setDurationSeconds = 60;
+	}
+
+	function commitSet() {
 		if (locked) return;
 		const payload: AddSetPayload = {
 			reps: tracksReps ? setReps : 0,
@@ -99,6 +118,11 @@
 		if (tracksWeight && exercise.perSideWeight && exercise.splitWeight) {
 			payload.weightLeft = setWeightLeft;
 			payload.weightRight = setWeightRight;
+		}
+		if (editingSetId !== null) {
+			onUpdateSet?.(editingSetId, payload);
+			resetSetForm();
+			return;
 		}
 		onAddSet?.(payload);
 	}
@@ -199,7 +223,10 @@
 		<div class="body" id="ex-body-{exercise.id}">
 			<!-- Settings -->
 			<section class="sub">
-				<div class="sub-head"><h4>Settings</h4><span class="help">optional equipment setup</span></div>
+				<div class="sub-head">
+					<h4>Settings</h4>
+					<span class="help">optional equipment setup</span>
+				</div>
 				<div class="settings">
 					{#each exercise.settings as s (s.id)}
 						<div class="setting-row">
@@ -245,8 +272,8 @@
 							class="add-btn"
 							type="button"
 							onclick={addSetting}
-							disabled={locked || !newSettingKey.trim() || !newSettingValue.trim()}
-						>Add</button>
+							disabled={locked || !newSettingKey.trim() || !newSettingValue.trim()}>Add</button
+						>
 					</div>
 				</div>
 			</section>
@@ -267,7 +294,10 @@
 
 			<!-- Current sets -->
 			<section class="sub">
-				<div class="sub-head"><h4>Current sets</h4><span class="help">tap pills to edit</span></div>
+				<div class="sub-head">
+					<h4>Current sets</h4>
+					<span class="help">edit or remove logged sets</span>
+				</div>
 
 				<div class="tracking">
 					{#if !tracksTime}
@@ -318,6 +348,19 @@
 							prGroupIndex={exercise.status === 'active' ? prGroupIndex : null}
 						/>
 					</div>
+					{#if !locked}
+						<div class="set-actions" aria-label="Logged set actions">
+							{#each exercise.sets as set, i (set.id)}
+								<div class="set-action-row">
+									<span>Set {i + 1}</span>
+									<div>
+										<button type="button" onclick={() => setFormFromSet(set)}>Edit</button>
+										<button type="button" onclick={() => onRemoveSet?.(set.id)}>Remove</button>
+									</div>
+								</div>
+							{/each}
+						</div>
+					{/if}
 				{/if}
 
 				{#if !locked}
@@ -343,46 +386,28 @@
 						{#if tracksWeight && !exercise.perSideWeight}
 							<div class="field">
 								<span class="field-lbl">Weight</span>
-								<StepperPill
-									bind:value={setWeight}
-									label="Weight"
-									step={2.5}
-									min={0}
-									unit="kg"
-								/>
+								<StepperPill bind:value={setWeight} label="Weight" step={2.5} min={0} unit="kg" />
 							</div>
 						{:else if tracksWeight && !exercise.splitWeight}
 							<div class="field">
 								<span class="field-lbl">Per side · kg</span>
-								<StepperPill
-									bind:value={setWeight}
-									label="Per side"
-									step={2.5}
-									min={0}
-								/>
+								<StepperPill bind:value={setWeight} label="Per side" step={2.5} min={0} />
 							</div>
 						{:else if tracksWeight}
 							<div class="field">
 								<span class="field-lbl">Left · kg</span>
-								<StepperPill
-									bind:value={setWeightLeft}
-									label="Left"
-									step={2.5}
-									min={0}
-								/>
+								<StepperPill bind:value={setWeightLeft} label="Left" step={2.5} min={0} />
 							</div>
 							<div class="field">
 								<span class="field-lbl">Right · kg</span>
-								<StepperPill
-									bind:value={setWeightRight}
-									label="Right"
-									step={2.5}
-									min={0}
-								/>
+								<StepperPill bind:value={setWeightRight} label="Right" step={2.5} min={0} />
 							</div>
 						{/if}
-						<button class="commit-set" type="button" onclick={addSet}>
-							▶ Log set {setCount + 1}
+						{#if editingSetId !== null}
+							<button class="cancel-edit" type="button" onclick={resetSetForm}>Cancel edit</button>
+						{/if}
+						<button class="commit-set" type="button" onclick={commitSet}>
+							{editingSetId === null ? `▶ Log set ${setCount + 1}` : '✓ Save set'}
 						</button>
 					</div>
 				{/if}
@@ -454,12 +479,18 @@
 	}
 	h3 {
 		margin: 0;
-		font: 800 18px/1.1 'Onest', system-ui, sans-serif;
+		font:
+			800 18px/1.1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: -0.01em;
 	}
 	.summary {
 		margin-top: 6px;
-		font: 500 12px/1.35 'Onest', system-ui, sans-serif;
+		font:
+			500 12px/1.35 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 		display: flex;
 		align-items: center;
@@ -483,7 +514,10 @@
 		border: 0;
 		background: var(--bg-2);
 		color: var(--ink-soft);
-		font: 700 14px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 14px/1 'Onest',
+			system-ui,
+			sans-serif;
 		cursor: pointer;
 	}
 	.toggle:active {
@@ -498,7 +532,10 @@
 		background: color-mix(in oklab, var(--clay) 10%, transparent);
 		color: var(--clay-text);
 		cursor: pointer;
-		font: 700 13px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 13px/1 'Onest',
+			system-ui,
+			sans-serif;
 	}
 	.badge-btn {
 		background: var(--bg-2);
@@ -506,7 +543,10 @@
 		border: 0;
 		padding: 6px 10px;
 		border-radius: 999px;
-		font: 700 11px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 11px/1 'Onest',
+			system-ui,
+			sans-serif;
 		cursor: pointer;
 	}
 
@@ -533,7 +573,10 @@
 	}
 	.sub-head h4 {
 		margin: 0;
-		font: 700 11px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 11px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: 0.18em;
 		text-transform: uppercase;
 		color: var(--ink-soft);
@@ -559,7 +602,10 @@
 		border: 1px solid var(--line);
 		border-radius: 10px;
 		padding: 9px 10px;
-		font: 500 13px/1.2 'Onest', system-ui, sans-serif;
+		font:
+			500 13px/1.2 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink);
 		outline: 0;
 		min-width: 0;
@@ -576,7 +622,10 @@
 		border-radius: 10px;
 		background: color-mix(in oklab, var(--clay) 10%, transparent);
 		color: var(--clay-text);
-		font: 800 13px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 13px/1 'Onest',
+			system-ui,
+			sans-serif;
 		cursor: pointer;
 	}
 	.add-btn {
@@ -586,7 +635,10 @@
 		border-radius: 10px;
 		background: var(--ink);
 		color: var(--card);
-		font: 700 12px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 12px/1 'Onest',
+			system-ui,
+			sans-serif;
 		cursor: pointer;
 	}
 
@@ -604,11 +656,50 @@
 		align-items: center;
 	}
 	.set-pills .lbl {
-		font: 700 10px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: 0.18em;
 		text-transform: uppercase;
 		color: var(--ink-soft);
 		margin-right: 4px;
+	}
+	.set-actions {
+		margin-top: 8px;
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+	.set-action-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 8px;
+		padding: 8px 10px;
+		border-radius: 10px;
+		background: var(--card-3);
+		font:
+			700 11px/1 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--ink-soft);
+	}
+	.set-action-row div {
+		display: flex;
+		gap: 6px;
+	}
+	.set-action-row button {
+		border: 0;
+		border-radius: 999px;
+		padding: 6px 9px;
+		background: var(--bg-2);
+		color: var(--ink-2);
+		font:
+			700 11px/1 'Onest',
+			system-ui,
+			sans-serif;
+		cursor: pointer;
 	}
 
 	.add-set {
@@ -631,7 +722,10 @@
 		min-width: 0;
 	}
 	.field-lbl {
-		font: 700 10px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: 0.18em;
 		text-transform: uppercase;
 		color: var(--ink-soft);
@@ -644,10 +738,26 @@
 		border-radius: 999px;
 		background: linear-gradient(180deg, var(--clay-2), var(--clay));
 		color: white;
-		font: 800 14px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 14px/1 'Onest',
+			system-ui,
+			sans-serif;
 		box-shadow:
 			0 14px 28px -10px rgba(255, 94, 31, 0.55),
 			inset 0 -3px 0 var(--clay-deep);
+		cursor: pointer;
+	}
+	.cancel-edit {
+		grid-column: 1 / -1;
+		border: 0;
+		border-radius: 999px;
+		padding: 12px 10px;
+		background: var(--bg-2);
+		color: var(--ink-2);
+		font:
+			800 12px/1 'Onest',
+			system-ui,
+			sans-serif;
 		cursor: pointer;
 	}
 
@@ -659,7 +769,10 @@
 		border: 1px solid var(--line);
 		border-radius: 10px;
 		padding: 10px 12px;
-		font: 500 13px/1.45 'Onest', system-ui, sans-serif;
+		font:
+			500 13px/1.45 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink);
 		outline: 0;
 	}

@@ -22,7 +22,7 @@
 		trackingFieldsSetting,
 		TRACKING_FIELDS_SETTING_KEY
 	} from '$lib/today/tracking';
-	import { Btn, Card, Chip, Chk, PageHero } from '$lib/components/ui';
+	import { Btn, Card, Chk, PageHero } from '$lib/components/ui';
 
 	interface Props {
 		data: { templates: WorkoutTemplate[] };
@@ -45,10 +45,7 @@
 
 	const authState = auth.state;
 
-	let templates = $state<WorkoutTemplate[]>([]);
-	$effect(() => {
-		templates = data.templates;
-	});
+	let templates = $derived(data.templates);
 
 	let selectedId = $state<number | 'new' | null>(null);
 	let detailError = $state<string | null>(null);
@@ -99,7 +96,10 @@
 		};
 	}
 
-	function draftToInput(d: DraftTemplate): { name: string; exercises: WorkoutTemplateExerciseInput[] } {
+	function draftToInput(d: DraftTemplate): {
+		name: string;
+		exercises: WorkoutTemplateExerciseInput[];
+	} {
 		return {
 			name: d.name.trim(),
 			exercises: d.exercises.map((ex) => ({
@@ -164,9 +164,7 @@
 	}
 
 	function updateExercise(localId: string, patch: Partial<DraftExercise>) {
-		draft.exercises = draft.exercises.map((e) =>
-			e.localId === localId ? { ...e, ...patch } : e
-		);
+		draft.exercises = draft.exercises.map((e) => (e.localId === localId ? { ...e, ...patch } : e));
 	}
 
 	function addSetting(localId: string) {
@@ -186,13 +184,15 @@
 		});
 	}
 
-	function updateSetting(exerciseLocalId: string, settingLocalId: string, patch: Partial<DraftSetting>) {
+	function updateSetting(
+		exerciseLocalId: string,
+		settingLocalId: string,
+		patch: Partial<DraftSetting>
+	) {
 		const ex = draft.exercises.find((e) => e.localId === exerciseLocalId);
 		if (!ex) return;
 		updateExercise(exerciseLocalId, {
-			settings: ex.settings.map((s) =>
-				s.localId === settingLocalId ? { ...s, ...patch } : s
-			)
+			settings: ex.settings.map((s) => (s.localId === settingLocalId ? { ...s, ...patch } : s))
 		});
 	}
 
@@ -545,11 +545,17 @@
 		background: color-mix(in oklab, var(--clay) 8%, var(--card-3));
 	}
 	.t-name {
-		font: 800 14px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 14px/1 'Onest',
+			system-ui,
+			sans-serif;
 	}
 	.t-meta {
 		margin-top: 4px;
-		font: 500 12px/1 'Onest', system-ui, sans-serif;
+		font:
+			500 12px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 	}
 
@@ -559,7 +565,10 @@
 	}
 	.lbl {
 		display: block;
-		font: 700 10px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: 0.18em;
 		text-transform: uppercase;
 		color: var(--ink-soft);
@@ -572,7 +581,10 @@
 		border: 1px solid var(--line);
 		border-radius: 10px;
 		padding: 11px 12px;
-		font: 500 14px/1.2 'Onest', system-ui, sans-serif;
+		font:
+			500 14px/1.2 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink);
 		outline: 0;
 		resize: vertical;
@@ -598,7 +610,10 @@
 	}
 	.ex-list-head h3 {
 		margin: 0;
-		font: 800 14px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 14px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: -0.01em;
 	}
 	.ex-cards {
@@ -621,7 +636,10 @@
 		align-items: center;
 	}
 	.ex-idx {
-		font: 800 13px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 13px/1 'Onest',
+			system-ui,
+			sans-serif;
 	}
 	.toggles {
 		display: flex;
@@ -640,7 +658,10 @@
 	}
 	.settings-head h4 {
 		margin: 0;
-		font: 700 10px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: 0.18em;
 		text-transform: uppercase;
 		color: var(--ink-soft);
@@ -661,12 +682,18 @@
 		border-radius: 10px;
 		background: color-mix(in oklab, var(--clay) 10%, transparent);
 		color: var(--clay-text);
-		font: 800 13px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 13px/1 'Onest',
+			system-ui,
+			sans-serif;
 		cursor: pointer;
 	}
 
 	.empty {
-		font: 500 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			500 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 		padding: 12px;
 		border-radius: 10px;
@@ -674,15 +701,24 @@
 		border: 1px dashed var(--line);
 	}
 	.muted {
-		font: 500 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			500 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 	}
 	.err {
-		font: 600 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			600 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--clay-text);
 	}
 	.ok {
-		font: 600 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			600 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--sage);
 	}
 

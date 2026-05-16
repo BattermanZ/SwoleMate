@@ -111,11 +111,17 @@
 		color: white;
 		display: grid;
 		place-items: center;
-		font: 800 12px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 12px/1 'Onest',
+			system-ui,
+			sans-serif;
 		box-shadow: 0 4px 10px -3px rgba(255, 94, 31, 0.55);
 	}
 	.name {
-		font: 800 17px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 17px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: -0.01em;
 		white-space: nowrap;
 		overflow: hidden;

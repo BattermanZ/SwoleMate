@@ -40,6 +40,7 @@
 	} | null>(null);
 
 	let demoModeEnabled = $state(false);
+	let mcpTokensLoaded = $state(false);
 
 	let activeMcpTokens = $derived(mcpTokens.filter((t) => !t.revoked_at));
 
@@ -74,6 +75,7 @@
 		mcpError = null;
 		try {
 			mcpTokens = await getMcpTokens();
+			mcpTokensLoaded = true;
 		} catch (e) {
 			mcpError = e instanceof Error ? e.message : 'Failed to load MCP tokens';
 		} finally {
@@ -187,7 +189,17 @@
 
 	onMount(async () => {
 		demoModeEnabled = readDemoModePreference();
-		await loadMcpTokens();
+	});
+
+	$effect(() => {
+		if (
+			$authState.status === 'authenticated' &&
+			!$authState.offline &&
+			!mcpTokensLoaded &&
+			!mcpLoading
+		) {
+			void loadMcpTokens();
+		}
 	});
 </script>
 
@@ -433,7 +445,10 @@
 	}
 	.lbl {
 		display: block;
-		font: 700 10px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: 0.18em;
 		text-transform: uppercase;
 		color: var(--ink-soft);
@@ -446,7 +461,10 @@
 		border: 1px solid var(--line);
 		border-radius: 10px;
 		padding: 11px 12px;
-		font: 500 14px/1.2 'Onest', system-ui, sans-serif;
+		font:
+			500 14px/1.2 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink);
 		outline: 0;
 	}
@@ -467,11 +485,17 @@
 		margin: 6px 0;
 	}
 	.err {
-		font: 600 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			600 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--clay-text);
 	}
 	.ok {
-		font: 600 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			600 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--sage);
 	}
 	.warn {
@@ -480,14 +504,23 @@
 		background: color-mix(in oklab, var(--warn) 14%, var(--card));
 		border: 1px solid color-mix(in oklab, var(--warn) 30%, var(--line));
 		color: var(--warn);
-		font: 600 12px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			600 12px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 	}
 	.warn-text {
-		font: 600 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			600 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--warn);
 	}
 	.muted {
-		font: 500 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			500 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 	}
 
@@ -502,11 +535,17 @@
 		padding: 12px 14px;
 	}
 	.toggle-row .t {
-		font: 800 14px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 14px/1 'Onest',
+			system-ui,
+			sans-serif;
 	}
 	.toggle-row p {
 		margin: 4px 0 0;
-		font: 500 12px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			500 12px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 	}
 
@@ -524,11 +563,17 @@
 		gap: 10px;
 	}
 	.created .t {
-		font: 800 13px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 13px/1 'Onest',
+			system-ui,
+			sans-serif;
 	}
 	.created p {
 		margin: 4px 0 0;
-		font: 500 12px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			500 12px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 	}
 	.created .value {
@@ -538,7 +583,9 @@
 		background: var(--surface-deep);
 		color: var(--on-deep);
 		border-radius: 10px;
-		font: 500 12px/1.5 'JetBrains Mono', monospace;
+		font:
+			500 12px/1.5 'JetBrains Mono',
+			monospace;
 		overflow-x: auto;
 	}
 	.created .meta {
@@ -552,7 +599,10 @@
 	}
 	.tokens-list h4 {
 		margin: 0 0 8px;
-		font: 700 10px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: 0.18em;
 		text-transform: uppercase;
 		color: var(--ink-soft);
@@ -573,18 +623,27 @@
 		align-items: start;
 	}
 	.token .t {
-		font: 800 14px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 14px/1 'Onest',
+			system-ui,
+			sans-serif;
 	}
 	.token .sub {
 		margin-top: 4px;
-		font: 600 11px/1 'Onest', system-ui, sans-serif;
+		font:
+			600 11px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 	}
 	.meta2 {
 		margin-top: 8px;
 		display: flex;
 		gap: 12px;
-		font: 500 11px/1.3 'Onest', system-ui, sans-serif;
+		font:
+			500 11px/1.3 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 		flex-wrap: wrap;
 	}

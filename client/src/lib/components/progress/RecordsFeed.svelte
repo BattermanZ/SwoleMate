@@ -42,9 +42,7 @@
 
 	let active = $derived(feed === 'prs' ? prs : recentBests);
 	let visible = $derived(active.slice(0, LIMIT));
-	let empty = $derived(
-		feed === 'prs' ? 'No all-time PRs yet.' : 'No recent bests yet.'
-	);
+	let empty = $derived(feed === 'prs' ? 'No all-time PRs yet.' : 'No recent bests yet.');
 	let tagLabel = $derived(feed === 'prs' ? 'All-time PR' : 'Recent best');
 	let tone = $derived(feed === 'prs' ? 'gold' : 'sage');
 </script>
@@ -105,7 +103,10 @@
 		border: 0;
 		background: transparent;
 		padding: 8px 0;
-		font: 700 11px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 11px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 		cursor: pointer;
 		border-radius: 999px;
@@ -122,7 +123,10 @@
 		gap: 8px;
 	}
 	.empty {
-		font: 500 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			500 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 	}
 </style>

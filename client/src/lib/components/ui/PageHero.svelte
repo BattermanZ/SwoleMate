@@ -67,7 +67,10 @@
 	}
 
 	.kicker {
-		font: 700 11px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 11px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: 0.22em;
 		text-transform: uppercase;
 		color: var(--clay-2);
@@ -76,7 +79,10 @@
 
 	h1 {
 		margin: 8px 0 0;
-		font: 800 28px/1.02 'Onest', system-ui, sans-serif;
+		font:
+			800 28px/1.02 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: -0.025em;
 		position: relative;
 	}

@@ -25,26 +25,26 @@ describe('groupSets', () => {
 	});
 
 	it('formats per-side weights', () => {
-		const groups = groupSets(
-			[{ reps: 8, weight: 22.5 }],
-			{ perSideWeight: true, splitWeight: false }
-		);
+		const groups = groupSets([{ reps: 8, weight: 22.5 }], {
+			perSideWeight: true,
+			splitWeight: false
+		});
 		expect(groups[0].weightLabel).toBe('22.5kg/side');
 	});
 
 	it('renders split L/R when values differ', () => {
-		const groups = groupSets(
-			[{ reps: 8, weight: 27.5, weightLeft: 27.5, weightRight: 22.5 }],
-			{ perSideWeight: true, splitWeight: true }
-		);
+		const groups = groupSets([{ reps: 8, weight: 27.5, weightLeft: 27.5, weightRight: 22.5 }], {
+			perSideWeight: true,
+			splitWeight: true
+		});
 		expect(groups[0].weightLabel).toBe('27.5/22.5kg');
 	});
 
 	it('collapses split L=R back to /side notation', () => {
-		const groups = groupSets(
-			[{ reps: 8, weight: 25, weightLeft: 25, weightRight: 25 }],
-			{ perSideWeight: true, splitWeight: true }
-		);
+		const groups = groupSets([{ reps: 8, weight: 25, weightLeft: 25, weightRight: 25 }], {
+			perSideWeight: true,
+			splitWeight: true
+		});
 		expect(groups[0].weightLabel).toBe('25kg/side');
 	});
 

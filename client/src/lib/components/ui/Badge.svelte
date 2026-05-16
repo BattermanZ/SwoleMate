@@ -18,7 +18,10 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 4px;
-		font: 700 9px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 9px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: 0.16em;
 		text-transform: uppercase;
 		padding: 5px 8px;

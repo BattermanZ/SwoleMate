@@ -37,7 +37,10 @@
 		align-items: center;
 		gap: 6px;
 		flex-wrap: wrap;
-		font: 500 12px/1 'Onest', system-ui, sans-serif;
+		font:
+			500 12px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-2);
 	}
 	.head b {

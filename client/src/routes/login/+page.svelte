@@ -93,13 +93,19 @@
 		color: white;
 		display: grid;
 		place-items: center;
-		font: 800 16px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 16px/1 'Onest',
+			system-ui,
+			sans-serif;
 		box-shadow: 0 6px 14px -4px rgba(255, 94, 31, 0.55);
 		margin: 0 auto 14px;
 	}
 	h1 {
 		margin: 0;
-		font: 800 32px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 32px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: -0.025em;
 	}
 	h1 em {
@@ -108,7 +114,10 @@
 	}
 	p {
 		margin: 8px 0 0;
-		font: 500 14px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			500 14px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 	}
 	form {
@@ -124,7 +133,10 @@
 	}
 	.lbl {
 		display: block;
-		font: 700 10px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: 0.18em;
 		text-transform: uppercase;
 		color: var(--ink-soft);
@@ -136,7 +148,10 @@
 		border: 1px solid var(--line);
 		border-radius: 10px;
 		padding: 12px 14px;
-		font: 500 14px/1.2 'Onest', system-ui, sans-serif;
+		font:
+			500 14px/1.2 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink);
 		outline: 0;
 	}
@@ -145,7 +160,10 @@
 		box-shadow: 0 0 0 3px rgba(255, 94, 31, 0.16);
 	}
 	.err {
-		font: 600 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			600 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--clay-text);
 	}
 	.hint {

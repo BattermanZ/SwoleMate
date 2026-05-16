@@ -8,10 +8,7 @@
 	}
 	let { data }: Props = $props();
 
-	let backups = $state<BackupInfo[]>([]);
-	$effect(() => {
-		backups = data.backups;
-	});
+	let backups = $derived(data.backups);
 	let loading = $state(false);
 	let error = $state<string | null>(null);
 	let notice = $state<string | null>(null);
@@ -46,9 +43,7 @@
 
 	async function handleRestore(b: BackupInfo) {
 		if (
-			!confirm(
-				`Restore from ${b.filename}? Your current data will be REPLACED with this backup.`
-			)
+			!confirm(`Restore from ${b.filename}? Your current data will be REPLACED with this backup.`)
 		)
 			return;
 		loading = true;
@@ -189,17 +184,26 @@
 		gap: 8px;
 	}
 	.err {
-		font: 600 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			600 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--clay-text);
 		margin-bottom: 10px;
 	}
 	.ok {
-		font: 600 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			600 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--sage);
 		margin-bottom: 10px;
 	}
 	.muted {
-		font: 500 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			500 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 	}
 	.list {
@@ -221,7 +225,9 @@
 		min-width: 0;
 	}
 	.t {
-		font: 700 13px/1.2 'JetBrains Mono', monospace;
+		font:
+			700 13px/1.2 'JetBrains Mono',
+			monospace;
 		color: var(--ink);
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -232,7 +238,10 @@
 		display: flex;
 		gap: 6px;
 		flex-wrap: wrap;
-		font: 500 12px/1.3 'Onest', system-ui, sans-serif;
+		font:
+			500 12px/1.3 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 		align-items: center;
 	}

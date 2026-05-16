@@ -5,12 +5,14 @@ import { createExerciseSetActions } from '$lib/today/controller/actions/exercise
 
 const apiMocks = vi.hoisted(() => ({
 	createSet: vi.fn(),
-	endExercise: vi.fn()
+	endExercise: vi.fn(),
+	replaceSets: vi.fn()
 }));
 
 vi.mock('$lib/api', () => ({
 	createSet: apiMocks.createSet,
-	endExercise: apiMocks.endExercise
+	endExercise: apiMocks.endExercise,
+	replaceSets: apiMocks.replaceSets
 }));
 
 const offlineMocks = vi.hoisted(() => ({
@@ -199,6 +201,107 @@ describe('today controller set actions', () => {
 		const added = get(state.currentSession)!.exercises[0]!.sets[0]!;
 		expect(added.id).toBeLessThan(0);
 		expect(added).toMatchObject({ reps: 5, weight: 140 });
+	});
+
+	it('updates an online set through replaceSets and keeps returned ids', async () => {
+		apiMocks.replaceSets.mockResolvedValueOnce([
+			{
+				id: 22,
+				exercise_id: 10,
+				reps: 6,
+				weight: 150,
+				weight_left: null,
+				weight_right: null,
+				duration_seconds: null,
+				notes: null
+			}
+		]);
+
+		const state = createTodayState();
+		state.currentSession.set({
+			id: 6,
+			startedAt: '2026-01-01T10:00:00.000Z',
+			notes: '',
+			exercises: [
+				{
+					id: 10,
+					name: 'Deadlift',
+					notes: '',
+					startedAt: '2026-01-01T10:00:00.000Z',
+					endedAt: '2026-01-01T10:05:00.000Z',
+					status: 'active',
+					perSideWeight: false,
+					splitWeight: false,
+					settings: [],
+					sets: [{ id: 22, reps: 5, weight: 140 }]
+				}
+			]
+		});
+
+		const actions = createExerciseSetActions({ state });
+		await actions.updateSet(10, 22, { reps: 6, weight: 150 });
+
+		expect(apiMocks.replaceSets).toHaveBeenCalledWith(10, [
+			expect.objectContaining({ reps: 6, weight: 150 })
+		]);
+		expect(get(state.currentSession)!.exercises[0]!.sets).toEqual([
+			{
+				id: 22,
+				reps: 6,
+				weight: 150,
+				weightLeft: undefined,
+				weightRight: undefined,
+				durationSeconds: undefined
+			}
+		]);
+	});
+
+	it('removes an online set through replaceSets', async () => {
+		apiMocks.replaceSets.mockResolvedValueOnce([
+			{
+				id: 23,
+				exercise_id: 10,
+				reps: 8,
+				weight: 120,
+				weight_left: null,
+				weight_right: null,
+				duration_seconds: null,
+				notes: null
+			}
+		]);
+
+		const state = createTodayState();
+		state.currentSession.set({
+			id: 6,
+			startedAt: '2026-01-01T10:00:00.000Z',
+			notes: '',
+			exercises: [
+				{
+					id: 10,
+					name: 'Deadlift',
+					notes: '',
+					startedAt: '2026-01-01T10:00:00.000Z',
+					endedAt: '2026-01-01T10:05:00.000Z',
+					status: 'active',
+					perSideWeight: false,
+					splitWeight: false,
+					settings: [],
+					sets: [
+						{ id: 22, reps: 5, weight: 140 },
+						{ id: 23, reps: 8, weight: 120 }
+					]
+				}
+			]
+		});
+
+		const actions = createExerciseSetActions({ state });
+		await actions.removeSet(10, 22);
+
+		expect(apiMocks.replaceSets).toHaveBeenCalledWith(10, [
+			expect.objectContaining({ reps: 8, weight: 120 })
+		]);
+		expect(get(state.currentSession)!.exercises[0]!.sets).toHaveLength(1);
+		expect(get(state.currentSession)!.exercises[0]!.sets[0]!.id).toBe(23);
 	});
 
 	it('marks exercise done offline and collapses only that card', async () => {

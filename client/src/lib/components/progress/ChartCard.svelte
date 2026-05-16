@@ -14,7 +14,8 @@
 </script>
 
 <Card>
-	{#snippet title()}{headline}{#if titleEm} <em>— {titleEm}</em>{/if}{/snippet}
+	{#snippet title()}{headline}{#if titleEm}
+			<em>— {titleEm}</em>{/if}{/snippet}
 	{#snippet actions()}
 		{#if legend}<div class="legend">{@render legend()}</div>{/if}
 	{/snippet}
@@ -59,7 +60,10 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 5px;
-		font: 700 9px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 9px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: 0.12em;
 		text-transform: uppercase;
 		color: var(--ink-soft);

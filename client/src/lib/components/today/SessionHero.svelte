@@ -155,7 +155,10 @@
 		justify-content: center;
 	}
 	.big {
-		font: 800 32px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 32px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: -0.04em;
 		font-variant-numeric: tabular-nums;
 		color: var(--on-deep);
@@ -177,13 +180,19 @@
 		gap: 6px;
 	}
 	.k {
-		font: 700 10px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: 0.18em;
 		text-transform: uppercase;
 		color: var(--on-deep-soft);
 	}
 	.v {
-		font: 800 22px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 22px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: -0.025em;
 		font-variant-numeric: tabular-nums;
 		color: var(--on-deep);
@@ -192,7 +201,10 @@
 		gap: 4px;
 	}
 	.v small {
-		font: 500 11px/1 'Onest', system-ui, sans-serif;
+		font:
+			500 11px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--on-deep-soft);
 		font-weight: 600;
 	}
@@ -203,7 +215,10 @@
 		border: 0;
 		padding: 14px;
 		border-radius: 14px;
-		font: 700 13px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 13px/1 'Onest',
+			system-ui,
+			sans-serif;
 		cursor: pointer;
 	}
 	.cancel {

@@ -25,9 +25,7 @@
 
 	<div class="ctas">
 		<Btn variant="primary" onclick={onStart} disabled={loading}>▶ Start session</Btn>
-		<Btn variant="soft" onclick={onUseTemplate} disabled={loading || offlineMode}>
-			Use template
-		</Btn>
+		<Btn variant="soft" onclick={onUseTemplate} disabled={loading || offlineMode}>Use template</Btn>
 		{#if showDemoAction}
 			<Btn variant="ghost" onclick={onDemo} disabled={loading}>Load demo</Btn>
 		{/if}

@@ -166,7 +166,10 @@
 	}
 	.offline {
 		padding: 8px 14px;
-		font: 600 12px/1.3 'Onest', system-ui, sans-serif;
+		font:
+			600 12px/1.3 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--warn);
 		background: color-mix(in oklab, var(--warn) 14%, var(--card));
 		border: 1px solid color-mix(in oklab, var(--warn) 30%, var(--line));

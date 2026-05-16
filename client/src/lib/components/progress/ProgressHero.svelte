@@ -29,9 +29,7 @@
 	}: Props = $props();
 
 	const RING_CIRC = 427;
-	let pct = $derived(
-		consistencyWindow > 0 ? Math.min(1, consistencyDone / consistencyWindow) : 0
-	);
+	let pct = $derived(consistencyWindow > 0 ? Math.min(1, consistencyDone / consistencyWindow) : 0);
 	let dashOffset = $derived(RING_CIRC * (1 - Math.max(0.06, pct)));
 
 	function fmtSigned(n: number | undefined, suffix = ''): string | undefined {
@@ -76,9 +74,7 @@
 				</defs>
 			</svg>
 			<div class="center">
-				<span class="big"
-					>{consistencyDone}<small>/{consistencyWindow}</small></span
-				>
+				<span class="big">{consistencyDone}<small>/{consistencyWindow}</small></span>
 			</div>
 		</div>
 
@@ -153,7 +149,10 @@
 		place-items: center;
 	}
 	.big {
-		font: 800 32px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 32px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: -0.04em;
 		font-variant-numeric: tabular-nums;
 		color: var(--on-deep);
@@ -162,7 +161,10 @@
 		align-items: baseline;
 	}
 	.big small {
-		font: 500 13px/1 'Onest', system-ui, sans-serif;
+		font:
+			500 13px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--on-deep-soft);
 		margin-left: 2px;
 	}
@@ -184,13 +186,19 @@
 		gap: 6px;
 	}
 	.k {
-		font: 700 10px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: 0.18em;
 		text-transform: uppercase;
 		color: var(--on-deep-soft);
 	}
 	.v {
-		font: 800 22px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 22px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: -0.025em;
 		font-variant-numeric: tabular-nums;
 		color: var(--on-deep);
@@ -199,7 +207,10 @@
 		gap: 4px;
 	}
 	.v small {
-		font: 500 11px/1 'Onest', system-ui, sans-serif;
+		font:
+			500 11px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--on-deep-soft);
 		font-weight: 600;
 	}
@@ -212,7 +223,10 @@
 		white-space: nowrap;
 	}
 	.d {
-		font: 600 11px/1 'Onest', system-ui, sans-serif;
+		font:
+			600 11px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--on-deep-soft);
 	}
 	.d.up {
@@ -235,7 +249,10 @@
 		border: 1px solid var(--on-deep-line);
 		background: color-mix(in oklab, var(--on-deep) 6%, transparent);
 		color: var(--on-deep);
-		font: 700 12px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 12px/1 'Onest',
+			system-ui,
+			sans-serif;
 		cursor: pointer;
 		display: inline-flex;
 		align-items: center;
@@ -246,7 +263,10 @@
 		cursor: not-allowed;
 	}
 	.err {
-		font: 600 12px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			600 12px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--clay-2);
 		flex: 1;
 	}

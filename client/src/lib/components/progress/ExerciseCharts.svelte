@@ -152,7 +152,11 @@
 							ticks: { color: theme.mutedText },
 							grid: { color: theme.grid }
 						},
-						y: { beginAtZero: false, ticks: { color: theme.mutedText }, grid: { color: theme.grid } }
+						y: {
+							beginAtZero: false,
+							ticks: { color: theme.mutedText },
+							grid: { color: theme.grid }
+						}
 					}
 				}
 			};
@@ -199,9 +203,6 @@
 	});
 
 	$effect(() => {
-		// re-render when data changes
-		volumeStats;
-		exerciseProgress;
 		render();
 	});
 </script>

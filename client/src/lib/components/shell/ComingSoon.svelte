@@ -4,11 +4,11 @@
 		title: string;
 		blurb?: string;
 	}
-	let { title, blurb }: Props = $props();
+	let { title: pageTitle, blurb }: Props = $props();
 </script>
 
 <PageHero kicker="► Coming soon">
-	{#snippet title()}{title} <em>— rebuilding.</em>{/snippet}
+	{#snippet title()}{pageTitle} <em>— rebuilding.</em>{/snippet}
 	{#snippet sub()}
 		{#if blurb}{blurb}{:else}This route is being ported to the new design system. Check back soon.{/if}
 	{/snippet}

@@ -21,7 +21,10 @@
 		border-radius: 999px;
 		border: 1px solid color-mix(in oklab, var(--ink) 10%, transparent);
 		box-shadow: 0 2px 6px -2px var(--shadow-soft);
-		font: 800 11px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 11px/1 'Onest',
+			system-ui,
+			sans-serif;
 		font-variant-numeric: tabular-nums;
 		vertical-align: middle;
 	}

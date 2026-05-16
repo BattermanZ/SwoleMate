@@ -37,7 +37,10 @@
 		background: var(--bg-2);
 		border: 1px solid transparent;
 		border-radius: 999px;
-		font: 700 11px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 11px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-2);
 		cursor: pointer;
 		transition:

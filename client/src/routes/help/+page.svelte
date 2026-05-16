@@ -29,7 +29,8 @@
 <div class="page">
 	<PageHero kicker="► Help">
 		{#snippet title()}Quick guidance, <em>safe resets.</em>{/snippet}
-		{#snippet sub()}How to use SwoleMate, plus a place to clear local UI state if something feels stuck.{/snippet}
+		{#snippet sub()}How to use SwoleMate, plus a place to clear local UI state if something feels
+			stuck.{/snippet}
 	</PageHero>
 
 	<Card>
@@ -53,8 +54,8 @@
 			<div class="step">
 				<div class="t">Progress</div>
 				<div>
-					Pick a focus exercise to see PRs and charts; overall cards show frequency and
-					time-of-day patterns.
+					Pick a focus exercise to see PRs and charts; overall cards show frequency and time-of-day
+					patterns.
 				</div>
 			</div>
 		</div>
@@ -95,12 +96,18 @@
 		padding: 12px;
 	}
 	.step .t {
-		font: 800 14px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 14px/1 'Onest',
+			system-ui,
+			sans-serif;
 		margin-bottom: 4px;
 		letter-spacing: -0.01em;
 	}
 	.step div:last-child {
-		font: 500 13px/1.5 'Onest', system-ui, sans-serif;
+		font:
+			500 13px/1.5 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-2);
 	}
 	ul {
@@ -111,7 +118,10 @@
 		gap: 4px;
 	}
 	li {
-		font: 500 14px/1.5 'Onest', system-ui, sans-serif;
+		font:
+			500 14px/1.5 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-2);
 	}
 </style>

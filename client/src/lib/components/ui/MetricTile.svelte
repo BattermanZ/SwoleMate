@@ -65,14 +65,20 @@
 	}
 
 	.k {
-		font: 700 9px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 9px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: 0.18em;
 		text-transform: uppercase;
 		color: var(--ink-soft);
 	}
 	.v {
 		margin-top: 5px;
-		font: 800 19px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 19px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: -0.02em;
 		font-variant-numeric: tabular-nums;
 		white-space: nowrap;
@@ -83,13 +89,19 @@
 		gap: 4px;
 	}
 	.v small {
-		font: 500 10px/1 'Onest', system-ui, sans-serif;
+		font:
+			500 10px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 		font-weight: 600;
 	}
 	.d {
 		margin-top: 3px;
-		font: 600 10px/1 'Onest', system-ui, sans-serif;
+		font:
+			600 10px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 	}
 	.t-up {

@@ -25,11 +25,7 @@
 <nav class="tabs" aria-label={ariaLabel}>
 	{#each items as item (item.href)}
 		{@const active = isActive(item.href)}
-		<a
-			href={item.href}
-			class:active
-			aria-current={active ? 'page' : undefined}
-		>
+		<a href={item.href} class:active aria-current={active ? 'page' : undefined}>
 			<span class="pill">{@render item.icon()}</span>
 			<span class="lbl">{item.label}</span>
 		</a>
@@ -60,7 +56,10 @@
 		gap: 4px;
 		color: var(--ink-soft);
 		text-decoration: none;
-		font: 700 10px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
 		padding: 8px 0;
 		transition: color 160ms ease;
 	}

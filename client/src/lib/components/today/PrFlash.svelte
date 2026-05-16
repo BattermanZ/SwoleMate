@@ -12,7 +12,10 @@
 	<span class="icn" aria-hidden="true">⚡</span>
 	<span class="body">
 		<span class="k">New personal record</span>
-		<span class="v">{exerciseName} <b>{summary}</b>{#if delta} — {delta}{/if}</span>
+		<span class="v"
+			>{exerciseName} <b>{summary}</b>{#if delta}
+				— {delta}{/if}</span
+		>
 	</span>
 	<span class="arr" aria-hidden="true">→</span>
 </button>
@@ -52,7 +55,10 @@
 		background: rgba(255, 255, 255, 0.18);
 		display: grid;
 		place-items: center;
-		font: 800 22px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 22px/1 'Onest',
+			system-ui,
+			sans-serif;
 	}
 	.body {
 		display: block;
@@ -60,7 +66,10 @@
 	}
 	.k {
 		display: block;
-		font: 700 10px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: 0.18em;
 		text-transform: uppercase;
 		color: rgba(255, 255, 255, 0.85);
@@ -76,6 +85,9 @@
 		font-weight: 800;
 	}
 	.arr {
-		font: 800 22px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 22px/1 'Onest',
+			system-ui,
+			sans-serif;
 	}
 </style>

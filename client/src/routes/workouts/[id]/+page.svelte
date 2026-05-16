@@ -188,7 +188,10 @@
 		margin-bottom: 10px;
 	}
 	.meta {
-		font: 500 12px/1 'Onest', system-ui, sans-serif;
+		font:
+			500 12px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 	}
 	.notes {
@@ -203,11 +206,17 @@
 	}
 	.err {
 		margin-top: 10px;
-		font: 600 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			600 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--clay-text);
 	}
 	.muted {
-		font: 500 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			500 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 	}
 	.settings {

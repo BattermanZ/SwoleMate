@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { auth } from '$lib/auth';
 	import {
 		adminCreateUser,
@@ -28,9 +27,8 @@
 	let resetError = $state<string | null>(null);
 
 	let isAdmin = $derived($authState.user?.role === 'admin');
-	let blocked = $derived(
-		$authState.offline || $authState.status !== 'authenticated' || !isAdmin
-	);
+	let blocked = $derived($authState.offline || $authState.status !== 'authenticated' || !isAdmin);
+	let usersLoaded = $state(false);
 
 	async function loadUsers() {
 		if (blocked) return;
@@ -38,6 +36,7 @@
 		error = null;
 		try {
 			users = await adminListUsers();
+			usersLoaded = true;
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load users';
 		} finally {
@@ -88,11 +87,7 @@
 
 	async function handleDelete(u: AdminUserListItem) {
 		if (blocked) return;
-		if (
-			!confirm(
-				`Delete ${u.username}? This removes ALL their data and cannot be undone.`
-			)
-		) {
+		if (!confirm(`Delete ${u.username}? This removes ALL their data and cannot be undone.`)) {
 			return;
 		}
 		loading = true;
@@ -133,8 +128,10 @@
 		}
 	}
 
-	onMount(() => {
-		void loadUsers();
+	$effect(() => {
+		if (!blocked && !usersLoaded && !loading) {
+			void loadUsers();
+		}
 	});
 </script>
 
@@ -272,8 +269,8 @@
 								resetTarget = null;
 								resetPassword = resetConfirm = '';
 								resetError = null;
-							}}
-						>Cancel</Btn>
+							}}>Cancel</Btn
+						>
 					</div>
 				</form>
 			</Card>
@@ -307,7 +304,10 @@
 	}
 	.lbl {
 		display: block;
-		font: 700 10px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: 0.18em;
 		text-transform: uppercase;
 		color: var(--ink-soft);
@@ -320,7 +320,10 @@
 		border: 1px solid var(--line);
 		border-radius: 10px;
 		padding: 11px 12px;
-		font: 500 14px/1.2 'Onest', system-ui, sans-serif;
+		font:
+			500 14px/1.2 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink);
 		outline: 0;
 	}
@@ -335,15 +338,24 @@
 		gap: 8px;
 	}
 	.err {
-		font: 600 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			600 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--clay-text);
 	}
 	.ok {
-		font: 600 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			600 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--sage);
 	}
 	.muted {
-		font: 500 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			500 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 	}
 
@@ -366,7 +378,10 @@
 		flex-wrap: wrap;
 	}
 	.user .t {
-		font: 800 14px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 14px/1 'Onest',
+			system-ui,
+			sans-serif;
 	}
 	.user .meta {
 		margin-top: 6px;

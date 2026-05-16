@@ -70,8 +70,7 @@ function resolveCssVarColor(varName: string, fallback: string): string {
 
 export function readTheme(): ChartTheme {
 	const root = document.documentElement;
-	const isDark =
-		root.getAttribute('data-theme') === 'dark' || root.classList.contains('dark');
+	const isDark = root.getAttribute('data-theme') === 'dark' || root.classList.contains('dark');
 
 	return {
 		isDark,

@@ -11,10 +11,7 @@
 	}
 	let { data }: Props = $props();
 
-	let workouts = $state<Workout[]>([]);
-	$effect(() => {
-		workouts = data.workouts;
-	});
+	let workouts = $derived(data.workouts);
 
 	let loading = $state(false);
 	let error = $state<string | null>(null);
@@ -57,8 +54,7 @@
 			}
 			const at = new Date(a.start_time).getTime();
 			const bt = new Date(b.start_time).getTime();
-			if (sort === 'oldest')
-				return (Number.isFinite(at) ? at : 0) - (Number.isFinite(bt) ? bt : 0);
+			if (sort === 'oldest') return (Number.isFinite(at) ? at : 0) - (Number.isFinite(bt) ? bt : 0);
 			return (Number.isFinite(bt) ? bt : 0) - (Number.isFinite(at) ? at : 0);
 		})
 	);
@@ -134,7 +130,12 @@
 	<div class="metrics">
 		<MetricTile label="Total" value={String(summary.total)} rail="clay" />
 		<MetricTile label="Last 30d" value={String(summary.last30)} rail="warn" />
-		<MetricTile label="Avg duration" value={summary.avg !== null ? `${summary.avg}` : '—'} unit="m" rail="sage" />
+		<MetricTile
+			label="Avg duration"
+			value={summary.avg !== null ? `${summary.avg}` : '—'}
+			unit="m"
+			rail="sage"
+		/>
 	</div>
 
 	<Card>
@@ -277,7 +278,10 @@
 	}
 	.lbl {
 		display: block;
-		font: 700 10px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: 0.18em;
 		text-transform: uppercase;
 		color: var(--ink-soft);
@@ -290,7 +294,10 @@
 		border: 1px solid var(--line);
 		border-radius: 10px;
 		padding: 10px 12px;
-		font: 500 14px/1.2 'Onest', system-ui, sans-serif;
+		font:
+			500 14px/1.2 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink);
 		outline: 0;
 	}
@@ -301,7 +308,10 @@
 	}
 	.err {
 		margin-top: 10px;
-		font: 600 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			600 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--clay-text);
 	}
 
@@ -318,11 +328,16 @@
 		gap: 8px;
 	}
 	.pager-pos {
-		font: 700 12px/1 'JetBrains Mono', monospace;
+		font:
+			700 12px/1 'JetBrains Mono',
+			monospace;
 		color: var(--ink-2);
 	}
 	.muted {
-		font: 500 12px/1 'Onest', system-ui, sans-serif;
+		font:
+			500 12px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 	}
 
@@ -354,13 +369,19 @@
 		min-width: 0;
 	}
 	.day {
-		font: 800 15px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 15px/1 'Onest',
+			system-ui,
+			sans-serif;
 		display: flex;
 		align-items: center;
 		gap: 8px;
 	}
 	.mood {
-		font: 400 14px/1 'Onest', system-ui, sans-serif;
+		font:
+			400 14px/1 'Onest',
+			system-ui,
+			sans-serif;
 		opacity: 0.85;
 	}
 	.meta {
@@ -368,7 +389,10 @@
 		display: flex;
 		gap: 6px;
 		flex-wrap: wrap;
-		font: 500 12px/1 'Onest', system-ui, sans-serif;
+		font:
+			500 12px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 		align-items: center;
 	}
@@ -384,11 +408,17 @@
 	}
 	.arr {
 		flex: none;
-		font: 800 18px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 18px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 	}
 	.empty {
-		font: 500 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			500 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 		text-align: center;
 	}

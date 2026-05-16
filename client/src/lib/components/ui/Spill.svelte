@@ -36,11 +36,7 @@
 	let pct = $derived(`${Math.round(intensity * 100)}%`);
 </script>
 
-<span
-	class="spill s-{size}"
-	class:pr
-	style="--w: {pct};"
->
+<span class="spill s-{size}" class:pr style="--w: {pct};">
 	{#if count !== undefined && count > 1}<span class="count">{count}×</span>{/if}
 	{#if reps !== undefined && reps > 0}<span class="reps">{reps}×</span>{/if}
 	{#if duration}<span class="duration">{duration}</span>{/if}
@@ -55,7 +51,10 @@
 		border-radius: 999px;
 		border: 1px solid color-mix(in oklab, var(--ink) 10%, transparent);
 		box-shadow: 0 4px 10px -4px var(--shadow-soft);
-		font: 800 12px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 12px/1 'Onest',
+			system-ui,
+			sans-serif;
 		font-variant-numeric: tabular-nums;
 		vertical-align: middle;
 	}

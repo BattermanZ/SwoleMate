@@ -95,13 +95,19 @@
 	h3 {
 		margin: 0;
 		text-align: center;
-		font: 800 20px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 20px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: -0.015em;
 	}
 	p {
 		text-align: center;
 		margin: 4px 0 14px;
-		font: 500 13px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			500 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-soft);
 	}
 	.moods {
@@ -114,7 +120,10 @@
 		border-radius: 14px;
 		border: 1.5px solid var(--line);
 		background: var(--card-3);
-		font: 400 32px/1 'Onest', system-ui, sans-serif;
+		font:
+			400 32px/1 'Onest',
+			system-ui,
+			sans-serif;
 		text-align: center;
 		cursor: pointer;
 		transition: transform 120ms ease;
@@ -130,7 +139,10 @@
 	}
 	.mood-label {
 		margin-top: 8px;
-		font: 700 11px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 11px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: 0.16em;
 		text-transform: uppercase;
 		text-align: center;
@@ -141,7 +153,10 @@
 		margin-top: 14px;
 	}
 	.lbl {
-		font: 700 10px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: 0.18em;
 		text-transform: uppercase;
 		color: var(--ink-soft);
@@ -155,7 +170,10 @@
 		border: 1px solid var(--line);
 		border-radius: 12px;
 		padding: 11px 12px;
-		font: 500 14px/1.4 'Onest', system-ui, sans-serif;
+		font:
+			500 14px/1.4 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink);
 		outline: 0;
 	}

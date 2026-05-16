@@ -113,7 +113,10 @@
 		border: 1px solid var(--line);
 		border-radius: 12px;
 		padding: 12px 14px;
-		font: 500 14px/1.2 'Onest', system-ui, sans-serif;
+		font:
+			500 14px/1.2 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink);
 		outline: 0;
 	}
@@ -135,7 +138,10 @@
 		background: transparent;
 		border: 0;
 		border-bottom: 1px solid var(--line);
-		font: 600 13px/1 'Onest', system-ui, sans-serif;
+		font:
+			600 13px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--ink-2);
 		cursor: pointer;
 	}
@@ -160,13 +166,19 @@
 		align-items: center;
 	}
 	.template-plan .lbl {
-		font: 700 10px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: 0.18em;
 		text-transform: uppercase;
 		color: var(--clay-text);
 	}
 	.count {
-		font: 700 10px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--clay-text);
 		background: color-mix(in oklab, var(--clay) 12%, var(--card));
 		padding: 4px 8px;
@@ -184,7 +196,10 @@
 		color: var(--clay-text);
 		padding: 7px 11px;
 		border-radius: 999px;
-		font: 700 12px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 12px/1 'Onest',
+			system-ui,
+			sans-serif;
 		cursor: pointer;
 	}
 	.pick::before {
@@ -199,7 +214,10 @@
 		align-items: center;
 	}
 	.quick-picks .lbl {
-		font: 700 10px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: 0.18em;
 		text-transform: uppercase;
 		color: var(--ink-soft);
@@ -210,7 +228,10 @@
 		border-radius: 999px;
 		background: var(--bg-2);
 		color: var(--ink-2);
-		font: 700 12px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 12px/1 'Onest',
+			system-ui,
+			sans-serif;
 		cursor: pointer;
 		border: 0;
 	}
