@@ -154,7 +154,7 @@
 	}
 	main {
 		flex: 1;
-		padding: 14px 18px calc(110px + env(safe-area-inset-bottom));
+		padding: 14px 18px calc(96px + env(safe-area-inset-bottom));
 		max-width: 720px;
 		width: 100%;
 		margin: 0 auto;

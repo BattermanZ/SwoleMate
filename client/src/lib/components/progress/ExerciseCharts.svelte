@@ -159,8 +159,9 @@
 			progressChart = upsertChart(progressChart, progressCanvas, cfg);
 		}
 
-		// 3. Monthly volume
-		const monthlyRows = volumeStats.monthly_volume.filter((v) => v.total_volume > 0);
+		// 3. Monthly volume — render every month in the series, even zero ones,
+		// so gaps in training are visible instead of being hidden.
+		const monthlyRows = volumeStats.monthly_volume;
 		if (monthlyRows.length > 0 && monthlyCanvas) {
 			const cfg: ChartConfiguration = {
 				type: 'bar',

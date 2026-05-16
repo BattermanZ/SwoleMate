@@ -74,8 +74,10 @@
 <style>
 	.login {
 		min-height: 100dvh;
-		display: grid;
-		place-items: center;
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		align-items: center;
 		padding: 32px 18px;
 	}
 	header {

@@ -41,8 +41,8 @@
 		position: fixed;
 		left: 16px;
 		right: 16px;
-		bottom: calc(14px + env(safe-area-inset-bottom));
-		height: 72px;
+		bottom: calc(8px + env(safe-area-inset-bottom));
+		height: 68px;
 		background: color-mix(in oklab, var(--card) 92%, transparent);
 		backdrop-filter: blur(14px);
 		border-radius: 28px;
