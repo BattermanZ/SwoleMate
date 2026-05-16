@@ -48,6 +48,7 @@
 		border-radius: 50%;
 		background: radial-gradient(circle, rgba(255, 94, 31, 0.55), transparent 65%);
 		animation: hero-drift 12s ease-in-out infinite alternate;
+		pointer-events: none;
 	}
 	.hero::after {
 		content: '';
@@ -59,6 +60,7 @@
 		border-radius: 50%;
 		background: radial-gradient(circle, rgba(213, 162, 58, 0.35), transparent 65%);
 		animation: hero-drift 14s ease-in-out infinite alternate-reverse;
+		pointer-events: none;
 	}
 	@keyframes hero-drift {
 		to {
