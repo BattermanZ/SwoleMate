@@ -14,11 +14,11 @@ const contentSecurityPolicy = [
 	"frame-ancestors 'none'",
 	"object-src 'none'",
 	"form-action 'self'",
-	"script-src 'self' 'unsafe-eval' 'sha256-XxsyBzghD6XiU6EbSkMzj+Ob6G4ncvvkwDcYat6QTXA='",
+	"script-src 'self' 'unsafe-eval' 'sha256-XxsyBzghD6XiU6EbSkMzj+Ob6G4ncvvkwDcYat6QTXA=' https://analytics.battercloud.cc",
 	"style-src 'self' 'unsafe-inline'",
 	"img-src 'self' data: blob: https:",
 	"font-src 'self' data:",
-	"connect-src 'self' ws: wss: https:",
+	"connect-src 'self' ws: wss: https: https://analytics.battercloud.cc",
 	"worker-src 'self' blob:",
 	"manifest-src 'self'"
 ].join('; ');
