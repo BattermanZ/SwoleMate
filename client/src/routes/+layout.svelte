@@ -30,6 +30,15 @@
 	onMount(() => {
 		void auth.refresh();
 
+		if (!import.meta.env.DEV && !document.querySelector('script[data-umami]')) {
+			const s = document.createElement('script');
+			s.src = 'https://analytics.battercloud.cc/script.js';
+			s.defer = true;
+			s.dataset.websiteId = '55c688cf-5605-48ae-b3ae-2a6a9f342c51';
+			s.dataset.umami = 'true';
+			document.head.appendChild(s);
+		}
+
 		if ('serviceWorker' in navigator) {
 			if (import.meta.env.DEV) {
 				navigator.serviceWorker.getRegistrations().then((regs) => {
