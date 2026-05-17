@@ -16,7 +16,7 @@
 		"test": "npm run test:unit",
 		"test:unit": "vitest run",
 		"test:unit:watch": "vitest",
-		"icons": "node scripts/generate-icons.mjs"
+		"icons": "node scripts/build-logo.mjs"
 	},
 	"devDependencies": {
 		"@resvg/resvg-js": "^2.6.2",
@@ -32,6 +32,7 @@
 		"eslint": "^9.39.2",
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-svelte": "^3.13.1",
+		"fontkit": "^2.0.4",
 		"globals": "^17.0.0",
 		"jsdom": "^26.1.0",
 		"prettier": "^3.7.4",
