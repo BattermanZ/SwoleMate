@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Logo } from '$lib/components/ui';
 	interface Props {
 		onLogout?: () => void;
 	}
@@ -25,7 +26,7 @@
 
 <header class="appbar">
 	<a class="brand" href="/" aria-label="SwoleMate home">
-		<span class="logo">SM</span>
+		<Logo size={30} />
 		<span class="name">SwoleMate</span>
 	</a>
 	<div class="actions">
@@ -101,21 +102,6 @@
 		min-width: 0;
 		text-decoration: none;
 		color: inherit;
-	}
-	.logo {
-		width: 30px;
-		height: 30px;
-		border-radius: 9px;
-		flex: none;
-		background: linear-gradient(135deg, var(--clay-2), var(--clay));
-		color: white;
-		display: grid;
-		place-items: center;
-		font:
-			800 12px/1 'Onest',
-			system-ui,
-			sans-serif;
-		box-shadow: 0 4px 10px -3px rgba(255, 94, 31, 0.55);
 	}
 	.name {
 		font:

@@ -14,3 +14,4 @@ export type { NavItem } from './BottomNav.svelte';
 export { default as MetricTile } from './MetricTile.svelte';
 export { default as PRRow } from './PRRow.svelte';
 export { default as RPill } from './RPill.svelte';
+export { default as Logo } from './Logo.svelte';

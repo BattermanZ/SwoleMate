@@ -3,7 +3,7 @@
 	import { auth } from '$lib/auth';
 	import { logger } from '$lib/logger';
 	import { get } from 'svelte/store';
-	import { Btn, Card } from '$lib/components/ui';
+	import { Btn, Card, Logo } from '$lib/components/ui';
 
 	let username = $state('');
 	let password = $state('');
@@ -28,7 +28,7 @@
 
 <main class="login">
 	<header>
-		<div class="logo">SM</div>
+		<div class="logo-wrap"><Logo size={40} /></div>
 		<h1>Welcome <em>back.</em></h1>
 		<p>Sign in with your SwoleMate username and password.</p>
 	</header>
@@ -85,19 +85,9 @@
 		margin-bottom: 18px;
 		max-width: 420px;
 	}
-	.logo {
-		width: 40px;
-		height: 40px;
-		border-radius: 12px;
-		background: linear-gradient(135deg, var(--clay-2), var(--clay));
-		color: white;
-		display: grid;
-		place-items: center;
-		font:
-			800 16px/1 'Onest',
-			system-ui,
-			sans-serif;
-		box-shadow: 0 6px 14px -4px rgba(255, 94, 31, 0.55);
+	.logo-wrap {
+		display: flex;
+		justify-content: center;
 		margin: 0 auto 14px;
 	}
 	h1 {
