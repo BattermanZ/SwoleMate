@@ -743,11 +743,22 @@ impl Database {
         validate_progress_offset(timezone_offset_minutes)?;
 
         let now = Utc::now();
+        // Align period boundaries to the caller's local midnight so windows match the
+        // dates the UI labels. `timezone_offset_minutes` follows JS getTimezoneOffset
+        // semantics: local = UTC - offset.
+        let offset = Duration::minutes(timezone_offset_minutes);
+        let local_today_midnight = (now - offset)
+            .date_naive()
+            .and_hms_opt(0, 0, 0)
+            .expect("midnight is a valid time");
+        let today_start_utc =
+            DateTime::<Utc>::from_naive_utc_and_offset(local_today_midnight, Utc) + offset;
+
         let last_7_end = now;
-        let last_7_start = now - Duration::days(7);
+        let last_7_start = today_start_utc - Duration::days(6);
         let previous_7_start = last_7_start - Duration::days(7);
         let last_30_end = now;
-        let last_30_start = now - Duration::days(30);
+        let last_30_start = today_start_utc - Duration::days(29);
         let previous_30_start = last_30_start - Duration::days(30);
 
         let facts = self.get_progress_set_facts(user_id).await?;
