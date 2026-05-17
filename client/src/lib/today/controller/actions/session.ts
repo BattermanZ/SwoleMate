@@ -24,6 +24,7 @@ import type { TodayState } from '../state';
 import { getErrorMessage, isNetworkFailure, makeLocalNumericId } from '../utils';
 import type { ExerciseSeedOptions, SeedSet } from './types';
 import { resetLocalSessionUi } from './shared';
+import { clearPlannedTemplate, persistPlannedTemplate } from './plannedTemplate';
 import {
 	decodeTrackingFields,
 	isTrackingFieldsSetting,
@@ -58,6 +59,7 @@ export function createSessionActions(args: {
 		state.sessionNotes.set(notes);
 		state.openExerciseIds.set([]);
 		state.plannedTemplateExercises.set([]);
+		void clearPlannedTemplate();
 		resetLocalSessionUi(state);
 	}
 
@@ -190,7 +192,9 @@ export function createSessionActions(args: {
 				timezone_offset_minutes: timezoneOffsetMinutes
 			});
 			beginLocalSession(created.id, startIso, '');
-			state.plannedTemplateExercises.set(toPlannedTemplateExercises(template.exercises));
+			const planned = toPlannedTemplateExercises(template.exercises);
+			state.plannedTemplateExercises.set(planned);
+			await persistPlannedTemplate(created.id, planned);
 			await refreshFromBackend();
 		} catch (e) {
 			state.error.set(getErrorMessage(e));
@@ -222,6 +226,7 @@ export function createSessionActions(args: {
 				state.sessionNotes.set('');
 				state.openExerciseIds.set([]);
 				state.plannedTemplateExercises.set([]);
+				void clearPlannedTemplate();
 				resetLocalSessionUi(state);
 				await refreshPendingSyncCount(state);
 				state.notice.set('Session canceled locally.');
@@ -234,6 +239,7 @@ export function createSessionActions(args: {
 			state.sessionNotes.set('');
 			state.openExerciseIds.set([]);
 			state.plannedTemplateExercises.set([]);
+			void clearPlannedTemplate();
 			resetLocalSessionUi(state);
 			await refreshFromBackend();
 		} catch (e) {
@@ -275,6 +281,7 @@ export function createSessionActions(args: {
 				state.sessionNotes.set('');
 				state.openExerciseIds.set([]);
 				state.plannedTemplateExercises.set([]);
+				void clearPlannedTemplate();
 				resetLocalSessionUi(state);
 
 				const key = sessionKeyForId(session.id);
@@ -328,6 +335,7 @@ export function createSessionActions(args: {
 			state.sessionNotes.set('');
 			state.openExerciseIds.set([]);
 			state.plannedTemplateExercises.set([]);
+			void clearPlannedTemplate();
 			resetLocalSessionUi(state);
 			await refreshFromBackend();
 		} catch (e) {

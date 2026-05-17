@@ -12,6 +12,7 @@ import {
 import type { TodayState } from '../state';
 import { getErrorMessage, isNetworkFailure } from '../utils';
 import { resetLocalSessionUi } from './shared';
+import { clearPlannedTemplate, loadPlannedTemplate } from './plannedTemplate';
 
 export async function refreshFromBackend(state: TodayState) {
 	state.loading.set(true);
@@ -31,6 +32,12 @@ export async function refreshFromBackend(state: TodayState) {
 					.filter((exercise) => exercise.status !== 'done')
 					.map((exercise) => exercise.id)
 			);
+			if (get(state.plannedTemplateExercises).length === 0) {
+				const restored = await loadPlannedTemplate(next.id);
+				if (restored && restored.length > 0) {
+					state.plannedTemplateExercises.set(restored);
+				}
+			}
 		} else {
 			const offlineInProgress = await findInProgressOffline();
 			if (offlineInProgress?.session) {
@@ -41,12 +48,19 @@ export async function refreshFromBackend(state: TodayState) {
 						.filter((exercise) => exercise.status !== 'done')
 						.map((exercise) => exercise.id)
 				);
+				if (get(state.plannedTemplateExercises).length === 0) {
+					const restored = await loadPlannedTemplate(offlineInProgress.session.id);
+					if (restored && restored.length > 0) {
+						state.plannedTemplateExercises.set(restored);
+					}
+				}
 				state.notice.set('Local session in progress. You can keep logging and sync later.');
 			} else {
 				state.currentSession.set(null);
 				state.sessionNotes.set('');
 				state.openExerciseIds.set([]);
 				state.plannedTemplateExercises.set([]);
+				void clearPlannedTemplate();
 			}
 		}
 
