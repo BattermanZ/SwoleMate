@@ -1539,7 +1539,9 @@
         <p class="lede">
           All numeric inputs in the live session log (reps, weight, time, per-side, left/right) use this
           unified component. Centered value (with optional unit suffix), <code>−</code> and <code>+</code>
-          as integrated end segments. 52px tall, full pill radius.
+          as integrated end segments. 52px tall, full pill radius. The value is <b>tap-to-edit</b>: clicking
+          the number swaps it for an inline numeric input — <kbd>Enter</kbd> or blur commits (clamped to
+          min/max), <kbd>Esc</kbd> cancels.
         </p>
         <div class="cmp">
           <div class="head">
@@ -1565,8 +1567,10 @@
             <ul>
               <li>The <b>value</b> is a content-sized inline element (not a fixed-width input). Wrap value + unit in
                 <code>.v-wrap</code> (flex justify-center) so the group centers regardless of digit count.</li>
-              <li>For real input behavior: use <code>&lt;input&gt;</code> with <code>field-sizing: content</code>
-                (Chromium) and a fallback fixed-width on Safari/Firefox.</li>
+              <li><b>Direct entry</b>: the value renders as a button; clicking it focuses an overlay
+                <code>&lt;input inputmode="decimal"&gt;</code> seeded with the current value (selected on focus).
+                Blur or <kbd>Enter</kbd> parses, clamps to <code>min</code>/<code>max</code>, and fires
+                <code>onchange</code>; <kbd>Esc</kbd> or a non-numeric entry reverts.</li>
               <li><b>Per-side mode</b> drops the unit suffix and uses the label "Per side · kg" instead — "kg / side"
                 doesn't fit in the pill at 390px.</li>
               <li><b>Split L/R</b> uses two stepper-pills side by side, Reps spans full width on a row above.</li>

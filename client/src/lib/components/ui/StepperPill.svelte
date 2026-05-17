@@ -49,6 +49,45 @@
 	}
 
 	let display = $derived(format ? format(value) : String(value));
+	let editing = $state(false);
+	let draft = $state('');
+	let inputEl: HTMLInputElement | undefined = $state();
+
+	function startEdit() {
+		if (disabled) return;
+		draft = String(value);
+		editing = true;
+		queueMicrotask(() => {
+			inputEl?.focus();
+			inputEl?.select();
+		});
+	}
+
+	function commit() {
+		if (!editing) return;
+		editing = false;
+		const parsed = Number(draft.replace(',', '.'));
+		if (!Number.isFinite(parsed)) return;
+		const next = clamp(parsed);
+		if (next === value) return;
+		value = next;
+		onchange?.(next);
+	}
+
+	function cancel() {
+		editing = false;
+	}
+
+	function onKey(e: KeyboardEvent) {
+		if (e.key === 'Enter') {
+			e.preventDefault();
+			inputEl?.blur();
+		} else if (e.key === 'Escape') {
+			e.preventDefault();
+			draft = String(value);
+			cancel();
+		}
+	}
 </script>
 
 <div class="stepper-pill" class:disabled aria-label={ariaLabel ?? label}>
@@ -60,7 +99,26 @@
 		{disabled}>−</button
 	>
 	<div class="v-wrap">
-		<span class="value">{display}</span>
+		{#if editing}
+			<input
+				bind:this={inputEl}
+				class="value value-input"
+				type="text"
+				inputmode="decimal"
+				bind:value={draft}
+				onblur={commit}
+				onkeydown={onKey}
+				aria-label={ariaLabel ?? label}
+			/>
+		{:else}
+			<button
+				type="button"
+				class="value value-button"
+				onclick={startEdit}
+				{disabled}
+				aria-label={`Edit ${label ?? 'value'}`}>{display}</button
+			>
+		{/if}
 		{#if unit}<span class="unit">{unit}</span>{/if}
 	</div>
 	<button
@@ -138,6 +196,38 @@
 		color: var(--ink);
 		font-variant-numeric: tabular-nums;
 		letter-spacing: -0.03em;
+	}
+	.value-button {
+		background: transparent;
+		border: 0;
+		padding: 4px 6px;
+		margin: 0;
+		cursor: text;
+		border-radius: 8px;
+		min-width: 0;
+		text-align: center;
+	}
+	.value-button:hover:not(:disabled) {
+		background: color-mix(in oklab, var(--ink) 6%, transparent);
+	}
+	.value-button:disabled {
+		cursor: not-allowed;
+	}
+	.value-input {
+		background: transparent;
+		border: 0;
+		outline: 0;
+		padding: 4px 6px;
+		width: 100%;
+		min-width: 0;
+		text-align: center;
+		-moz-appearance: textfield;
+		appearance: textfield;
+	}
+	.value-input::-webkit-outer-spin-button,
+	.value-input::-webkit-inner-spin-button {
+		-webkit-appearance: none;
+		margin: 0;
 	}
 	.unit {
 		font:
