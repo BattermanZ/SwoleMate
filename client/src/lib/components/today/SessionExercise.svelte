@@ -71,6 +71,7 @@
 	let newSettingValue = $state('');
 	let editing = $state(false);
 	let editingSetId = $state<number | null>(null);
+	let settingsOpen = $state(false);
 
 	let locked = $derived(exercise.status === 'done' && !editing);
 
@@ -223,59 +224,82 @@
 		<div class="body" id="ex-body-{exercise.id}">
 			<!-- Settings -->
 			<section class="sub">
-				<div class="sub-head">
-					<h4>Settings</h4>
-					<span class="help">optional equipment setup</span>
-				</div>
-				<div class="settings">
-					{#each exercise.settings as s (s.id)}
+				<button
+					class="sub-head sub-toggle"
+					type="button"
+					onclick={() => (settingsOpen = !settingsOpen)}
+					aria-expanded={settingsOpen}
+					aria-controls="ex-settings-{exercise.id}"
+				>
+					<div class="sub-head-left">
+						<h4>Settings</h4>
+						{#if settingsOpen}
+							<span class="help">optional equipment setup</span>
+						{:else if exercise.settings.length > 0}
+							<div class="settings-chips" aria-label="Saved settings">
+								{#each exercise.settings as s (s.id)}
+									<span class="setting-chip"
+										><span class="k">{s.key}</span><span class="v">{s.value}</span></span
+									>
+								{/each}
+							</div>
+						{:else}
+							<span class="settings-empty">none yet — tap to add</span>
+						{/if}
+					</div>
+					<span class="sub-caret" aria-hidden="true">{settingsOpen ? '▾' : '▸'}</span>
+				</button>
+				{#if settingsOpen}
+					<div class="settings" id="ex-settings-{exercise.id}">
+						{#each exercise.settings as s (s.id)}
+							<div class="setting-row">
+								<input
+									class="input"
+									value={s.key}
+									placeholder="Setting"
+									disabled={locked}
+									oninput={(e) => onUpdateSetting?.(s.id, e.currentTarget.value, s.value)}
+								/>
+								<input
+									class="input"
+									value={s.value}
+									placeholder="Value"
+									disabled={locked}
+									oninput={(e) => onUpdateSetting?.(s.id, s.key, e.currentTarget.value)}
+								/>
+								<button
+									class="x-btn"
+									type="button"
+									aria-label="Remove setting"
+									disabled={locked}
+									onclick={() => onRemoveSetting?.(s.id)}>✕</button
+								>
+							</div>
+						{/each}
 						<div class="setting-row">
 							<input
 								class="input"
-								value={s.key}
-								placeholder="Setting"
+								bind:value={newSettingKey}
+								placeholder="Bench angle"
 								disabled={locked}
-								oninput={(e) => onUpdateSetting?.(s.id, e.currentTarget.value, s.value)}
+								onkeydown={(e) => e.key === 'Enter' && addSetting()}
 							/>
 							<input
 								class="input"
-								value={s.value}
-								placeholder="Value"
+								bind:value={newSettingValue}
+								placeholder="30°"
 								disabled={locked}
-								oninput={(e) => onUpdateSetting?.(s.id, s.key, e.currentTarget.value)}
+								onkeydown={(e) => e.key === 'Enter' && addSetting()}
 							/>
 							<button
-								class="x-btn"
+								class="add-btn"
 								type="button"
-								aria-label="Remove setting"
-								disabled={locked}
-								onclick={() => onRemoveSetting?.(s.id)}>✕</button
+								onclick={addSetting}
+								disabled={locked || !newSettingKey.trim() || !newSettingValue.trim()}>Add</button
 							>
 						</div>
-					{/each}
-					<div class="setting-row">
-						<input
-							class="input"
-							bind:value={newSettingKey}
-							placeholder="Bench angle"
-							disabled={locked}
-							onkeydown={(e) => e.key === 'Enter' && addSetting()}
-						/>
-						<input
-							class="input"
-							bind:value={newSettingValue}
-							placeholder="30°"
-							disabled={locked}
-							onkeydown={(e) => e.key === 'Enter' && addSetting()}
-						/>
-						<button
-							class="add-btn"
-							type="button"
-							onclick={addSetting}
-							disabled={locked || !newSettingKey.trim() || !newSettingValue.trim()}>Add</button
-						>
 					</div>
-				</div>
+				{/if}
 			</section>
 
 			<!-- Last time -->
@@ -583,6 +607,79 @@
 	}
 	.sub-head .help {
 		font: italic 400 11px/1 'Instrument Serif';
+		color: var(--ink-dim);
+	}
+	.sub-toggle {
+		width: 100%;
+		background: transparent;
+		border: 0;
+		padding: 0;
+		cursor: pointer;
+		color: inherit;
+		text-align: left;
+		gap: 12px;
+	}
+	.sub-head-left {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 8px;
+		min-width: 0;
+		flex: 1 1 auto;
+	}
+	.sub-caret {
+		flex: none;
+		width: 24px;
+		height: 24px;
+		display: grid;
+		place-items: center;
+		border-radius: 8px;
+		background: var(--bg-2);
+		color: var(--ink-soft);
+		font:
+			700 11px/1 'Onest',
+			system-ui,
+			sans-serif;
+	}
+	.settings-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+	}
+	.setting-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 4px 4px 4px 10px;
+		border-radius: 999px;
+		background: var(--card-3);
+		border: 1px solid var(--line);
+		font:
+			600 11px/1 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--ink-2);
+		max-width: 100%;
+	}
+	.setting-chip .k {
+		font-weight: 700;
+		letter-spacing: 0.02em;
+		color: var(--ink-soft);
+		text-transform: lowercase;
+	}
+	.setting-chip .v {
+		padding: 4px 8px;
+		border-radius: 999px;
+		background: var(--card);
+		color: var(--ink);
+		font-variant-numeric: tabular-nums;
+		max-width: 140px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.settings-empty {
+		font: italic 400 12px/1.1 'Instrument Serif';
 		color: var(--ink-dim);
 	}
 
