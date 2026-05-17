@@ -1,0 +1,8 @@
+[advisories]
+# RUSTSEC-2023-0071 — Marvin Attack on the `rsa` crate.
+# `rsa` is only pulled in transitively via `sqlx-mysql` from `sqlx-macros-core`.
+# SwoleMate uses SQLite (sqlx features = ["sqlite", ...]); MySQL and RSA code
+# are never compiled into the binary (`cargo tree -i rsa` returns nothing).
+# Re-evaluate whenever upstream `rsa` ships a fix or sqlx-macros-core stops
+# resolving MySQL deps unconditionally.
+ignore = ["RUSTSEC-2023-0071"]
