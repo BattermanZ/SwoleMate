@@ -3,6 +3,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as fontkit from 'fontkit';
 import { Resvg } from '@resvg/resvg-js';
+import toIco from 'to-ico';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..');
@@ -66,8 +67,19 @@ const targets = [
 	{ out: 'apple-touch-icon-precomposed.png', size: 192 }
 ];
 
+const pngBuffers = {};
 for (const { out, size } of targets) {
 	const png = new Resvg(svg, { fitTo: { mode: 'width', value: size } }).render().asPng();
 	writeFileSync(resolve(root, 'static', out), png);
+	pngBuffers[size] = png;
 	console.log(`wrote ${out} (${size}x${size}, ${png.length} bytes)`);
 }
+
+// Build favicon.ico with 16, 32, and 48px layers
+const icoSizes = [16, 32, 48];
+const icoPngs = icoSizes.map((size) =>
+	Buffer.from(new Resvg(svg, { fitTo: { mode: 'width', value: size } }).render().asPng())
+);
+const ico = await toIco(icoPngs);
+writeFileSync(resolve(root, 'static/favicon.ico'), ico);
+console.log(`wrote favicon.ico (${icoSizes.join('/')}px, ${ico.length} bytes)`);
