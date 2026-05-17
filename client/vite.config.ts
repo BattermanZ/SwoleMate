@@ -14,7 +14,7 @@ const contentSecurityPolicy = [
 	"frame-ancestors 'none'",
 	"object-src 'none'",
 	"form-action 'self'",
-	"script-src 'self' 'unsafe-eval' 'sha256-/5eKnbp5xWDcwK5HQYYHlXfAOSFfG1Nm6VeAhpXPbJ0='",
+	"script-src 'self' 'unsafe-eval' 'sha256-XxsyBzghD6XiU6EbSkMzj+Ob6G4ncvvkwDcYat6QTXA='",
 	"style-src 'self' 'unsafe-inline'",
 	"img-src 'self' data: blob: https:",
 	"font-src 'self' data:",
