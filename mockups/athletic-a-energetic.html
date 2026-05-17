@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#f5efe6" />
+<title>SwoleMate · Soft Athletic — A · Energetic</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800;900&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #f3ece1;
+    --bg-2: #ebe2d2;
+    --card: #fbf6ec;
+    --card-2: #f6efe1;
+    --ink: #18130d;
+    --ink-2: #443c30;
+    --ink-soft: #847562;
+    --line: #e5dccb;
+    --sage: #4f7d54;
+    --clay: #ff5e1f;     /* hotter, saturated */
+    --clay-2: #ff7a2a;
+    --clay-deep: #c83a05;
+    --gold: #d5a23a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    min-height: 100dvh; display: grid; place-items: center; padding: 24px;
+    background:
+      radial-gradient(900px 600px at 0% 0%, #f7efde 0%, transparent 60%),
+      radial-gradient(900px 600px at 100% 100%, #ead7c4 0%, transparent 55%),
+      var(--bg);
+    font-family: 'Onest', system-ui, sans-serif; color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  .device {
+    width: 100%; max-width: 420px; aspect-ratio: 390/844;
+    background: var(--bg);
+    border-radius: 48px; padding: 14px;
+    box-shadow: 0 0 0 1.5px #d4c6ac, 0 0 0 14px #18130d, 0 40px 80px rgba(60,40,20,0.35);
+    position: relative; overflow: hidden;
+  }
+  .screen {
+    height: 100%; width: 100%; border-radius: 34px;
+    background: linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
+    overflow: hidden; display: flex; flex-direction: column; position: relative;
+  }
+  .notch { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); width: 120px; height: 28px; background: #18130d; border-radius: 14px; z-index: 3; }
+  .statusbar { padding: 14px 24px 4px; display: flex; justify-content: space-between; font: 600 12px/1 'Onest'; color: var(--ink-soft); position: relative; z-index: 2; }
+  .statusbar .live { color: var(--clay); display: inline-flex; align-items: center; gap: 6px; }
+  .statusbar .live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--clay); animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.3; transform: scale(0.85); } }
+  main { flex: 1; padding: 6px 18px 96px; overflow-y: auto; position: relative; z-index: 2; }
+
+  /* Loud PR banner above hero — pushed accent */
+  .pr-flash {
+    margin: 8px 0 14px; padding: 14px 16px;
+    background: linear-gradient(95deg, var(--clay) 0%, var(--clay-2) 60%, var(--gold) 100%);
+    color: #fff; border-radius: 18px;
+    display: grid; grid-template-columns: 44px 1fr auto; align-items: center; gap: 14px;
+    box-shadow: 0 14px 32px -10px rgba(255,94,31,0.5);
+    position: relative; overflow: hidden;
+  }
+  .pr-flash::after {
+    content: ""; position: absolute; inset: -50% -20% auto auto; width: 220px; height: 220px;
+    background: radial-gradient(circle, rgba(255,255,255,0.35), transparent 60%);
+    pointer-events: none;
+  }
+  .pr-flash .icon { width: 44px; height: 44px; border-radius: 14px; background: rgba(255,255,255,0.18); display: grid; place-items: center; font: 800 22px/1 'Onest'; }
+  .pr-flash .body .k { font: 700 10px/1 'Onest'; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(255,255,255,0.85); }
+  .pr-flash .body .v { font: italic 400 22px/1.1 'Instrument Serif'; margin-top: 4px; }
+  .pr-flash .body .v b { font-style: normal; font-family: 'Onest'; font-weight: 800; }
+  .pr-flash .arr { font: 800 22px/1 'Onest'; }
+
+  /* Hero — bigger, theatrical, breathing ring */
+  .hero {
+    background: var(--ink); color: #f3ece1; border-radius: 28px;
+    padding: 22px 22px 24px; position: relative; overflow: hidden;
+    box-shadow: 0 24px 48px -16px rgba(24,19,13,0.55);
+  }
+  .hero::before {
+    content: ""; position: absolute; top: -120px; right: -100px; width: 320px; height: 320px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,94,31,0.55), transparent 65%);
+    animation: drift 12s ease-in-out infinite alternate;
+  }
+  .hero::after {
+    content: ""; position: absolute; bottom: -140px; left: -80px; width: 300px; height: 300px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(213,162,58,0.35), transparent 65%);
+    animation: drift 14s ease-in-out infinite alternate-reverse;
+  }
+  @keyframes drift { to { transform: translate(20px, -10px) scale(1.05); } }
+
+  .hero .kicker { font: 700 11px/1 'Onest'; letter-spacing: 0.22em; text-transform: uppercase; color: var(--clay-2); position: relative; }
+  .hero h1 { margin: 8px 0 0; font: 800 30px/1.02 'Onest'; letter-spacing: -0.025em; position: relative; }
+  .hero h1 em { font: italic 400 30px/1.02 'Instrument Serif'; color: var(--clay-2); }
+
+  .timer-block { margin-top: 22px; display: grid; grid-template-columns: 160px 1fr; gap: 18px; align-items: center; position: relative; }
+  .ring { width: 160px; height: 160px; position: relative; animation: breathe 4s ease-in-out infinite; }
+  @keyframes breathe { 50% { transform: scale(1.03); } }
+  .ring svg { transform: rotate(-90deg); }
+  .ring .center { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
+  .ring .big { font: 800 36px/1 'Onest'; letter-spacing: -0.035em; font-variant-numeric: tabular-nums; }
+  .ring .small { font: italic 400 13px/1 'Instrument Serif'; color: rgba(243,236,225,0.65); margin-top: 4px; }
+
+  .timer-block .right .k { font: 700 10px/1 'Onest'; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(243,236,225,0.55); }
+  .timer-block .right .v { font: 800 40px/1 'Onest'; letter-spacing: -0.03em; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .timer-block .right .v small { font: 500 14px/1 'Onest'; color: rgba(243,236,225,0.55); margin-left: 4px; }
+  .timer-block .right .sub { margin-top: 6px; font: italic 400 13px/1.3 'Instrument Serif'; color: var(--clay-2); }
+
+  .chips { display: flex; gap: 8px; margin-top: 18px; position: relative; }
+  .chip { background: rgba(243,236,225,0.1); border: 1px solid rgba(243,236,225,0.18); border-radius: 999px; padding: 8px 14px; font: 700 12px/1 'Onest'; color: #f3ece1; display: flex; align-items: center; gap: 8px; }
+  .chip.hot { background: var(--clay); border-color: var(--clay-deep); }
+
+  /* Exercise card */
+  .ex-card {
+    margin-top: 18px; background: var(--card); border-radius: 24px;
+    padding: 20px; border: 1px solid var(--line);
+    box-shadow: 0 8px 20px -10px rgba(60,40,20,0.12);
+  }
+  .ex-head { display: flex; align-items: center; justify-content: space-between; }
+  .ex-name { font: 800 20px/1 'Onest'; letter-spacing: -0.01em; }
+  .ex-name small { display: block; font: italic 400 13px/1 'Instrument Serif'; color: var(--ink-soft); margin-top: 4px; }
+  .prog-pills { display: flex; gap: 4px; }
+  .prog-pills span { width: 10px; height: 22px; border-radius: 5px; background: var(--bg-2); }
+  .prog-pills span.done { background: var(--sage); }
+  .prog-pills span.live { background: var(--clay); animation: livepulse 1.2s ease-in-out infinite; box-shadow: 0 0 0 4px rgba(255,94,31,0.18); }
+  @keyframes livepulse { 50% { opacity: 0.6; } }
+
+  .sets-list { margin-top: 16px; }
+  .s-row { display: grid; grid-template-columns: 30px 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px dashed var(--line); }
+  .s-row:last-child { border-bottom: 0; }
+  .s-row .n { width: 28px; height: 28px; border-radius: 50%; background: var(--bg-2); color: var(--ink-soft); display: grid; place-items: center; font: 800 12px/1 'Onest'; }
+  .s-row .body { font: 600 16px/1 'Onest'; color: var(--ink-2); }
+  .s-row .body .w { color: var(--ink); font-weight: 800; }
+  .s-row .right { font: 600 12px/1 'Onest'; color: var(--ink-soft); }
+  .s-row.done .n { background: var(--sage); color: white; }
+  .s-row.pr { background: linear-gradient(90deg, rgba(255,94,31,0.1), transparent 70%); margin: 0 -8px; padding: 12px 8px; border-radius: 12px; border-bottom: 0; }
+  .s-row.pr .n { background: var(--clay); color: white; box-shadow: 0 4px 12px -4px var(--clay); }
+  .s-row.pr .body .w { color: var(--clay-deep); }
+  .s-row.pr .right { color: var(--clay-deep); font-weight: 800; }
+  .s-row.live { background: var(--ink); margin: 8px -8px 0; padding: 14px 8px; border-radius: 14px; border-bottom: 0; color: #f3ece1; }
+  .s-row.live .n { background: var(--clay); color: white; }
+  .s-row.live .body { color: var(--clay-2); }
+  .s-row.live .right { color: rgba(243,236,225,0.7); }
+
+  /* Composer — bigger thumb targets */
+  .compose { margin-top: 14px; background: var(--card-2); border-radius: 22px; padding: 16px; border: 1px solid var(--line); }
+  .compose .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .field { background: var(--card); border-radius: 16px; padding: 12px; border: 1px solid var(--line); }
+  .field label { font: 700 10px/1 'Onest'; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-soft); }
+  .field .v { margin-top: 6px; font: 800 32px/1 'Onest'; letter-spacing: -0.03em; display: flex; align-items: baseline; gap: 4px; font-variant-numeric: tabular-nums; }
+  .field .v .u { font: italic 400 14px/1 'Instrument Serif'; color: var(--ink-soft); }
+  .field .stepper { display: flex; gap: 6px; margin-top: 8px; }
+  .field .stepper button { flex: 1; height: 36px; border-radius: 12px; border: 0; background: var(--bg-2); color: var(--ink-2); font: 800 16px/1 'Onest'; cursor: pointer; }
+  .field .stepper button:active { background: var(--ink); color: var(--bg); }
+
+  .log-btn {
+    margin-top: 14px; width: 100%; padding: 22px; border: 0; border-radius: 999px;
+    background: linear-gradient(180deg, var(--clay-2), var(--clay));
+    color: white; font: 800 17px/1 'Onest'; letter-spacing: 0.01em;
+    box-shadow: 0 16px 32px -10px rgba(255,94,31,0.55), inset 0 -3px 0 var(--clay-deep);
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+  }
+
+  /* Rest */
+  .rest {
+    margin-top: 16px; background: var(--card); border-radius: 22px; padding: 18px;
+    border: 1px solid var(--line); display: grid; grid-template-columns: 72px 1fr auto; gap: 14px; align-items: center;
+  }
+  .rest .ring-sm { width: 72px; height: 72px; position: relative; }
+  .rest .ring-sm .label { position: absolute; inset: 0; display: grid; place-items: center; font: 800 18px/1 'Onest'; color: var(--clay); font-variant-numeric: tabular-nums; }
+  .rest .copy .k { font: 700 10px/1 'Onest'; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-soft); }
+  .rest .copy .v { margin-top: 4px; font: 800 17px/1.2 'Onest'; color: var(--ink); }
+  .rest .copy .sub { font: italic 400 12px/1.3 'Instrument Serif'; color: var(--ink-soft); margin-top: 2px; }
+  .rest button { background: var(--ink); color: var(--card); border: 0; border-radius: 999px; padding: 12px 16px; font: 700 12px/1 'Onest'; }
+
+  /* Nav */
+  nav.tabs {
+    position: absolute; left: 16px; right: 16px; bottom: 14px; height: 72px;
+    background: rgba(251,246,236,0.92); backdrop-filter: blur(14px);
+    border-radius: 28px; border: 1px solid var(--line);
+    display: grid; grid-template-columns: repeat(5, 1fr); align-items: center;
+    z-index: 4; box-shadow: 0 16px 32px -10px rgba(60,40,20,0.18);
+  }
+  nav.tabs a { display: grid; place-items: center; gap: 4px; color: var(--ink-soft); text-decoration: none; font: 700 10px/1 'Onest'; padding: 8px 0; }
+  nav.tabs a .pill { width: 32px; height: 32px; border-radius: 16px; display: grid; place-items: center; background: var(--bg-2); }
+  nav.tabs a.active { color: var(--clay); }
+  nav.tabs a.active .pill { background: var(--clay); color: white; box-shadow: 0 6px 14px -6px var(--clay); }
+
+  .home {
+    position: fixed; top: 20px; left: 20px;
+    color: var(--ink-2); font: 700 12px/1 'Onest'; text-decoration: none;
+    background: var(--card); padding: 10px 14px; border-radius: 999px; border: 1px solid var(--line);
+    box-shadow: 0 8px 16px -8px rgba(60,40,20,0.15);
+  }
+  @media (max-width: 480px) {
+    body { padding: 0; background: var(--bg); }
+    .device { max-width: 100%; aspect-ratio: auto; min-height: 100dvh; border-radius: 0; padding: 0; box-shadow: none; }
+    .screen { border-radius: 0; }
+    .notch { display: none; }
+    .home { top: 12px; left: 12px; }
+  }
+</style>
+</head>
+<body>
+  <a class="home" href="index.html">← gallery</a>
+  <div class="device">
+    <div class="notch"></div>
+    <div class="screen">
+      <div class="statusbar">
+        <span>7:42</span>
+        <span class="live">SESSION LIVE</span>
+      </div>
+      <main>
+
+        <div class="pr-flash">
+          <div class="icon">⚡</div>
+          <div class="body">
+            <div class="k">New personal record</div>
+            <div class="v">Bench <b>105 kg × 8</b> — +2.5kg</div>
+          </div>
+          <div class="arr">→</div>
+        </div>
+
+        <section class="hero">
+          <div class="kicker">► Session live · 42 min in</div>
+          <h1>Push day, <em>going off.</em></h1>
+
+          <div class="timer-block">
+            <div class="ring">
+              <svg width="160" height="160" viewBox="0 0 160 160">
+                <circle cx="80" cy="80" r="72" stroke="rgba(243,236,225,0.1)" stroke-width="10" fill="none" />
+                <circle cx="80" cy="80" r="72" stroke="url(#g)" stroke-width="10" fill="none"
+                  stroke-dasharray="452" stroke-dashoffset="150" stroke-linecap="round" />
+                <defs>
+                  <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#ff7a2a"/>
+                    <stop offset="100%" stop-color="#ff5e1f"/>
+                  </linearGradient>
+                </defs>
+              </svg>
+              <div class="center">
+                <div class="big">42:18</div>
+                <div class="small">elapsed</div>
+              </div>
+            </div>
+            <div class="right">
+              <div class="k">Volume today</div>
+              <div class="v">4,820<small>kg</small></div>
+              <div class="sub">↑ 12% vs last push</div>
+            </div>
+          </div>
+
+          <div class="chips">
+            <div class="chip">18 sets</div>
+            <div class="chip">4 / 5 ex</div>
+            <div class="chip hot">⚡ 1 PR</div>
+          </div>
+        </section>
+
+        <section class="ex-card">
+          <div class="ex-head">
+            <div class="ex-name">Bench Press<small>— heavy</small></div>
+            <div class="prog-pills">
+              <span class="done"></span><span class="done"></span><span class="done"></span><span class="live"></span><span></span>
+            </div>
+          </div>
+          <div class="sets-list">
+            <div class="s-row done"><span class="n">1</span><span class="body"><span class="w">100</span> kg × 10</span><span class="right">7:18</span></div>
+            <div class="s-row done"><span class="n">2</span><span class="body"><span class="w">102.5</span> kg × 9</span><span class="right">7:26</span></div>
+            <div class="s-row pr"><span class="n">3</span><span class="body"><span class="w">105.0</span> kg × 8</span><span class="right">⚡ PR</span></div>
+            <div class="s-row live"><span class="n">4</span><span class="body">Logging set 4…</span><span class="right">now</span></div>
+          </div>
+        </section>
+
+        <section class="compose">
+          <div class="row">
+            <div class="field">
+              <label>Weight</label>
+              <div class="v"><span>105</span><span class="u">kg</span></div>
+              <div class="stepper"><button>−</button><button>+</button></div>
+            </div>
+            <div class="field">
+              <label>Reps</label>
+              <div class="v"><span>8</span><span class="u">×</span></div>
+              <div class="stepper"><button>−</button><button>+</button></div>
+            </div>
+          </div>
+          <button class="log-btn">▶ Log set 4 of 5</button>
+        </section>
+
+        <section class="rest">
+          <div class="ring-sm">
+            <svg width="72" height="72" viewBox="0 0 72 72" style="transform:rotate(-90deg)">
+              <circle cx="36" cy="36" r="30" stroke="#e5dccb" stroke-width="5" fill="none"/>
+              <circle cx="36" cy="36" r="30" stroke="#ff5e1f" stroke-width="5" fill="none"
+                stroke-dasharray="188" stroke-dashoffset="65" stroke-linecap="round"/>
+            </svg>
+            <div class="label">63s</div>
+          </div>
+          <div class="copy">
+            <div class="k">Rest clock</div>
+            <div class="v">1:03 left</div>
+            <div class="sub">Set 4 ready · same weight</div>
+          </div>
+          <button>Skip</button>
+        </section>
+      </main>
+
+      <nav class="tabs">
+        <a class="active" href="#"><span class="pill">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 21s-7-4.5-7-11a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 6.5-7 11-7 11z"/></svg>
+        </span>Today</a>
+        <a href="#"><span class="pill">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 9h16"/></svg>
+        </span>Plans</a>
+        <a href="#"><span class="pill">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        </span>History</a>
+        <a href="#"><span class="pill">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19h16"/><path d="M6 16l4-5 4 3 5-7"/></svg>
+        </span>Progress</a>
+        <a href="#"><span class="pill">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="9" r="3.5"/><path d="M5 20c1-4 4-6 7-6s6 2 7 6"/></svg>
+        </span>You</a>
+      </nav>
+    </div>
+  </div>
+</body>
+</html>

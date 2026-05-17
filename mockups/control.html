@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#ece2cf" />
+<title>SwoleMate · Control Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Archivo+Narrow:wght@500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --paper: #ece2cf;
+    --paper-2: #e3d8c1;
+    --paper-3: #f3ecda;
+    --line: #1d1a14;
+    --line-2: #5a544a;
+    --line-hair: #b8ad94;
+    --ink: #1a1812;
+    --ink-2: #3d3830;
+    --ink-soft: #6d6557;
+    --shu: #e83a1e;
+    --shu-2: #b9270f;
+    --warn: #c87f1a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    min-height: 100dvh; padding: 24px; display: grid; place-items: center;
+    background:
+      repeating-linear-gradient(0deg, transparent 0 23px, rgba(20,15,5,0.05) 23px 24px),
+      radial-gradient(800px 600px at 10% 0%, #d9cdb1 0%, transparent 60%),
+      #c9bea2;
+    font-family: 'IBM Plex Mono', monospace; color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  .device {
+    width: 100%; max-width: 420px; aspect-ratio: 390/844;
+    background: var(--paper);
+    border-radius: 44px; padding: 14px;
+    box-shadow:
+      0 0 0 1.5px #6a604c,
+      0 0 0 12px #1a1714,
+      0 40px 80px rgba(0,0,0,0.45);
+    position: relative; overflow: hidden;
+  }
+  .screen {
+    height: 100%; width: 100%; border-radius: 32px;
+    background:
+      repeating-linear-gradient(0deg, transparent 0 23px, rgba(26,24,18,0.045) 23px 24px),
+      linear-gradient(180deg, var(--paper) 0%, var(--paper-2) 100%);
+    overflow: hidden; display: flex; flex-direction: column; position: relative;
+  }
+  .screen::after {
+    /* CRT-style scanline + grain */
+    content: ""; position: absolute; inset: 0;
+    background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.2 0 0 0 0 0.16 0 0 0 0 0.1 0 0 0 0.12 0'/></filter><rect width='200' height='200' filter='url(%23n)'/></svg>");
+    mix-blend-mode: multiply; opacity: 0.55; pointer-events: none; z-index: 1;
+  }
+  .notch { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); width: 120px; height: 28px; background: #1a1714; border-radius: 14px; z-index: 4; }
+
+  /* ─── Top title bar ──────────────────────────────────────────────── */
+  .titlebar {
+    position: relative; z-index: 3;
+    margin: 38px 12px 0; border: 1px solid var(--line);
+    display: grid; grid-template-columns: 1fr auto; align-items: stretch;
+    background: var(--paper-3);
+  }
+  .titlebar .left { padding: 8px 12px; border-right: 1px solid var(--line); }
+  .titlebar .ts { font: 700 9px/1 'IBM Plex Mono'; letter-spacing: 0.18em; color: var(--ink-soft); text-transform: uppercase; }
+  .titlebar .ts .num { display: block; margin-top: 4px; font: 700 18px/1 'Archivo Narrow'; letter-spacing: 0.05em; color: var(--ink); }
+  .titlebar .right { padding: 8px 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: center; }
+  .titlebar .cell { font: 700 8px/1 'IBM Plex Mono'; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-soft); }
+  .titlebar .cell .v { display: block; margin-top: 4px; font: 700 11px/1 'IBM Plex Mono'; color: var(--ink); }
+  .titlebar .cell.status .v { color: var(--shu); }
+  .titlebar .cell.status .v::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--shu); margin-right: 6px; vertical-align: middle; animation: blink 1s steps(2,end) infinite; }
+  @keyframes blink { 50% { opacity: 0.25; } }
+
+  /* Big page title strip */
+  .page-title {
+    margin: 8px 12px 0; padding: 6px 0; display: flex; align-items: baseline; justify-content: space-between;
+    border-bottom: 1px solid var(--line); position: relative; z-index: 3;
+  }
+  .page-title h1 {
+    margin: 0; font: 800 18px/1 'Archivo Narrow'; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink);
+  }
+  .page-title h1 .red { color: var(--shu); }
+  .page-title .subtype { font: 600 9px/1 'IBM Plex Mono'; letter-spacing: 0.18em; color: var(--ink-soft); text-transform: uppercase; }
+
+  /* Subtitle / parameters strip */
+  .params {
+    margin: 0 12px; padding: 6px 0 10px; display: flex; gap: 14px; flex-wrap: wrap;
+    font: 600 9px/1 'IBM Plex Mono'; letter-spacing: 0.12em; color: var(--ink-soft); text-transform: uppercase;
+    border-bottom: 1px solid var(--line); position: relative; z-index: 3;
+  }
+  .params span b { color: var(--ink); font-weight: 700; margin-left: 4px; }
+  .params .warn b { color: var(--shu); }
+
+  main { flex: 1; padding: 12px 12px 90px; overflow-y: auto; position: relative; z-index: 3; display: flex; flex-direction: column; gap: 10px; }
+
+  /* ─── Exercise list (sidebar) ───────────────────────────────────── */
+  .ex-list { border: 1px solid var(--line); background: var(--paper-3); }
+  .ex-list .head {
+    padding: 6px 10px; border-bottom: 1px solid var(--line);
+    display: flex; justify-content: space-between; align-items: center;
+    font: 700 9px/1 'IBM Plex Mono'; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink);
+  }
+  .ex-list .head .id { color: var(--ink-soft); }
+  .ex { padding: 8px 10px; border-bottom: 1px solid var(--line-hair); display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; align-items: start; }
+  .ex:last-child { border-bottom: 0; }
+  .ex.active { background: var(--ink); color: var(--paper); }
+  .ex .name { font: 700 11px/1 'Archivo Narrow'; letter-spacing: 0.1em; text-transform: uppercase; }
+  .ex.active .name { color: var(--paper); }
+  .ex .name .sub { display: block; font: 500 9px/1 'IBM Plex Mono'; letter-spacing: 0.12em; color: var(--shu); text-transform: uppercase; margin-top: 4px; }
+  .ex.active .name .sub { color: var(--shu); }
+  .ex .meta { text-align: right; font: 600 9px/1 'IBM Plex Mono'; color: var(--ink-soft); letter-spacing: 0.06em; }
+  .ex.active .meta { color: var(--paper-3); }
+  .ex .hex { grid-column: 1 / -1; font: 500 9px/1.3 'IBM Plex Mono'; color: var(--ink-soft); letter-spacing: 0.04em; word-break: break-all; }
+  .ex.active .hex { color: rgba(243,236,218,0.5); }
+  .ex .bar {
+    grid-column: 1 / -1; margin-top: 4px;
+    height: 4px; background: rgba(0,0,0,0.06); position: relative;
+  }
+  .ex.active .bar { background: rgba(255,255,255,0.1); }
+  .ex .bar::after { content: ""; position: absolute; inset: 0 auto 0 0; background: var(--shu); width: var(--p, 0%); }
+  .ex .nums { font: 600 9px/1 'IBM Plex Mono'; color: var(--ink-soft); letter-spacing: 0.06em; margin-left: 8px; }
+
+  /* ─── Center: wireframe visualization ──────────────────────────── */
+  .viz {
+    border: 1px solid var(--line); background: var(--paper-3);
+    position: relative; overflow: hidden;
+  }
+  .viz .vh {
+    padding: 6px 10px; display: flex; justify-content: space-between;
+    border-bottom: 1px solid var(--line);
+    font: 700 9px/1 'IBM Plex Mono'; letter-spacing: 0.18em; text-transform: uppercase;
+  }
+  .viz .vh .red { color: var(--shu); }
+  .viz .canvas { aspect-ratio: 4/3; position: relative; }
+  .viz svg { width: 100%; height: 100%; display: block; }
+  .viz .overlay {
+    position: absolute; top: 8px; left: 12px; right: 12px;
+    display: flex; justify-content: space-between;
+    font: 700 8px/1 'IBM Plex Mono'; letter-spacing: 0.15em; text-transform: uppercase; color: var(--ink-soft);
+  }
+  .viz .footline {
+    padding: 6px 10px; display: flex; justify-content: space-between;
+    border-top: 1px solid var(--line);
+    font: 700 9px/1 'Archivo Narrow'; letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .viz .footline .red { color: var(--shu); }
+  .viz .footline .sub { font: 500 9px/1 'IBM Plex Mono'; letter-spacing: 0.15em; color: var(--ink-soft); margin-top: 4px; }
+
+  /* ─── Right column: instruments ─────────────────────────────────── */
+  .instruments { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .panel { border: 1px solid var(--line); background: var(--paper-3); }
+  .panel .ph {
+    padding: 6px 10px; border-bottom: 1px solid var(--line);
+    font: 700 8.5px/1 'IBM Plex Mono'; letter-spacing: 0.16em; text-transform: uppercase;
+  }
+  .panel .pbody { padding: 10px; }
+
+  /* mini line chart */
+  .lc-svg { width: 100%; height: 60px; }
+  .lc-legend { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; font: 600 8px/1 'IBM Plex Mono'; letter-spacing: 0.1em; color: var(--ink-soft); text-transform: uppercase; }
+  .lc-legend span { display: flex; align-items: center; gap: 4px; }
+  .lc-legend span::before { content: ""; width: 8px; height: 2px; background: var(--ink); }
+  .lc-legend span.r::before { background: var(--shu); }
+
+  /* dial */
+  .dial { width: 100%; aspect-ratio: 1; }
+
+  /* heatmap */
+  .heatmap { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; }
+  .heatmap div { aspect-ratio: 1; background: rgba(26,24,18,0.08); }
+  .heatmap div[data-h="1"] { background: rgba(26,24,18,0.18); }
+  .heatmap div[data-h="2"] { background: rgba(26,24,18,0.32); }
+  .heatmap div[data-h="3"] { background: rgba(26,24,18,0.5); }
+  .heatmap div[data-h="4"] { background: var(--shu); }
+
+  /* ─── Composer ──────────────────────────────────────────────────── */
+  .compose { border: 1px solid var(--line); background: var(--paper-3); }
+  .compose .ch {
+    padding: 6px 10px; display: flex; justify-content: space-between;
+    border-bottom: 1px solid var(--line);
+    font: 700 9px/1 'IBM Plex Mono'; letter-spacing: 0.18em; text-transform: uppercase;
+  }
+  .compose .ch .red { color: var(--shu); }
+  .compose .cbody { padding: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .field { border: 1px solid var(--line); padding: 8px 10px; background: var(--paper); }
+  .field .k { font: 700 8px/1 'IBM Plex Mono'; letter-spacing: 0.2em; color: var(--ink-soft); text-transform: uppercase; }
+  .field .v {
+    margin-top: 6px; font: 800 28px/1 'Archivo Narrow'; letter-spacing: 0.02em;
+    display: flex; align-items: baseline; justify-content: space-between;
+  }
+  .field .u { font: 600 10px/1 'IBM Plex Mono'; color: var(--ink-soft); letter-spacing: 0.16em; }
+  .compose .submit {
+    grid-column: 1 / -1; padding: 14px; background: var(--shu); color: var(--paper);
+    border: 0; font: 800 13px/1 'Archivo Narrow'; letter-spacing: 0.22em; text-transform: uppercase;
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    box-shadow: inset 0 -3px 0 var(--shu-2); cursor: pointer;
+  }
+
+  /* ─── Bottom status strip ───────────────────────────────────────── */
+  .statusbar-bot {
+    position: absolute; left: 14px; right: 14px; bottom: 14px; z-index: 4;
+    background: var(--paper-3); border: 1px solid var(--line);
+    padding: 8px 12px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    font: 700 8.5px/1 'IBM Plex Mono'; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-soft);
+  }
+  .statusbar-bot .rec { color: var(--shu); display: flex; align-items: center; gap: 6px; }
+  .statusbar-bot .rec::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--shu); animation: blink 1s steps(2,end) infinite; }
+  .statusbar-bot .right { margin-left: auto; color: var(--ink); }
+  .statusbar-bot b { color: var(--ink); }
+
+  .home {
+    position: fixed; top: 20px; left: 20px;
+    color: var(--ink); font: 700 10px/1 'IBM Plex Mono'; letter-spacing: 0.18em; text-decoration: none; text-transform: uppercase;
+    background: var(--paper-3); padding: 8px 10px; border: 1px solid var(--line);
+  }
+  .home:hover { color: var(--shu); border-color: var(--shu); }
+
+  @media (max-width: 480px) {
+    body { padding: 0; background: var(--paper); }
+    .device { max-width: 100%; aspect-ratio: auto; min-height: 100dvh; border-radius: 0; padding: 0; box-shadow: none; }
+    .screen { border-radius: 0; }
+    .notch { display: none; }
+    .home { top: 12px; left: 12px; }
+    .titlebar { margin-top: 8px; }
+  }
+</style>
+</head>
+<body>
+  <a class="home" href="index.html">◂ gallery</a>
+  <div class="device">
+    <div class="notch"></div>
+    <div class="screen">
+
+      <div class="titlebar">
+        <div class="left">
+          <div class="ts">Session timestamp</div>
+          <div class="ts num">26.05.14</div>
+        </div>
+        <div class="right">
+          <div class="cell status">
+            Core status
+            <span class="v">ONLINE</span>
+          </div>
+          <div class="cell">
+            Runtime
+            <span class="v">00:42:18</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-title">
+        <h1>BENCH PRESS <span class="red">/ HEAVY</span></h1>
+        <div class="subtype">SES.042 · 04 / 05</div>
+      </div>
+
+      <div class="params">
+        <span>VERSION <b>2.4.1</b></span>
+        <span>WEIGHT MODE <b>BAR</b></span>
+        <span>UNIT <b>KG</b></span>
+        <span class="warn">PR FLAG <b>HIGH</b></span>
+      </div>
+
+      <main>
+        <!-- Exercise list -->
+        <section class="ex-list">
+          <div class="head">
+            <span>► EXERCISES // 04 OF 05</span>
+            <span class="id">ID 0428</span>
+          </div>
+          <div class="ex">
+            <div class="name">[01] Squat<span class="sub">— BACK · COMPLETE</span></div>
+            <div class="meta">SETS 4<br/><span class="nums">2400KG</span></div>
+            <div class="hex">7a45c042b510896ae08056e2bc0e018b5ab458a04002f0b924</div>
+            <div class="bar" style="--p:100%"></div>
+          </div>
+          <div class="ex">
+            <div class="name">[02] Row<span class="sub">— BARBELL · COMPLETE</span></div>
+            <div class="meta">SETS 4<br/><span class="nums">1120KG</span></div>
+            <div class="hex">08fa00f857a0c13cea5a16d04f085f75011b9ff007b008</div>
+            <div class="bar" style="--p:100%"></div>
+          </div>
+          <div class="ex active">
+            <div class="name">[03] Bench Press<span class="sub">— HEAVY · LIVE</span></div>
+            <div class="meta">SETS 03/05<br/><span class="nums">1240KG</span></div>
+            <div class="hex">f8e2645275f20847af09f0090d409c14a3950b440a3000aac</div>
+            <div class="bar" style="--p:65%"></div>
+          </div>
+          <div class="ex">
+            <div class="name">[04] Overhead Press<span class="sub">— PENDING</span></div>
+            <div class="meta">SETS 0/4<br/><span class="nums">— —</span></div>
+            <div class="hex">9c0c8e5e025dab86fa07f4f5b80b10089a704018a27330b1</div>
+            <div class="bar" style="--p:0%"></div>
+          </div>
+        </section>
+
+        <!-- Center wireframe viz -->
+        <section class="viz">
+          <div class="vh">
+            <span>BAR PATH · WIREFRAME</span>
+            <span class="red">▌LIVE</span>
+          </div>
+          <div class="canvas">
+            <div class="overlay">
+              <span>BAR VELOCITY 0.42 M·S⁻¹</span>
+              <span>RPE 8.5</span>
+            </div>
+            <svg viewBox="0 0 400 300" preserveAspectRatio="none">
+              <defs>
+                <pattern id="dotgrid" width="20" height="20" patternUnits="userSpaceOnUse">
+                  <circle cx="1" cy="1" r="0.5" fill="rgba(26,24,18,0.25)"/>
+                </pattern>
+              </defs>
+              <rect width="400" height="300" fill="url(#dotgrid)"/>
+              <!-- Concentric ring "well" -->
+              <g fill="none" stroke="rgba(26,24,18,0.5)" stroke-width="0.6">
+                <ellipse cx="200" cy="130" rx="170" ry="22"/>
+                <ellipse cx="200" cy="135" rx="150" ry="26"/>
+                <ellipse cx="200" cy="142" rx="128" ry="30"/>
+                <ellipse cx="200" cy="152" rx="106" ry="32"/>
+                <ellipse cx="200" cy="166" rx="86" ry="32"/>
+                <ellipse cx="200" cy="182" rx="68" ry="30"/>
+                <ellipse cx="200" cy="200" rx="50" ry="26"/>
+                <ellipse cx="200" cy="218" rx="34" ry="20"/>
+                <ellipse cx="200" cy="234" rx="20" ry="14"/>
+              </g>
+              <!-- Radial "stress" lines -->
+              <g fill="none" stroke="rgba(26,24,18,0.32)" stroke-width="0.5">
+                <path d="M30 130 C 80 130, 160 250, 200 248 C 240 250, 320 130, 370 130"/>
+                <path d="M60 122 C 110 122, 170 240, 200 240 C 230 240, 290 122, 340 122"/>
+                <path d="M100 116 C 140 116, 178 226, 200 226 C 222 226, 260 116, 300 116"/>
+                <path d="M140 112 C 168 112, 188 210, 200 210 C 212 210, 232 112, 260 112"/>
+              </g>
+              <!-- Marker at bottom -->
+              <circle cx="200" cy="252" r="6" fill="#e83a1e"/>
+              <circle cx="200" cy="252" r="11" fill="none" stroke="#e83a1e" stroke-width="0.8"/>
+              <line x1="200" y1="252" x2="200" y2="280" stroke="#e83a1e" stroke-width="0.6"/>
+              <text x="206" y="282" fill="#e83a1e" font-family="IBM Plex Mono" font-size="9" font-weight="700">PR · 105KG×8</text>
+
+              <!-- Tick markers -->
+              <g font-family="IBM Plex Mono" font-size="7" fill="rgba(26,24,18,0.5)" font-weight="600">
+                <text x="6" y="295">0.0 s</text>
+                <text x="350" y="295">2.4 s</text>
+                <text x="6" y="22">LIFT TRAJECTORY · SET 03</text>
+              </g>
+            </svg>
+          </div>
+          <div class="footline">
+            <div>
+              <div>SINGULARITY ENGINE</div>
+              <div class="sub">▸ SUBSCIENCE: CORE V2.4 · PARAMETER SET</div>
+            </div>
+            <div style="text-align:right">
+              <div class="red">+ 2.5 KG</div>
+              <div class="sub">VS LAST · 102.5</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Instruments row -->
+        <section class="instruments">
+          <div class="panel">
+            <div class="ph">RPE / VELOCITY</div>
+            <div class="pbody">
+              <svg class="lc-svg" viewBox="0 0 100 60" preserveAspectRatio="none">
+                <polyline fill="none" stroke="rgba(26,24,18,0.7)" stroke-width="1" points="0,42 14,38 28,34 42,30 56,28 70,26 84,24 100,22"/>
+                <polyline fill="none" stroke="#e83a1e" stroke-width="1.2" points="0,30 14,26 28,22 42,18 56,16 70,14 84,18 100,30" />
+                <line x1="0" y1="55" x2="100" y2="55" stroke="rgba(26,24,18,0.3)" stroke-dasharray="2,2" stroke-width="0.4"/>
+              </svg>
+              <div class="lc-legend"><span>RPE</span><span class="r">VEL</span></div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="ph">MASS FLOW</div>
+            <div class="pbody" style="padding:6px">
+              <svg class="dial" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(26,24,18,0.2)" stroke-width="1"/>
+                <circle cx="50" cy="50" r="32" fill="none" stroke="rgba(26,24,18,0.2)" stroke-width="0.5"/>
+                <g stroke="rgba(26,24,18,0.6)" stroke-width="0.5">
+                  <line x1="50" y1="6" x2="50" y2="14"/>
+                  <line x1="94" y1="50" x2="86" y2="50"/>
+                  <line x1="50" y1="94" x2="50" y2="86"/>
+                  <line x1="6" y1="50" x2="14" y2="50"/>
+                </g>
+                <circle cx="50" cy="50" r="40" fill="none" stroke="#e83a1e" stroke-width="2"
+                  stroke-dasharray="251" stroke-dashoffset="80"
+                  transform="rotate(-90 50 50)"/>
+                <text x="50" y="48" text-anchor="middle" font-family="Archivo Narrow" font-size="18" font-weight="800" fill="#1a1812">68%</text>
+                <text x="50" y="62" text-anchor="middle" font-family="IBM Plex Mono" font-size="6" letter-spacing="2" fill="#6d6557">VOLUME TGT</text>
+              </svg>
+            </div>
+          </div>
+
+          <div class="panel" style="grid-column: 1 / -1;">
+            <div class="ph">TRAINING DISTRIBUTION · 8 WEEKS</div>
+            <div class="pbody">
+              <div class="heatmap" id="hm"></div>
+              <div class="lc-legend" style="margin-top:8px"><span>OFF</span><span style="margin-left:auto">LOW</span><span>MED</span><span>HIGH</span><span class="r">PR DAYS</span></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Composer -->
+        <section class="compose">
+          <div class="ch">
+            <span>► LOG SET 04</span>
+            <span class="red">AWAITING INPUT</span>
+          </div>
+          <div class="cbody">
+            <div class="field">
+              <div class="k">Weight (kg)</div>
+              <div class="v"><span>105.0</span><span class="u">KG</span></div>
+            </div>
+            <div class="field">
+              <div class="k">Reps</div>
+              <div class="v"><span>8</span><span class="u">REP</span></div>
+            </div>
+            <button class="submit">▶ COMMIT TO LOG · SET 04</button>
+          </div>
+        </section>
+
+      </main>
+
+      <div class="statusbar-bot">
+        <span class="rec">REC</span>
+        <span>SEED <b>0xFE12-A8C4-0001</b></span>
+        <span class="right">FPS <b>60</b></span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Heatmap fill — 8 cols (weeks) x 4 rows (sessions per week density)
+    const hm = document.getElementById('hm');
+    const cells = 56;
+    const seed = [0,1,2,3,2,1,0,2, 1,2,3,4,3,2,1,3, 2,3,2,1,2,3,4,2, 1,2,3,2,1,2,3,4, 2,3,4,3,2,3,2,1, 3,2,1,2,3,4,3,2, 2,3,2,1,2,3,2,1];
+    seed.forEach(v => {
+      const d = document.createElement('div');
+      if (v > 0) d.setAttribute('data-h', String(v));
+      hm.appendChild(d);
+    });
+  </script>
+</body>
+</html>

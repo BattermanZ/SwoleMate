@@ -8,9 +8,8 @@
 		deleteWorkoutTemplate,
 		duplicateWorkoutTemplate,
 		getWorkoutTemplate,
-		getWorkoutTemplates,
-		startWorkoutFromTemplate,
-		updateWorkoutTemplate
+		updateWorkoutTemplate,
+		startWorkoutFromTemplate
 	} from '$lib/api';
 	import type {
 		WorkoutTemplate,
@@ -23,15 +22,14 @@
 		trackingFieldsSetting,
 		TRACKING_FIELDS_SETTING_KEY
 	} from '$lib/today/tracking';
+	import { Btn, Card, Chk, PageHero } from '$lib/components/ui';
 
-	export let data: { templates: WorkoutTemplate[] };
+	interface Props {
+		data: { templates: WorkoutTemplate[] };
+	}
+	let { data }: Props = $props();
 
-	type DraftSetting = {
-		localId: string;
-		key: string;
-		value: string;
-	};
-
+	type DraftSetting = { localId: string; key: string; value: string };
 	type DraftExercise = {
 		localId: string;
 		exercise_type: string;
@@ -43,47 +41,23 @@
 		tracks_weight: boolean;
 		settings: DraftSetting[];
 	};
+	type DraftTemplate = { id?: number; name: string; exercises: DraftExercise[] };
 
-	type DraftTemplate = {
-		id?: number;
-		name: string;
-		exercises: DraftExercise[];
-	};
-
-	let templates = data.templates;
-	let selectedId: number | 'new' | null = null;
-	let detailError: string | null = null;
-	let pageError: string | null = null;
-	let pageNotice: string | null = null;
-	let loadingDetail = false;
-	let saving = false;
-	let starting = false;
-	let deleting = false;
-	let draft: DraftTemplate = createBlankDraft();
-	let loadedTemplateId: number | null = null;
 	const authState = auth.state;
 
-	$: canEditTemplates = !$authState.offline;
+	let templates = $derived(data.templates);
 
-	$: selectedSummary =
-		typeof selectedId === 'number'
-			? templates.find((template) => template.id === selectedId)
-			: null;
+	let selectedId = $state<number | 'new' | null>(null);
+	let detailError = $state<string | null>(null);
+	let pageError = $state<string | null>(null);
+	let pageNotice = $state<string | null>(null);
+	let loadingDetail = $state(false);
+	let saving = $state(false);
+	let starting = $state(false);
+	let deleting = $state(false);
+	let draft = $state<DraftTemplate>(createBlankDraft());
 
-	onMount(() => {
-		const queryTemplateId = Number($page.url.searchParams.get('template'));
-		if (queryTemplateId && templates.some((template) => template.id === queryTemplateId)) {
-			void selectTemplate(queryTemplateId);
-			return;
-		}
-
-		if (templates[0]) {
-			void selectTemplate(templates[0].id);
-			return;
-		}
-
-		openNewTemplate();
-	});
+	let canEdit = $derived(!$authState.offline);
 
 	function makeLocalId() {
 		return Math.random().toString(36).slice(2, 10);
@@ -97,214 +71,154 @@
 		return {
 			id: detail.template.id,
 			name: detail.template.name,
-			exercises: detail.exercises.map((exercise) => {
+			exercises: detail.exercises.map((ex) => {
 				const tracking = decodeTrackingFields(
-					(exercise.settings ?? []).find((setting) => setting.key === TRACKING_FIELDS_SETTING_KEY)
-						?.value
+					(ex.settings ?? []).find((s) => s.key === TRACKING_FIELDS_SETTING_KEY)?.value
 				);
 				return {
-					localId: `exercise-${exercise.id}`,
-					exercise_type: exercise.exercise_type,
-					notes: exercise.notes ?? '',
-					per_side_weight: exercise.per_side_weight ?? false,
-					split_weight: exercise.split_weight ?? false,
+					localId: `ex-${ex.id}`,
+					exercise_type: ex.exercise_type,
+					notes: ex.notes ?? '',
+					per_side_weight: ex.per_side_weight ?? false,
+					split_weight: ex.split_weight ?? false,
 					tracks_reps: tracking.reps,
 					tracks_time: tracking.time,
 					tracks_weight: tracking.weight,
-					settings: (exercise.settings ?? [])
-						.filter((setting) => !isTrackingFieldsSetting(setting))
-						.map((setting) => ({
-							localId: `setting-${setting.id}`,
-							key: setting.key,
-							value: setting.value
+					settings: (ex.settings ?? [])
+						.filter((s) => !isTrackingFieldsSetting(s))
+						.map((s) => ({
+							localId: `set-${s.id}`,
+							key: s.key,
+							value: s.value
 						}))
 				};
 			})
 		};
 	}
 
-	function toPayload(currentDraft: DraftTemplate) {
+	function draftToInput(d: DraftTemplate): {
+		name: string;
+		exercises: WorkoutTemplateExerciseInput[];
+	} {
 		return {
-			name: currentDraft.name.trim(),
-			exercises: currentDraft.exercises.map(
-				(exercise): WorkoutTemplateExerciseInput => ({
-					exercise_type: exercise.exercise_type.trim(),
-					notes: exercise.notes.trim() || null,
-					per_side_weight: exercise.per_side_weight,
-					split_weight: exercise.split_weight,
-					settings: [
-						...exercise.settings.map((setting) => ({
-							key: setting.key.trim(),
-							value: setting.value.trim()
-						})),
-						trackingFieldsSetting({
-							reps: exercise.tracks_reps,
-							time: exercise.tracks_time,
-							weight: exercise.tracks_weight
-						})
-					].filter((setting) => setting.key && setting.value)
-				})
-			)
+			name: d.name.trim(),
+			exercises: d.exercises.map((ex) => ({
+				exercise_type: ex.exercise_type.trim(),
+				notes: ex.notes.trim() || null,
+				per_side_weight: ex.per_side_weight,
+				split_weight: ex.split_weight,
+				settings: [
+					trackingFieldsSetting({
+						reps: ex.tracks_reps,
+						time: ex.tracks_time,
+						weight: ex.tracks_weight
+					}),
+					...ex.settings
+						.filter((s) => s.key.trim() && s.value.trim())
+						.map((s) => ({ key: s.key.trim(), value: s.value.trim() }))
+				]
+			}))
 		};
 	}
 
-	async function refreshTemplates(selectId?: number | 'new') {
-		templates = await getWorkoutTemplates();
-		const nextSelection =
-			selectId !== undefined
-				? selectId
-				: typeof selectedId === 'number' && templates.some((template) => template.id === selectedId)
-					? selectedId
-					: (templates[0]?.id ?? 'new');
-
-		if (nextSelection === 'new') {
-			openNewTemplate();
-			return;
-		}
-
-		await selectTemplate(nextSelection);
-	}
-
-	async function loadTemplate(templateId: number) {
-		loadingDetail = true;
+	async function selectTemplate(id: number) {
+		selectedId = id;
 		detailError = null;
-		pageNotice = null;
+		loadingDetail = true;
 		try {
-			const detail = await getWorkoutTemplate(templateId);
+			const detail = await getWorkoutTemplate(id);
 			draft = toDraft(detail);
-			selectedId = templateId;
-			loadedTemplateId = templateId;
-		} catch (error) {
-			loadedTemplateId = null;
-			detailError = error instanceof Error ? error.message : 'Failed to load template';
+		} catch (e) {
+			detailError = e instanceof Error ? e.message : 'Failed to load template';
+			draft = createBlankDraft();
 		} finally {
 			loadingDetail = false;
 		}
 	}
 
-	async function selectTemplate(templateId: number) {
-		if (templateId === loadedTemplateId && selectedId === templateId) return;
-		selectedId = templateId;
-		await loadTemplate(templateId);
-	}
-
 	function openNewTemplate() {
 		selectedId = 'new';
-		loadedTemplateId = null;
-		detailError = null;
-		pageError = null;
-		pageNotice = null;
 		draft = createBlankDraft();
+		detailError = null;
 	}
 
 	function addExercise() {
-		draft = {
-			...draft,
-			exercises: [
-				...draft.exercises,
-				{
-					localId: makeLocalId(),
-					exercise_type: '',
-					notes: '',
-					per_side_weight: false,
-					split_weight: false,
-					tracks_reps: true,
-					tracks_time: false,
-					tracks_weight: true,
-					settings: []
-				}
-			]
-		};
-	}
-
-	function updateExercise(localId: string, patch: Partial<DraftExercise>) {
-		draft = {
-			...draft,
-			exercises: draft.exercises.map((exercise) => {
-				if (exercise.localId !== localId) return exercise;
-				const next = { ...exercise, ...patch };
-				if (patch.tracks_time === true) next.tracks_reps = false;
-				if (patch.tracks_time === false && !next.tracks_reps) next.tracks_reps = true;
-				if (!next.tracks_reps && !next.tracks_time) next.tracks_reps = true;
-				return next;
-			})
-		};
+		draft.exercises = [
+			...draft.exercises,
+			{
+				localId: makeLocalId(),
+				exercise_type: '',
+				notes: '',
+				per_side_weight: false,
+				split_weight: false,
+				tracks_reps: true,
+				tracks_time: false,
+				tracks_weight: true,
+				settings: []
+			}
+		];
 	}
 
 	function removeExercise(localId: string) {
-		draft = {
-			...draft,
-			exercises: draft.exercises.filter((exercise) => exercise.localId !== localId)
-		};
+		draft.exercises = draft.exercises.filter((e) => e.localId !== localId);
+	}
+
+	function updateExercise(localId: string, patch: Partial<DraftExercise>) {
+		draft.exercises = draft.exercises.map((e) => (e.localId === localId ? { ...e, ...patch } : e));
 	}
 
 	function addSetting(localId: string) {
-		draft = {
-			...draft,
-			exercises: draft.exercises.map((exercise) =>
-				exercise.localId === localId
-					? {
-							...exercise,
-							settings: [...exercise.settings, { localId: makeLocalId(), key: '', value: '' }]
-						}
-					: exercise
-			)
-		};
+		updateExercise(localId, {
+			settings: [
+				...(draft.exercises.find((e) => e.localId === localId)?.settings ?? []),
+				{ localId: makeLocalId(), key: '', value: '' }
+			]
+		});
 	}
 
-	function updateSetting(exerciseId: string, settingId: string, patch: Partial<DraftSetting>) {
-		draft = {
-			...draft,
-			exercises: draft.exercises.map((exercise) =>
-				exercise.localId === exerciseId
-					? {
-							...exercise,
-							settings: exercise.settings.map((setting) =>
-								setting.localId === settingId ? { ...setting, ...patch } : setting
-							)
-						}
-					: exercise
-			)
-		};
+	function removeSetting(exerciseLocalId: string, settingLocalId: string) {
+		const ex = draft.exercises.find((e) => e.localId === exerciseLocalId);
+		if (!ex) return;
+		updateExercise(exerciseLocalId, {
+			settings: ex.settings.filter((s) => s.localId !== settingLocalId)
+		});
 	}
 
-	function removeSetting(exerciseId: string, settingId: string) {
-		draft = {
-			...draft,
-			exercises: draft.exercises.map((exercise) =>
-				exercise.localId === exerciseId
-					? {
-							...exercise,
-							settings: exercise.settings.filter((setting) => setting.localId !== settingId)
-						}
-					: exercise
-			)
-		};
+	function updateSetting(
+		exerciseLocalId: string,
+		settingLocalId: string,
+		patch: Partial<DraftSetting>
+	) {
+		const ex = draft.exercises.find((e) => e.localId === exerciseLocalId);
+		if (!ex) return;
+		updateExercise(exerciseLocalId, {
+			settings: ex.settings.map((s) => (s.localId === settingLocalId ? { ...s, ...patch } : s))
+		});
 	}
 
 	async function handleSave() {
-		if (!canEditTemplates) {
-			pageError = 'Offline mode: templates are available when you are back online.';
+		pageError = pageNotice = null;
+		if (!draft.name.trim()) {
+			pageError = 'Template name is required.';
 			return;
 		}
-
 		saving = true;
-		pageError = null;
-		pageNotice = null;
-
 		try {
-			const payload = toPayload(draft);
-			const wasExisting = typeof selectedId === 'number';
-			const saved = wasExisting
-				? await updateWorkoutTemplate(selectedId as number, payload)
-				: await createWorkoutTemplate(payload);
-			await refreshTemplates(saved.template.id);
-			draft = toDraft(saved);
-			loadedTemplateId = saved.template.id;
-			pageNotice = wasExisting ? 'Template updated.' : 'Template created.';
-			selectedId = saved.template.id;
-		} catch (error) {
-			pageError = error instanceof Error ? error.message : 'Failed to save template';
+			const input = draftToInput(draft);
+			if (typeof selectedId === 'number') {
+				const updated = await updateWorkoutTemplate(selectedId, input);
+				draft = toDraft(updated);
+				pageNotice = 'Template updated.';
+			} else {
+				const created = await createWorkoutTemplate(input);
+				draft = toDraft(created);
+				selectedId = created.template.id;
+				pageNotice = 'Template created.';
+			}
+			const all = await import('$lib/api').then((m) => m.getWorkoutTemplates());
+			templates = all;
+		} catch (e) {
+			pageError = e instanceof Error ? e.message : 'Failed to save template';
 		} finally {
 			saving = false;
 		}
@@ -312,45 +226,33 @@
 
 	async function handleDuplicate() {
 		if (typeof selectedId !== 'number') return;
-		const nextName = prompt(
-			'Duplicate template as:',
-			`${draft.name || selectedSummary?.name || 'Template'} Copy`
-		);
-		if (!nextName) return;
-
-		pageError = null;
-		pageNotice = null;
+		saving = true;
+		pageError = pageNotice = null;
 		try {
-			const duplicated = await duplicateWorkoutTemplate(selectedId, { name: nextName });
-			await refreshTemplates(duplicated.template.id);
-			draft = toDraft(duplicated);
-			loadedTemplateId = duplicated.template.id;
+			const dup = await duplicateWorkoutTemplate(selectedId, { name: `${draft.name} copy` });
+			const all = await import('$lib/api').then((m) => m.getWorkoutTemplates());
+			templates = all;
+			await selectTemplate(dup.template.id);
 			pageNotice = 'Template duplicated.';
-		} catch (error) {
-			pageError = error instanceof Error ? error.message : 'Failed to duplicate template';
+		} catch (e) {
+			pageError = e instanceof Error ? e.message : 'Failed to duplicate template';
+		} finally {
+			saving = false;
 		}
 	}
 
 	async function handleDelete() {
 		if (typeof selectedId !== 'number') return;
 		if (!confirm('Delete this template?')) return;
-
 		deleting = true;
-		pageError = null;
-		pageNotice = null;
+		pageError = pageNotice = null;
 		try {
 			await deleteWorkoutTemplate(selectedId);
-			await refreshTemplates();
-			if (!templates.length) {
-				selectedId = 'new';
-				loadedTemplateId = null;
-				draft = createBlankDraft();
-			} else if (typeof selectedId === 'number') {
-				await loadTemplate(selectedId);
-			}
+			templates = templates.filter((t) => t.id !== selectedId);
+			openNewTemplate();
 			pageNotice = 'Template deleted.';
-		} catch (error) {
-			pageError = error instanceof Error ? error.message : 'Failed to delete template';
+		} catch (e) {
+			pageError = e instanceof Error ? e.message : 'Failed to delete template';
 		} finally {
 			deleting = false;
 		}
@@ -359,343 +261,470 @@
 	async function handleStartTemplate() {
 		if (typeof selectedId !== 'number') return;
 		starting = true;
-		pageError = null;
-		pageNotice = null;
-
+		pageError = pageNotice = null;
 		try {
 			const startIso = new Date().toISOString();
-			const timezoneOffsetMinutes = new Date(startIso).getTimezoneOffset();
+			const tzOffsetMinutes = new Date(startIso).getTimezoneOffset();
 			await startWorkoutFromTemplate(selectedId, {
 				date: startIso,
 				start_time: startIso,
-				timezone_offset_minutes: timezoneOffsetMinutes
+				timezone_offset_minutes: tzOffsetMinutes
 			});
 			await goto('/');
-		} catch (error) {
-			pageError = error instanceof Error ? error.message : 'Failed to start workout from template';
+		} catch (e) {
+			pageError = e instanceof Error ? e.message : 'Failed to start from template';
 		} finally {
 			starting = false;
 		}
 	}
+
+	onMount(() => {
+		const queryId = Number($page.url.searchParams.get('template'));
+		if (queryId && templates.some((t) => t.id === queryId)) {
+			void selectTemplate(queryId);
+			return;
+		}
+		if (templates[0]) {
+			void selectTemplate(templates[0].id);
+			return;
+		}
+		openNewTemplate();
+	});
 </script>
 
-<div class="space-y-6">
-	<header
-		class="relative overflow-hidden rounded-2xl border border-surface-200/50 dark:border-surface-700/50 bg-gradient-to-br from-primary-500/10 via-transparent to-tertiary-500/10 p-5 sm:p-6"
-	>
-		<div class="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-			<div class="space-y-1">
-				<h1 class="text-3xl sm:text-4xl font-black tracking-tight">Templates</h1>
-				<p class="text-sm sm:text-base opacity-80 max-w-prose">
-					Build repeatable workout structures and start sessions from them without carrying over
-					reps or weight.
-				</p>
-			</div>
-			<button type="button" class="btn variant-filled-primary" on:click={openNewTemplate}>
-				New template
-			</button>
-		</div>
-	</header>
+<div class="page">
+	<PageHero kicker="► Plans · templates">
+		{#snippet title()}Repeatable <em>workouts.</em>{/snippet}
+		{#snippet sub()}Templates preload your exercise plan. Sets and weights are not saved.{/snippet}
+		{#snippet actions()}
+			<Btn variant="primary" onclick={openNewTemplate}>+ New template</Btn>
+		{/snippet}
+	</PageHero>
 
 	{#if pageError}
-		<div class="alert variant-filled-error">{pageError}</div>
+		<Card><div class="err">{pageError}</div></Card>
 	{/if}
 	{#if pageNotice}
-		<div class="alert variant-filled-primary">{pageNotice}</div>
+		<Card><div class="ok">{pageNotice}</div></Card>
 	{/if}
 
-	<div class="grid gap-6 lg:grid-cols-[20rem_minmax(0,1fr)]">
-		<aside class="card variant-glass-surface p-4 space-y-3">
-			<div class="flex items-center justify-between gap-3">
-				<h2 class="text-lg font-semibold">Your templates</h2>
-				<span class="text-sm opacity-70">{templates.length}</span>
-			</div>
+	<Card>
+		{#snippet title()}Your templates <em>({templates.length})</em>{/snippet}
 
-			<div class="space-y-2">
+		<div class="list">
+			<button
+				class="t-card"
+				class:selected={selectedId === 'new'}
+				onclick={openNewTemplate}
+				type="button"
+			>
+				<div class="t-name">+ New template</div>
+				<div class="t-meta">Start from scratch</div>
+			</button>
+			{#each templates as t (t.id)}
 				<button
+					class="t-card"
+					class:selected={selectedId === t.id}
+					onclick={() => selectTemplate(t.id)}
 					type="button"
-					class="w-full text-left rounded-xl border p-3 transition {selectedId === 'new'
-						? 'border-primary-500/60 bg-primary-500/10'
-						: 'border-surface-200/50 bg-surface-50/60 dark:border-surface-700/50 dark:bg-surface-950/30'}"
-					on:click={openNewTemplate}
 				>
-					<div class="font-semibold">New template</div>
-					<div class="text-sm opacity-70">Start from scratch</div>
+					<div class="t-name">{t.name}</div>
+					<div class="t-meta">
+						{t.exercise_count} exercise{t.exercise_count === 1 ? '' : 's'}
+					</div>
 				</button>
+			{/each}
+		</div>
+	</Card>
 
-				{#each templates as template (template.id)}
-					<button
-						type="button"
-						class="w-full text-left rounded-xl border p-3 transition {selectedId === template.id
-							? 'border-primary-500/60 bg-primary-500/10'
-							: 'border-surface-200/50 bg-surface-50/60 dark:border-surface-700/50 dark:bg-surface-950/30'}"
-						on:click={() => selectTemplate(template.id)}
-					>
-						<div class="font-semibold truncate">{template.name}</div>
-						<div class="text-sm opacity-70">
-							{template.exercise_count} exercise{template.exercise_count === 1 ? '' : 's'}
-						</div>
-					</button>
-				{/each}
-			</div>
-		</aside>
+	<Card>
+		{#snippet title()}
+			{typeof selectedId === 'number' ? 'Edit template' : 'Create template'}
+		{/snippet}
+		{#snippet actions()}
+			{#if typeof selectedId === 'number'}
+				<Btn variant="soft" size="sm" onclick={handleDuplicate} disabled={!canEdit || saving}>
+					Duplicate
+				</Btn>
+				<Btn variant="soft" size="sm" onclick={handleStartTemplate} disabled={!canEdit || starting}>
+					{starting ? 'Starting…' : 'Use →'}
+				</Btn>
+				<Btn variant="soft" size="sm" onclick={handleDelete} disabled={!canEdit || deleting}>
+					{deleting ? 'Deleting…' : 'Delete'}
+				</Btn>
+			{/if}
+		{/snippet}
 
-		<section class="card variant-glass-surface p-4 space-y-4 min-w-0">
-			<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-				<div>
-					<h2 class="text-lg font-semibold">
-						{typeof selectedId === 'number' ? 'Edit template' : 'Create template'}
-					</h2>
-					<p class="text-sm opacity-70">
-						Exercise order, notes, settings, and weight mode flags are saved. Sets are not.
-					</p>
+		{#if !canEdit}
+			<div class="muted">Offline mode: template changes are unavailable.</div>
+		{/if}
+
+		{#if detailError}
+			<div class="err">{detailError}</div>
+		{:else if loadingDetail}
+			<div class="muted">Loading template…</div>
+		{:else}
+			<label class="block">
+				<span class="lbl">Template name</span>
+				<input bind:value={draft.name} placeholder="Push Day A" disabled={!canEdit} />
+			</label>
+
+			<div class="ex-list">
+				<div class="ex-list-head">
+					<h3>Exercises</h3>
+					<Btn variant="soft" size="sm" onclick={addExercise} disabled={!canEdit}>+ Add</Btn>
 				</div>
 
-				{#if typeof selectedId === 'number'}
-					<div class="flex flex-wrap gap-2">
-						<button
-							type="button"
-							class="btn btn-sm variant-soft"
-							on:click={handleDuplicate}
-							disabled={!canEditTemplates || saving || deleting || starting}
-						>
-							Duplicate
-						</button>
-						<button
-							type="button"
-							class="btn btn-sm variant-soft"
-							on:click={handleStartTemplate}
-							disabled={!canEditTemplates || saving || deleting || starting}
-						>
-							Use template
-						</button>
-						<button
-							type="button"
-							class="btn btn-sm variant-soft-error"
-							on:click={handleDelete}
-							disabled={!canEditTemplates || saving || deleting || starting}
-						>
-							Delete
-						</button>
+				{#if draft.exercises.length === 0}
+					<div class="empty">
+						Add exercises manually, or save a past workout as a template from its detail page.
+					</div>
+				{:else}
+					<div class="ex-cards">
+						{#each draft.exercises as ex, i (ex.localId)}
+							<article class="ex-card">
+								<header class="ex-head">
+									<div class="ex-idx">Exercise {i + 1}</div>
+									<Btn
+										variant="soft"
+										size="sm"
+										onclick={() => removeExercise(ex.localId)}
+										disabled={!canEdit}
+									>
+										Remove
+									</Btn>
+								</header>
+
+								<label class="block">
+									<span class="lbl">Name</span>
+									<input
+										value={ex.exercise_type}
+										placeholder="Bench Press"
+										disabled={!canEdit}
+										oninput={(e) =>
+											updateExercise(ex.localId, {
+												exercise_type: (e.currentTarget as HTMLInputElement).value
+											})}
+									/>
+								</label>
+
+								<label class="block">
+									<span class="lbl">Notes</span>
+									<textarea
+										value={ex.notes}
+										rows="2"
+										placeholder="Cues, tempo…"
+										disabled={!canEdit}
+										oninput={(e) =>
+											updateExercise(ex.localId, {
+												notes: (e.currentTarget as HTMLTextAreaElement).value
+											})}
+									></textarea>
+								</label>
+
+								<div class="toggles">
+									<Chk
+										label="Reps"
+										checked={ex.tracks_reps}
+										disabled={!canEdit}
+										onchange={(v) => updateExercise(ex.localId, { tracks_reps: v })}
+									/>
+									<Chk
+										label="Time"
+										checked={ex.tracks_time}
+										disabled={!canEdit}
+										onchange={(v) => updateExercise(ex.localId, { tracks_time: v })}
+									/>
+									<Chk
+										label="Weight"
+										checked={ex.tracks_weight}
+										disabled={!canEdit}
+										onchange={(v) => updateExercise(ex.localId, { tracks_weight: v })}
+									/>
+									<Chk
+										label="Per-side"
+										checked={ex.per_side_weight}
+										disabled={!canEdit}
+										onchange={(v) => updateExercise(ex.localId, { per_side_weight: v })}
+									/>
+									{#if ex.per_side_weight}
+										<Chk
+											label="Split L/R"
+											checked={ex.split_weight}
+											disabled={!canEdit}
+											onchange={(v) => updateExercise(ex.localId, { split_weight: v })}
+										/>
+									{/if}
+								</div>
+
+								<div class="settings">
+									<div class="settings-head">
+										<h4>Settings</h4>
+										<Btn
+											variant="soft"
+											size="sm"
+											onclick={() => addSetting(ex.localId)}
+											disabled={!canEdit}
+										>
+											+ Setting
+										</Btn>
+									</div>
+									{#if ex.settings.length === 0}
+										<div class="muted">No settings yet (bench angle, pin position…).</div>
+									{:else}
+										{#each ex.settings as s (s.localId)}
+											<div class="setting-row">
+												<input
+													placeholder="Setting"
+													value={s.key}
+													disabled={!canEdit}
+													oninput={(e) =>
+														updateSetting(ex.localId, s.localId, {
+															key: (e.currentTarget as HTMLInputElement).value
+														})}
+												/>
+												<input
+													placeholder="Value"
+													value={s.value}
+													disabled={!canEdit}
+													oninput={(e) =>
+														updateSetting(ex.localId, s.localId, {
+															value: (e.currentTarget as HTMLInputElement).value
+														})}
+												/>
+												<button
+													class="x-btn"
+													type="button"
+													disabled={!canEdit}
+													onclick={() => removeSetting(ex.localId, s.localId)}
+												>
+													✕
+												</button>
+											</div>
+										{/each}
+									{/if}
+								</div>
+							</article>
+						{/each}
 					</div>
 				{/if}
 			</div>
 
-			{#if $authState.offline}
-				<div class="card variant-ghost p-3 text-sm opacity-80">
-					Offline mode: template changes and template starts are available when you are back online.
-				</div>
-			{/if}
-
-			{#if detailError}
-				<div class="alert variant-filled-error">{detailError}</div>
-			{:else if loadingDetail}
-				<div class="text-sm opacity-70">Loading template…</div>
-			{:else}
-				<label class="block">
-					<span class="text-sm font-semibold opacity-80">Template name</span>
-					<input class="input mt-1" bind:value={draft.name} placeholder="Push Day A" />
-				</label>
-
-				<div class="space-y-3">
-					<div class="flex items-center justify-between gap-3">
-						<h3 class="text-base font-semibold">Exercises</h3>
-						<button type="button" class="btn btn-sm variant-soft" on:click={addExercise}>
-							Add exercise
-						</button>
-					</div>
-
-					{#if draft.exercises.length === 0}
-						<div class="card variant-ghost p-4 text-sm opacity-80">
-							Add exercises manually or save a past workout as a template from History.
-						</div>
-					{:else}
-						<div class="space-y-4">
-							{#each draft.exercises as exercise, index (exercise.localId)}
-								<article
-									class="rounded-2xl border border-surface-200/50 bg-surface-50/60 p-4 dark:border-surface-700/50 dark:bg-surface-950/30 space-y-3"
-								>
-									<div class="flex items-start justify-between gap-3">
-										<div class="font-semibold">Exercise {index + 1}</div>
-										<button
-											type="button"
-											class="btn btn-sm variant-soft-error"
-											on:click={() => removeExercise(exercise.localId)}
-										>
-											Remove
-										</button>
-									</div>
-
-									<label class="block">
-										<span class="text-sm font-semibold opacity-80">Name</span>
-										<input
-											class="input mt-1"
-											value={exercise.exercise_type}
-											on:input={(event) =>
-												updateExercise(exercise.localId, {
-													exercise_type: (event.currentTarget as HTMLInputElement).value
-												})}
-											placeholder="Bench Press"
-										/>
-									</label>
-
-									<label class="block">
-										<span class="text-sm font-semibold opacity-80">Notes</span>
-										<textarea
-											class="textarea mt-1"
-											rows="2"
-											value={exercise.notes}
-											on:input={(event) =>
-												updateExercise(exercise.localId, {
-													notes: (event.currentTarget as HTMLTextAreaElement).value
-												})}
-											placeholder="Setup cues, target tempo, machine choice…"
-										></textarea>
-									</label>
-
-									<div class="flex flex-wrap gap-4 text-sm">
-										{#if !exercise.tracks_time}
-											<label class="inline-flex items-center gap-2">
-												<input
-													type="checkbox"
-													checked={exercise.tracks_reps}
-													disabled={exercise.tracks_reps}
-													on:change={(event) =>
-														updateExercise(exercise.localId, {
-															tracks_reps: (event.currentTarget as HTMLInputElement).checked
-														})}
-												/>
-												<span>Track reps</span>
-											</label>
-										{/if}
-										<label class="inline-flex items-center gap-2">
-											<input
-												type="checkbox"
-												checked={exercise.tracks_time}
-												on:change={(event) =>
-													updateExercise(exercise.localId, {
-														tracks_time: (event.currentTarget as HTMLInputElement).checked
-													})}
-											/>
-											<span>Track time</span>
-										</label>
-										<label class="inline-flex items-center gap-2">
-											<input
-												type="checkbox"
-												checked={exercise.tracks_weight}
-												on:change={(event) =>
-													updateExercise(exercise.localId, {
-														tracks_weight: (event.currentTarget as HTMLInputElement).checked,
-														per_side_weight: (event.currentTarget as HTMLInputElement).checked
-															? exercise.per_side_weight
-															: false,
-														split_weight: (event.currentTarget as HTMLInputElement).checked
-															? exercise.split_weight
-															: false
-													})}
-											/>
-											<span>Track weight</span>
-										</label>
-									</div>
-
-									<div class="flex flex-wrap gap-4 text-sm">
-										<label class="inline-flex items-center gap-2">
-											<input
-												type="checkbox"
-												checked={exercise.per_side_weight}
-												disabled={!exercise.tracks_weight}
-												on:change={(event) =>
-													updateExercise(exercise.localId, {
-														per_side_weight: (event.currentTarget as HTMLInputElement).checked,
-														split_weight: (event.currentTarget as HTMLInputElement).checked
-															? exercise.split_weight
-															: false
-													})}
-											/>
-											<span>Per-side weight</span>
-										</label>
-										<label class="inline-flex items-center gap-2">
-											<input
-												type="checkbox"
-												checked={exercise.split_weight}
-												disabled={!exercise.tracks_weight}
-												on:change={(event) =>
-													updateExercise(exercise.localId, {
-														split_weight: (event.currentTarget as HTMLInputElement).checked,
-														per_side_weight: (event.currentTarget as HTMLInputElement).checked
-															? true
-															: exercise.per_side_weight
-													})}
-											/>
-											<span>Split left/right weight</span>
-										</label>
-									</div>
-
-									<div class="space-y-2">
-										<div class="flex items-center justify-between gap-3">
-											<div class="text-sm font-semibold opacity-80">Settings</div>
-											<button
-												type="button"
-												class="btn btn-sm variant-soft"
-												on:click={() => addSetting(exercise.localId)}
-											>
-												Add setting
-											</button>
-										</div>
-
-										{#if exercise.settings.length === 0}
-											<div class="text-sm opacity-60">No settings saved for this exercise.</div>
-										{:else}
-											<div class="space-y-2">
-												{#each exercise.settings as setting (setting.localId)}
-													<div class="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-														<input
-															class="input"
-															value={setting.key}
-															on:input={(event) =>
-																updateSetting(exercise.localId, setting.localId, {
-																	key: (event.currentTarget as HTMLInputElement).value
-																})}
-															placeholder="Seat"
-														/>
-														<input
-															class="input"
-															value={setting.value}
-															on:input={(event) =>
-																updateSetting(exercise.localId, setting.localId, {
-																	value: (event.currentTarget as HTMLInputElement).value
-																})}
-															placeholder="5"
-														/>
-														<button
-															type="button"
-															class="btn btn-sm variant-soft-error"
-															on:click={() => removeSetting(exercise.localId, setting.localId)}
-														>
-															Remove
-														</button>
-													</div>
-												{/each}
-											</div>
-										{/if}
-									</div>
-								</article>
-							{/each}
-						</div>
-					{/if}
-				</div>
-
-				<div class="flex justify-end">
-					<button
-						type="button"
-						class="btn variant-filled-primary"
-						on:click={handleSave}
-						disabled={!canEditTemplates || saving || deleting || starting}
-					>
-						{typeof selectedId === 'number' ? 'Save changes' : 'Create template'}
-					</button>
-				</div>
-			{/if}
-		</section>
-	</div>
+			<div class="save-bar">
+				<Btn variant="primary" onclick={handleSave} disabled={!canEdit || saving}>
+					{saving ? 'Saving…' : 'Save template'}
+				</Btn>
+			</div>
+		{/if}
+	</Card>
 </div>
+
+<style>
+	.page {
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+	}
+	.list {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+	.t-card {
+		text-align: left;
+		background: var(--card-3);
+		border: 1px solid var(--line);
+		border-radius: 12px;
+		padding: 12px 14px;
+		cursor: pointer;
+		color: inherit;
+		display: block;
+	}
+	.t-card.selected {
+		border-color: color-mix(in oklab, var(--clay) 50%, var(--line));
+		background: color-mix(in oklab, var(--clay) 8%, var(--card-3));
+	}
+	.t-name {
+		font:
+			800 14px/1 'Onest',
+			system-ui,
+			sans-serif;
+	}
+	.t-meta {
+		margin-top: 4px;
+		font:
+			500 12px/1 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--ink-soft);
+	}
+
+	.block {
+		display: block;
+		margin-bottom: 12px;
+	}
+	.lbl {
+		display: block;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
+		letter-spacing: 0.18em;
+		text-transform: uppercase;
+		color: var(--ink-soft);
+		margin-bottom: 6px;
+	}
+	input,
+	textarea {
+		width: 100%;
+		background: var(--card-3);
+		border: 1px solid var(--line);
+		border-radius: 10px;
+		padding: 11px 12px;
+		font:
+			500 14px/1.2 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--ink);
+		outline: 0;
+		resize: vertical;
+	}
+	textarea {
+		min-height: 56px;
+		font-family: 'Onest', system-ui, sans-serif;
+	}
+	input:focus,
+	textarea:focus {
+		border-color: var(--clay);
+		box-shadow: 0 0 0 3px rgba(255, 94, 31, 0.16);
+	}
+
+	.ex-list {
+		margin-top: 14px;
+	}
+	.ex-list-head {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 10px;
+	}
+	.ex-list-head h3 {
+		margin: 0;
+		font:
+			800 14px/1 'Onest',
+			system-ui,
+			sans-serif;
+		letter-spacing: -0.01em;
+	}
+	.ex-cards {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+	.ex-card {
+		background: var(--card-3);
+		border: 1px solid var(--line);
+		border-radius: 14px;
+		padding: 12px;
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+	}
+	.ex-head {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+	}
+	.ex-idx {
+		font:
+			800 13px/1 'Onest',
+			system-ui,
+			sans-serif;
+	}
+	.toggles {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+	}
+	.settings {
+		border-top: 1px solid var(--line);
+		padding-top: 10px;
+	}
+	.settings-head {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 8px;
+	}
+	.settings-head h4 {
+		margin: 0;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
+		letter-spacing: 0.18em;
+		text-transform: uppercase;
+		color: var(--ink-soft);
+	}
+	.setting-row {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+		gap: 6px;
+		align-items: center;
+	}
+	.setting-row + .setting-row {
+		margin-top: 6px;
+	}
+	.x-btn {
+		min-width: 38px;
+		height: 38px;
+		border: 0;
+		border-radius: 10px;
+		background: color-mix(in oklab, var(--clay) 10%, transparent);
+		color: var(--clay-text);
+		font:
+			800 13px/1 'Onest',
+			system-ui,
+			sans-serif;
+		cursor: pointer;
+	}
+
+	.empty {
+		font:
+			500 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--ink-soft);
+		padding: 12px;
+		border-radius: 10px;
+		background: var(--card-3);
+		border: 1px dashed var(--line);
+	}
+	.muted {
+		font:
+			500 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--ink-soft);
+	}
+	.err {
+		font:
+			600 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--clay-text);
+	}
+	.ok {
+		font:
+			600 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--sage);
+	}
+
+	.save-bar {
+		margin-top: 14px;
+		display: flex;
+		justify-content: flex-end;
+	}
+</style>

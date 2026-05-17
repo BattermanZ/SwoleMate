@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0d0d10" />
+<title>SwoleMate · Aesthetic Direction Studies</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@500;700&family=Onest:wght@500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #0c0c10;
+    --bg-2: #15151b;
+    --panel: #1a1a22;
+    --line: #26262f;
+    --ink: #ecebe6;
+    --ink-mid: #9a98a0;
+    --ink-dim: #5e5c64;
+    --accent: #d8ff3a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font-family: 'Onest', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  body {
+    min-height: 100dvh;
+    background:
+      radial-gradient(1200px 700px at -10% -10%, #1c1a28 0%, transparent 55%),
+      radial-gradient(1000px 700px at 110% 110%, #20181a 0%, transparent 55%),
+      var(--bg);
+  }
+
+  header.page {
+    padding: 56px 32px 24px; max-width: 1280px; margin: 0 auto;
+  }
+  header.page .crumb { font: 700 11px/1 'JetBrains Mono'; letter-spacing: 0.24em; color: var(--accent); text-transform: uppercase; }
+  header.page h1 {
+    margin: 14px 0 0; font: italic 400 64px/0.95 'Instrument Serif';
+    letter-spacing: -0.02em; color: var(--ink); max-width: 18ch;
+  }
+  header.page h1 .alt { font-style: normal; font-family: 'Onest'; font-weight: 800; color: var(--accent); }
+  header.page p {
+    margin: 18px 0 0; max-width: 60ch;
+    font: 500 15px/1.5 'Onest'; color: var(--ink-mid);
+  }
+  header.page .brief {
+    margin-top: 28px; display: flex; flex-wrap: wrap; gap: 8px;
+  }
+  header.page .brief span {
+    font: 600 11px/1 'JetBrains Mono'; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink); background: var(--panel); border: 1px solid var(--line);
+    padding: 8px 12px; border-radius: 999px;
+  }
+  header.page .brief span b { color: var(--accent); margin-right: 6px; font-weight: 700; }
+
+  /* Grid */
+  .grid {
+    max-width: 1280px; margin: 32px auto 80px; padding: 0 32px;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 28px;
+  }
+  .card {
+    background: var(--bg-2); border: 1px solid var(--line); border-radius: 28px;
+    overflow: hidden; display: flex; flex-direction: column;
+    transition: transform 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
+    position: relative;
+  }
+  .card:hover { transform: translateY(-4px); border-color: #3a3a48; box-shadow: 0 30px 60px -20px rgba(0,0,0,0.6); }
+
+  .card .frame {
+    aspect-ratio: 9 / 13;
+    position: relative; overflow: hidden;
+    display: grid; place-items: center;
+    border-bottom: 1px solid var(--line);
+  }
+  .card iframe {
+    width: 360px; height: 780px;
+    border: 0; transform: scale(0.78); transform-origin: top center;
+    pointer-events: none;
+    border-radius: 32px;
+    box-shadow: 0 30px 60px -20px rgba(0,0,0,0.5);
+    margin-top: 20px;
+  }
+  /* Frame backgrounds vary per aesthetic */
+  .card.chronograph .frame { background: radial-gradient(700px 400px at 30% 0%, #1b160e, transparent 60%), #0a0a0c; }
+  .card.logbook .frame { background: radial-gradient(700px 400px at 30% 0%, #4a3e25, transparent 65%), #1a140c; }
+  .card.brutalist .frame { background: repeating-linear-gradient(135deg, #161413 0 14px, #1a1817 14px 28px); }
+  .card.athletic .frame { background: radial-gradient(700px 400px at 70% 0%, #36281c, transparent 60%), #1c1611; }
+  .card.japanese .frame { background: radial-gradient(700px 400px at 50% 0%, #3d3528, transparent 60%), #1f1c14; }
+  .card.control .frame { background: repeating-linear-gradient(0deg, transparent 0 14px, rgba(255,80,40,0.04) 14px 15px), radial-gradient(700px 400px at 30% 0%, #2a1d12, transparent 60%), #15110a; }
+  .card.var-a .frame { background: radial-gradient(700px 400px at 50% 0%, #3a221a, transparent 60%), #1c1410; }
+  .card.var-b .frame { background: radial-gradient(700px 400px at 50% 0%, #2b261d, transparent 60%), #181612; }
+  .card.var-c .frame { background: radial-gradient(700px 400px at 50% 0%, #4a2b15, transparent 60%), #1a1108; }
+
+  .card .meta { padding: 22px 22px 24px; display: flex; flex-direction: column; gap: 14px; flex: 1; }
+  .card .row1 { display: flex; align-items: center; justify-content: space-between; }
+  .card .tag { font: 700 10px/1 'JetBrains Mono'; letter-spacing: 0.22em; color: var(--ink-dim); text-transform: uppercase; }
+  .card .num { font: italic 400 18px/1 'Instrument Serif'; color: var(--ink-dim); }
+  .card h2 {
+    margin: 0; font: 700 26px/1.05 'Onest'; letter-spacing: -0.02em; color: var(--ink);
+  }
+  .card h2 em { font: italic 400 26px/1.05 'Instrument Serif'; color: var(--ink-mid); }
+  .card .desc { font: 500 14px/1.55 'Onest'; color: var(--ink-mid); }
+  .card .palette { display: flex; gap: 6px; margin-top: 4px; }
+  .card .palette span { width: 22px; height: 22px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.06); }
+  .card .row2 { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
+  .card .open {
+    display: inline-flex; align-items: center; gap: 10px; padding: 12px 18px;
+    background: var(--accent); color: #14140a; border-radius: 999px;
+    font: 700 13px/1 'Onest'; letter-spacing: 0.02em; text-decoration: none;
+  }
+  .card .open .arr { font: italic 400 16px/1 'Instrument Serif'; }
+  .card .fonts { font: 500 11px/1.4 'JetBrains Mono'; color: var(--ink-dim); letter-spacing: 0.04em; }
+
+  /* Aesthetic-specific accent strip */
+  .card.chronograph .open { background: #ffb347; }
+  .card.logbook .open { background: #f5ecd6; color: #2a221a; }
+  .card.brutalist .open { background: #c8ff2e; }
+  .card.athletic .open { background: linear-gradient(180deg, #d98a4f, #c66a3a); color: white; }
+  .card.japanese .open { background: #c8331e; color: #f7f5ef; }
+  .card.control .open { background: #e83a1e; color: #f3ecda; border-radius: 0; }
+  .card.var-a .open { background: #ff5e1f; color: #fff; }
+  .card.var-b .open { background: #1a1714; color: #fbf6ee; border-radius: 4px; }
+  .card.var-c .open { background: linear-gradient(180deg, #d4733a, #b6562a); color: #fff; }
+
+  /* Section break between directions and variants */
+  .section-break {
+    grid-column: 1 / -1; margin: 16px 0 4px;
+    display: flex; align-items: baseline; gap: 14px;
+    border-top: 1px solid var(--line); padding-top: 24px;
+  }
+  .section-break .label { font: 700 11px/1 'JetBrains Mono'; letter-spacing: 0.24em; color: var(--accent); text-transform: uppercase; }
+  .section-break h3 { margin: 0; font: italic 400 28px/1 'Instrument Serif'; color: var(--ink); letter-spacing: -0.01em; }
+  .section-break h3 .alt { font: 800 28px/1 'Onest'; color: var(--ink-mid); margin-left: 6px; font-style: normal; }
+  .section-break .right { margin-left: auto; font: 500 12px/1.4 'Onest'; color: var(--ink-mid); max-width: 36ch; text-align: right; }
+
+  footer.page {
+    max-width: 1280px; margin: 0 auto 60px; padding: 0 32px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    color: var(--ink-dim); font: 500 12px/1.5 'JetBrains Mono';
+    border-top: 1px solid var(--line); padding-top: 24px;
+  }
+  footer.page kbd {
+    font: 700 11px/1 'JetBrains Mono'; background: var(--panel); padding: 4px 8px;
+    border: 1px solid var(--line); border-radius: 4px; color: var(--ink);
+  }
+
+  /* Mobile: stack and let cards live their lives */
+  @media (max-width: 720px) {
+    header.page { padding: 32px 20px 12px; }
+    header.page h1 { font-size: 44px; }
+    .grid { padding: 0 20px; gap: 20px; margin-top: 20px; }
+    .card .frame { aspect-ratio: 9 / 12; }
+    .card iframe { transform: scale(0.62); margin-top: 12px; }
+  }
+</style>
+</head>
+<body>
+  <header class="page">
+    <div class="crumb">SwoleMate · Aesthetic Studies · 06 Directions + 03 Variants</div>
+    <h1>Six ways the app could <span class="alt">feel.</span></h1>
+    <p>
+      Each mockup shows the same moment — mid-session, set four of bench press,
+      one PR landed, rest clock ticking — rendered in a different aesthetic.
+      Designed for a phone, one-handed, with the active session as the emotional core.
+    </p>
+    <div class="brief">
+      <span><b>Surface</b> phone, one-hand</span>
+      <span><b>Hero</b> active session</span>
+      <span><b>Scope</b> full reimagining</span>
+      <span><b>State</b> 4/5 exercises · 1 PR</span>
+      <a href="../docs/design-system.html" style="text-decoration: none; color: inherit;">
+        <span style="background: #d8ff3a; color: #14140a; border-color: transparent;"><b>↗</b> Design system →</span>
+      </a>
+    </div>
+  </header>
+
+  <main class="grid">
+
+    <article class="card chronograph">
+      <div class="frame">
+        <iframe src="chronograph.html" title="Industrial Chronograph preview" loading="lazy" tabindex="-1"></iframe>
+      </div>
+      <div class="meta">
+        <div class="row1">
+          <span class="tag">▸ Direction 01</span>
+          <span class="num">i.</span>
+        </div>
+        <h2>Industrial <em>chronograph</em></h2>
+        <div class="desc">
+          Dark, dense, mono-spaced numerics. A stopwatch on your wrist. The timer is loud,
+          sets read like a data log, the rest clock looks like a piece of equipment.
+        </div>
+        <div class="palette">
+          <span style="background:#0a0a0c"></span>
+          <span style="background:#16181b"></span>
+          <span style="background:#ffb347"></span>
+          <span style="background:#ff7a1a"></span>
+          <span style="background:#d8ff3a"></span>
+        </div>
+        <div class="row2">
+          <div class="fonts">JetBrains Mono · Archivo</div>
+          <a class="open" href="chronograph.html">Open full <span class="arr">→</span></a>
+        </div>
+      </div>
+    </article>
+
+    <article class="card logbook">
+      <div class="frame">
+        <iframe src="logbook.html" title="Editorial Logbook preview" loading="lazy" tabindex="-1"></iframe>
+      </div>
+      <div class="meta">
+        <div class="row1">
+          <span class="tag">▸ Direction 02</span>
+          <span class="num">ii.</span>
+        </div>
+        <h2>Editorial <em>logbook</em></h2>
+        <div class="desc">
+          A training journal you'd be sad to lose. Cream paper, ruled lines,
+          a real display serif for the numbers, hand-written margin notes when something matters.
+        </div>
+        <div class="palette">
+          <span style="background:#f4ede0"></span>
+          <span style="background:#ede4d2"></span>
+          <span style="background:#1a1614"></span>
+          <span style="background:#8a3a1b"></span>
+          <span style="background:#2f4a2d"></span>
+        </div>
+        <div class="row2">
+          <div class="fonts">Fraunces · Inter Tight · Caveat</div>
+          <a class="open" href="logbook.html">Open full <span class="arr">→</span></a>
+        </div>
+      </div>
+    </article>
+
+    <article class="card brutalist">
+      <div class="frame">
+        <iframe src="brutalist.html" title="Brutalist Gym preview" loading="lazy" tabindex="-1"></iframe>
+      </div>
+      <div class="meta">
+        <div class="row1">
+          <span class="tag">▸ Direction 03</span>
+          <span class="num">iii.</span>
+        </div>
+        <h2>Brutalist <em>gym</em></h2>
+        <div class="desc">
+          No apologies. Concrete blocks, oversized headings, a single neon accent.
+          PRs explode. Buttons are huge. The app feels like a wall in your favorite gym.
+        </div>
+        <div class="palette">
+          <span style="background:#0c0c0c"></span>
+          <span style="background:#ece5d8"></span>
+          <span style="background:#c8ff2e"></span>
+          <span style="background:#ff3a1a"></span>
+          <span style="background:#1a1a1a"></span>
+        </div>
+        <div class="row2">
+          <div class="fonts">Archivo Black · IBM Plex Mono</div>
+          <a class="open" href="brutalist.html">Open full <span class="arr">→</span></a>
+        </div>
+      </div>
+    </article>
+
+    <article class="card japanese">
+      <div class="frame">
+        <iframe src="japanese.html" title="Japanese Grid preview" loading="lazy" tabindex="-1"></iframe>
+      </div>
+      <div class="meta">
+        <div class="row1">
+          <span class="tag">▸ Direction 05</span>
+          <span class="num">v.</span>
+        </div>
+        <h2>Japanese <em>grid</em></h2>
+        <div class="desc">
+          Strict hairline grid, generous negative space, vertical kana down the spine.
+          PRs get a vermillion hanko seal. Mono numbers, serif headings, the quiet of a tea-room.
+        </div>
+        <div class="palette">
+          <span style="background:#f7f5ef"></span>
+          <span style="background:#161412"></span>
+          <span style="background:#c8331e"></span>
+          <span style="background:#c9c4b6"></span>
+          <span style="background:#4a4640"></span>
+        </div>
+        <div class="row2">
+          <div class="fonts">Noto Serif JP · JetBrains Mono</div>
+          <a class="open" href="japanese.html">Open full <span class="arr">→</span></a>
+        </div>
+      </div>
+    </article>
+
+    <article class="card control">
+      <div class="frame">
+        <iframe src="control.html" title="Control Console preview" loading="lazy" tabindex="-1"></iframe>
+      </div>
+      <div class="meta">
+        <div class="row1">
+          <span class="tag">▸ Direction 06</span>
+          <span class="num">vi.</span>
+        </div>
+        <h2>Control <em>console</em></h2>
+        <div class="desc">
+          A scientific-instrument feel. Cream paper, vermillion alarms, hex IDs, a wireframe bar-path
+          where the gravitational well usually sits. Every panel is an instrument.
+        </div>
+        <div class="palette">
+          <span style="background:#ece2cf"></span>
+          <span style="background:#1a1812"></span>
+          <span style="background:#e83a1e"></span>
+          <span style="background:#5a544a"></span>
+          <span style="background:#c87f1a"></span>
+        </div>
+        <div class="row2">
+          <div class="fonts">Archivo Narrow · IBM Plex Mono</div>
+          <a class="open" href="control.html">Open full <span class="arr">→</span></a>
+        </div>
+      </div>
+    </article>
+
+    <article class="card athletic">
+      <div class="frame">
+        <iframe src="athletic.html" title="Soft Athletic preview" loading="lazy" tabindex="-1"></iframe>
+      </div>
+      <div class="meta">
+        <div class="row1">
+          <span class="tag">▸ Direction 04</span>
+          <span class="num">iv.</span>
+        </div>
+        <h2>Soft <em>athletic</em></h2>
+        <div class="desc">
+          Warm off-whites, clay and sage, gentle progress rings. Premium athleisure, not gym bro.
+          The kind of app you'd open even when you didn't train.
+        </div>
+        <div class="palette">
+          <span style="background:#f3ece1"></span>
+          <span style="background:#1f1c18"></span>
+          <span style="background:#c66a3a"></span>
+          <span style="background:#6c8a6a"></span>
+          <span style="background:#c8a24a"></span>
+        </div>
+        <div class="row2">
+          <div class="fonts">Onest · Instrument Serif</div>
+          <a class="open" href="athletic.html">Open full <span class="arr">→</span></a>
+        </div>
+      </div>
+    </article>
+
+    <div class="section-break">
+      <span class="label">▸ Soft athletic · variants</span>
+      <h3>Three pulls on the<span class="alt">favourite.</span></h3>
+      <div class="right">Same DNA, different intensities. Side-by-side at <a href="athletic.index.html" style="color:inherit">athletic.index.html</a>.</div>
+    </div>
+
+    <article class="card var-a">
+      <div class="frame">
+        <iframe src="athletic-a-energetic.html" title="Variant A · Energetic" loading="lazy" tabindex="-1"></iframe>
+      </div>
+      <div class="meta">
+        <div class="row1">
+          <span class="tag">▸ Variant A</span>
+          <span class="num">a.</span>
+        </div>
+        <h2>Energetic <em>— more punch</em></h2>
+        <div class="desc">
+          Same warm base, but the clay-orange is dialled to 11. Loud PR banner above the hero,
+          breathing timer ring, hot-orange CTAs. The page has more "going off" energy.
+        </div>
+        <div class="palette">
+          <span style="background:#f3ece1"></span>
+          <span style="background:#18130d"></span>
+          <span style="background:#ff5e1f"></span>
+          <span style="background:#ff7a2a"></span>
+          <span style="background:#d5a23a"></span>
+        </div>
+        <div class="row2">
+          <div class="fonts">Onest · Instrument Serif</div>
+          <a class="open" href="athletic-a-energetic.html">Open full <span class="arr">→</span></a>
+        </div>
+      </div>
+    </article>
+
+    <article class="card var-b">
+      <div class="frame">
+        <iframe src="athletic-b-restrained.html" title="Variant B · Restrained" loading="lazy" tabindex="-1"></iframe>
+      </div>
+      <div class="meta">
+        <div class="row1">
+          <span class="tag">▸ Variant B</span>
+          <span class="num">b.</span>
+        </div>
+        <h2>Restrained <em>— grown up</em></h2>
+        <div class="desc">
+          No dark hero card, no avatar, no pill chips. Light-on-light. Sharp 2–4px corners,
+          hairline rules, one signal color used in only three places per screen.
+        </div>
+        <div class="palette">
+          <span style="background:#fbf6ee"></span>
+          <span style="background:#e5dcc8"></span>
+          <span style="background:#847e72"></span>
+          <span style="background:#1a1714"></span>
+          <span style="background:#c66a3a"></span>
+        </div>
+        <div class="row2">
+          <div class="fonts">Onest · Instrument Serif</div>
+          <a class="open" href="athletic-b-restrained.html">Open full <span class="arr">→</span></a>
+        </div>
+      </div>
+    </article>
+
+    <article class="card var-c">
+      <div class="frame">
+        <iframe src="athletic-c-dusk.html" title="Variant C · Dusk" loading="lazy" tabindex="-1"></iframe>
+      </div>
+      <div class="meta">
+        <div class="row1">
+          <span class="tag">▸ Variant C</span>
+          <span class="num">c.</span>
+        </div>
+        <h2>Dusk <em>— moodier</em></h2>
+        <div class="desc">
+          Drop the white. Amber-cream base, terracotta accents, the hero is a deep ember-gradient
+          that feels like golden-hour. Premium, slower.
+        </div>
+        <div class="palette">
+          <span style="background:#ebdcc4"></span>
+          <span style="background:#2a1d12"></span>
+          <span style="background:#b6562a"></span>
+          <span style="background:#d99340"></span>
+          <span style="background:#5a3a20"></span>
+        </div>
+        <div class="row2">
+          <div class="fonts">Onest · Instrument Serif</div>
+          <a class="open" href="athletic-c-dusk.html">Open full <span class="arr">→</span></a>
+        </div>
+      </div>
+    </article>
+
+  </main>
+
+  <footer class="page">
+    <div>SwoleMate · aesthetic studies · 2026-05-14</div>
+    <div>Tip: open one in a new tab → resize narrow → it shifts to a real mobile layout.</div>
+  </footer>
+</body>
+</html>

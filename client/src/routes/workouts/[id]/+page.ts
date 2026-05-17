@@ -8,7 +8,6 @@ export const load: PageLoad = async ({ fetch, params }) => {
 	if (!Number.isFinite(workoutId)) {
 		return { workout: null as WorkoutWithExercises | null, error: 'Invalid workout ID' };
 	}
-
 	try {
 		const data = await getWorkout(workoutId, fetch);
 		const workout: WorkoutWithExercises = { ...data.workout, exercises: data.exercises };
@@ -21,3 +20,5 @@ export const load: PageLoad = async ({ fetch, params }) => {
 		};
 	}
 };
+
+export const prerender = false;

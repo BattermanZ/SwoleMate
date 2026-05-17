@@ -1,86 +1,55 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import EditWorkoutTimesModal from '$lib/components/history/EditWorkoutTimesModal.svelte';
+	import { cancelWorkout, createWorkoutTemplateFromWorkout } from '$lib/api';
 	import { auth } from '$lib/auth';
-	import {
-		cancelWorkout,
-		createWorkoutTemplateFromWorkout,
-		getWorkout,
-		updateWorkoutTimes
-	} from '$lib/api';
+	import { formatDateRelative, formatTime } from '$lib/utils/date';
+	import { Btn, Card, Badge, Chip, PageHero, SetPillList } from '$lib/components/ui';
 	import type { WorkoutWithExercises } from '$lib/types';
-	import WorkoutDetailsCard from '$lib/components/history/WorkoutDetailsCard.svelte';
 
-	export let data: { workout: WorkoutWithExercises | null; error: string | null };
+	interface Props {
+		data: { workout: WorkoutWithExercises | null; error: string | null };
+	}
+	let { data }: Props = $props();
 
-	let workout = data.workout;
-	let error = data.error;
-	let editTimesOpen = false;
-	let editTimesError: string | null = null;
-	let editTimesSaving = false;
-	let deleting = false;
-	let savingTemplate = false;
 	const authState = auth.state;
 
-	function openEditTimes() {
-		editTimesError = null;
-		editTimesOpen = true;
+	let workout = $state<WorkoutWithExercises | null>(null);
+	let loadError = $state<string | null>(null);
+	$effect(() => {
+		workout = data.workout;
+		loadError = data.error;
+	});
+
+	let deleting = $state(false);
+	let savingTemplate = $state(false);
+	let error = $state<string | null>(null);
+
+	function durationMinutes(w: WorkoutWithExercises | null): number | null {
+		if (!w) return null;
+		const s = new Date(w.start_time).getTime();
+		const e = new Date(w.end_time).getTime();
+		if (!Number.isFinite(s) || !Number.isFinite(e) || e <= s) return null;
+		return Math.round((e - s) / 60_000);
 	}
 
-	async function refreshWorkout(workoutId: number) {
-		const loaded = await getWorkout(workoutId);
-		workout = { ...loaded.workout, exercises: loaded.exercises };
-	}
-
-	async function handleSaveTimes(
-		e: CustomEvent<{
-			start_time: string;
-			end_time: string;
-			notes: string | null;
-			feedback: '😊' | '😐' | '😞' | null;
-		}>
-	) {
-		if (!workout || typeof workout.id !== 'number') return;
-		const workoutId: number = workout.id;
-		editTimesSaving = true;
-		editTimesError = null;
-		try {
-			await updateWorkoutTimes(workoutId, {
-				start_time: e.detail.start_time,
-				end_time: e.detail.end_time,
-				notes: e.detail.notes,
-				feedback: e.detail.feedback
-			});
-			await refreshWorkout(workoutId);
-			editTimesOpen = false;
-		} catch (err) {
-			editTimesError = err instanceof Error ? err.message : 'Failed to update times';
-		} finally {
-			editTimesSaving = false;
-		}
-	}
-
-	async function handleDeleteWorkout() {
+	async function handleDelete() {
 		if (!workout || typeof workout.id !== 'number') {
 			error = 'Invalid workout ID';
 			return;
 		}
-		const workoutId: number = workout.id;
 		if ($authState.offline) {
 			error = 'Offline mode: delete workouts when you are back online.';
 			return;
 		}
-		if (!confirm('Are you sure you want to delete this workout? This action cannot be undone.')) {
-			return;
-		}
+		if (!confirm('Delete this workout? This cannot be undone.')) return;
 
 		deleting = true;
 		error = null;
 		try {
-			await cancelWorkout(workoutId);
+			await cancelWorkout(workout.id);
 			await goto('/workouts');
-		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to delete workout';
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to delete workout';
 		} finally {
 			deleting = false;
 		}
@@ -95,7 +64,6 @@
 			error = 'Offline mode: templates are available when you are back online.';
 			return;
 		}
-
 		const defaultName =
 			workout.exercises.length > 0
 				? `${workout.exercises[0].exercise.exercise_type} template`
@@ -108,73 +76,156 @@
 		try {
 			const created = await createWorkoutTemplateFromWorkout(workout.id, { name });
 			await goto(`/templates?template=${created.template.id}`);
-		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to save template';
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to save template';
 		} finally {
 			savingTemplate = false;
 		}
 	}
 </script>
 
-<div class="space-y-6">
-	<header
-		class="relative overflow-hidden rounded-2xl border border-surface-200/50 dark:border-surface-700/50 bg-gradient-to-br from-primary-500/10 via-transparent to-tertiary-500/10 p-5 sm:p-6"
-	>
-		<div
-			class="pointer-events-none absolute -top-24 -right-24 size-72 rounded-full blur-3xl bg-primary-500/15"
-		></div>
-		<div
-			class="pointer-events-none absolute -bottom-24 -left-24 size-72 rounded-full blur-3xl bg-secondary-500/15"
-		></div>
-
-		<div class="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-			<div class="space-y-1">
-				<h1 class="text-3xl sm:text-4xl font-black tracking-tight">Workout</h1>
-				<p class="text-sm sm:text-base opacity-80 max-w-prose">Full session details.</p>
-			</div>
-			<div class="flex sm:justify-end">
-				<a href="/workouts" class="btn variant-soft">← Back to History</a>
-			</div>
-		</div>
-	</header>
-
-	<WorkoutDetailsCard {workout} loading={!workout && !error} {error}>
-		<svelte:fragment slot="actions">
+<div class="page">
+	<PageHero kicker="► Workout">
+		{#snippet title()}
+			{#if workout}{formatDateRelative(workout.start_time)}{:else}Workout{/if}<em> — details.</em>
+		{/snippet}
+		{#snippet sub()}
 			{#if workout}
-				<button
-					type="button"
-					class="btn btn-sm variant-soft"
-					on:click={handleSaveAsTemplate}
-					disabled={editTimesSaving || deleting || savingTemplate}
-				>
-					Save as template
-				</button>
-				<button
-					type="button"
-					class="btn btn-sm variant-soft"
-					on:click={openEditTimes}
-					disabled={editTimesSaving || deleting || savingTemplate}
-				>
-					Edit times
-				</button>
-				<button
-					type="button"
-					class="btn btn-sm variant-soft-error"
-					on:click={handleDeleteWorkout}
-					disabled={deleting || editTimesSaving || savingTemplate}
-				>
-					Delete
-				</button>
+				{formatTime(workout.start_time)} – {formatTime(workout.end_time)} ·
+				{durationMinutes(workout) ?? '—'}m
 			{/if}
-		</svelte:fragment>
-	</WorkoutDetailsCard>
+		{/snippet}
+	</PageHero>
 
-	<EditWorkoutTimesModal
-		open={editTimesOpen}
-		{workout}
-		disabled={editTimesSaving}
-		error={editTimesError}
-		on:cancel={() => (editTimesOpen = false)}
-		on:submit={handleSaveTimes}
-	/>
+	{#if loadError}
+		<Card><div class="err">{loadError}</div></Card>
+	{:else if !workout}
+		<Card><div class="muted">Loading…</div></Card>
+	{:else}
+		<Card>
+			{#snippet title()}Session{/snippet}
+			{#snippet actions()}
+				<Btn variant="soft" size="sm" onclick={() => goto('/workouts')}>← Back</Btn>
+			{/snippet}
+
+			<div class="meta-row">
+				{#if workout.feedback}<Badge tone="soft">{workout.feedback}</Badge>{/if}
+				{#if workout.auto_closed_at}<Badge tone="warn">Auto-closed</Badge>{/if}
+				<span class="meta">{workout.exercises.length} exercises</span>
+			</div>
+			{#if workout.notes}
+				<p class="notes">{workout.notes}</p>
+			{/if}
+
+			<div class="actions">
+				<Btn variant="soft" size="sm" onclick={handleSaveAsTemplate} disabled={savingTemplate}>
+					{savingTemplate ? 'Saving…' : 'Save as template'}
+				</Btn>
+				<Btn variant="soft" size="sm" onclick={handleDelete} disabled={deleting}>
+					{deleting ? 'Deleting…' : 'Delete'}
+				</Btn>
+			</div>
+			{#if error}<div class="err">{error}</div>{/if}
+		</Card>
+
+		{#if workout.exercises.length > 0}
+			{#each workout.exercises as ex (ex.exercise.id ?? ex.exercise.start_time)}
+				<Card>
+					{#snippet title()}{ex.exercise.exercise_type}{/snippet}
+					{#snippet lede()}
+						{formatTime(ex.exercise.start_time)} – {formatTime(ex.exercise.end_time)}
+					{/snippet}
+
+					{#if ex.exercise.settings && ex.exercise.settings.length > 0}
+						<div class="settings">
+							{#each ex.exercise.settings as s (s.id ?? s.key)}
+								<Chip size="xs">{s.key}: {s.value}</Chip>
+							{/each}
+						</div>
+					{/if}
+
+					{#if ex.sets.length > 0}
+						<div class="pills">
+							<SetPillList
+								sets={ex.sets.map((s) => ({
+									reps: s.reps,
+									weight: s.weight,
+									weightLeft: s.weight_left,
+									weightRight: s.weight_right,
+									durationSeconds: s.duration_seconds
+								}))}
+								perSideWeight={ex.exercise.per_side_weight ?? false}
+								splitWeight={ex.exercise.split_weight ?? false}
+								size="sm"
+							/>
+						</div>
+					{:else}
+						<div class="muted">No sets logged.</div>
+					{/if}
+
+					{#if ex.exercise.notes}
+						<p class="notes">Notes: {ex.exercise.notes}</p>
+					{/if}
+				</Card>
+			{/each}
+		{:else}
+			<Card><div class="muted">No exercises recorded.</div></Card>
+		{/if}
+	{/if}
 </div>
+
+<style>
+	.page {
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+	}
+	.meta-row {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		flex-wrap: wrap;
+		margin-bottom: 10px;
+	}
+	.meta {
+		font:
+			500 12px/1 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--ink-soft);
+	}
+	.notes {
+		margin: 6px 0 10px;
+		font: italic 400 14px/1.4 'Instrument Serif';
+		color: var(--ink-2);
+	}
+	.actions {
+		display: flex;
+		gap: 8px;
+		flex-wrap: wrap;
+	}
+	.err {
+		margin-top: 10px;
+		font:
+			600 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--clay-text);
+	}
+	.muted {
+		font:
+			500 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--ink-soft);
+	}
+	.settings {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+		margin-bottom: 8px;
+	}
+	.pills {
+		margin-top: 6px;
+	}
+</style>

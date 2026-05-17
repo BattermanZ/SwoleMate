@@ -5,163 +5,123 @@
 	import type { WorkoutStats } from '$lib/types';
 	import {
 		baseOptions,
-		formatMonthLabel,
 		observeTheme,
 		rgba,
 		readTheme,
+		formatMonthLabel,
 		upsertChart,
 		type AnyChart,
 		type ChartTheme
 	} from '$lib/progress/charting';
+	import ChartCard from './ChartCard.svelte';
 
-	export let workoutStats: WorkoutStats | null = null;
+	interface Props {
+		workoutStats: WorkoutStats | null;
+	}
+	let { workoutStats }: Props = $props();
 
-	let feedbackCanvas: HTMLCanvasElement | null = null;
-	let timeCanvas: HTMLCanvasElement | null = null;
-	let durationCanvas: HTMLCanvasElement | null = null;
-	let monthlySessionsCanvas: HTMLCanvasElement | null = null;
-	let avgExerciseDurationCanvas: HTMLCanvasElement | null = null;
+	let feedbackCanvas: HTMLCanvasElement | null = $state(null);
+	let monthlyCanvas: HTMLCanvasElement | null = $state(null);
+	let exerciseDurCanvas: HTMLCanvasElement | null = $state(null);
+	let timeCanvas: HTMLCanvasElement | null = $state(null);
+	let durationCanvas: HTMLCanvasElement | null = $state(null);
 
 	let feedbackChart: AnyChart | null = null;
-	let timeDistributionChart: AnyChart | null = null;
-	let durationDistributionChart: AnyChart | null = null;
-	let monthlySessionsChart: AnyChart | null = null;
-	let avgExerciseDurationChart: AnyChart | null = null;
+	let monthlyChart: AnyChart | null = null;
+	let exerciseDurChart: AnyChart | null = null;
+	let timeChart: AnyChart | null = null;
+	let durationChart: AnyChart | null = null;
 
-	let theme: ChartTheme = {
-		isDark: false,
-		text: '#0f172a',
-		mutedText: 'rgba(15, 23, 42, 0.65)',
-		grid: 'rgba(15, 23, 42, 0.12)',
-		primary: '#0ea5e9',
-		secondary: '#14b8a6',
-		tertiary: '#f59e0b',
-		success: '#22c55e',
-		warning: '#f59e0b',
-		error: '#ef4444'
-	};
-
+	let theme: ChartTheme = readTheme();
 	let observer: MutationObserver | null = null;
 
-	function destroyCharts() {
+	function destroyAll() {
 		feedbackChart?.destroy();
-		timeDistributionChart?.destroy();
-		durationDistributionChart?.destroy();
-		monthlySessionsChart?.destroy();
-		avgExerciseDurationChart?.destroy();
-		feedbackChart = null;
-		timeDistributionChart = null;
-		durationDistributionChart = null;
-		monthlySessionsChart = null;
-		avgExerciseDurationChart = null;
+		monthlyChart?.destroy();
+		exerciseDurChart?.destroy();
+		timeChart?.destroy();
+		durationChart?.destroy();
+		feedbackChart = monthlyChart = exerciseDurChart = timeChart = durationChart = null;
 	}
 
-	function render(...deps: unknown[]) {
-		if (deps.length < 0) return;
+	function render() {
 		if (!workoutStats) {
-			destroyCharts();
+			destroyAll();
 			return;
 		}
-
-		const durationDistribution = Array.isArray(workoutStats.duration_distribution)
-			? workoutStats.duration_distribution
-			: [];
-
 		const base = baseOptions(theme);
-		const basePlugins = (base.plugins ?? {}) as unknown as Record<string, unknown>;
-		const baseScales = (base.scales ?? {}) as unknown as {
-			x?: Record<string, unknown>;
-			y?: Record<string, unknown>;
-		};
 
-		feedbackChart = upsertChart(feedbackChart, feedbackCanvas, {
-			type: 'doughnut',
-			data: {
-				labels: ['Good', 'Neutral', 'Bad'],
-				datasets: [
-					{
-						data: [
-							workoutStats.feedback_distribution.good,
-							workoutStats.feedback_distribution.neutral,
-							workoutStats.feedback_distribution.bad
-						],
-						backgroundColor: [
-							rgba(theme.success, 0.88),
-							rgba(theme.warning, 0.88),
-							rgba(theme.error, 0.88)
-						],
-						borderColor: theme.isDark ? 'rgba(2, 6, 23, 0.5)' : 'rgba(255, 255, 255, 0.8)',
-						borderWidth: 2
-					}
-				]
-			},
-			options: {
-				...base,
-				cutout: '65%',
-				plugins: {
-					...basePlugins,
-					legend: {
-						position: 'bottom',
-						labels: { color: theme.mutedText }
-					}
-				}
-			}
-		} as unknown as ChartConfiguration<'doughnut'>);
-
-		const sessionsPerMonth = workoutStats.sessions_per_month ?? [];
-		if (sessionsPerMonth.length) {
-			monthlySessionsChart = upsertChart(monthlySessionsChart, monthlySessionsCanvas, {
-				type: 'bar',
+		// 1. Session feel (doughnut)
+		if (feedbackCanvas) {
+			const d = workoutStats.feedback_distribution;
+			feedbackChart = upsertChart(feedbackChart, feedbackCanvas, {
+				type: 'doughnut',
 				data: {
-					labels: sessionsPerMonth.map((m) => formatMonthLabel(m.month)),
+					labels: ['Good', 'Neutral', 'Bad'],
 					datasets: [
 						{
-							label: 'Sessions',
-							data: sessionsPerMonth.map((m) => m.count),
-							backgroundColor: rgba(theme.tertiary, theme.isDark ? 0.72 : 0.6),
-							borderColor: rgba(theme.tertiary, theme.isDark ? 0.92 : 0.85),
-							borderWidth: 1,
-							borderRadius: 8
+							data: [d.good, d.neutral, d.bad],
+							backgroundColor: [theme.success, theme.tertiary, theme.primary],
+							borderColor: 'transparent',
+							borderWidth: 0
 						}
 					]
 				},
 				options: {
 					...base,
-					scales: {
-						x: {
-							...(baseScales.x ?? {}),
-							title: { display: true, text: 'Month', color: theme.mutedText }
-						},
-						y: {
-							...(baseScales.y ?? {}),
-							beginAtZero: true,
-							title: { display: true, text: 'Sessions', color: theme.mutedText }
+					cutout: '64%',
+					plugins: {
+						...(base.plugins ?? {}),
+						legend: {
+							position: 'right',
+							labels: { color: theme.text, font: { family: 'Onest', size: 12, weight: 600 } }
 						}
-					}
-				}
+					},
+					scales: {}
+				} as unknown as ChartConfiguration['options']
 			});
-		} else {
-			monthlySessionsChart?.destroy();
-			monthlySessionsChart = null;
 		}
 
-		const avgExerciseSeries = workoutStats.avg_exercise_duration_series ?? [];
-		if (avgExerciseSeries.length) {
-			avgExerciseDurationChart = upsertChart(avgExerciseDurationChart, avgExerciseDurationCanvas, {
+		// 2. Sessions per month
+		if (workoutStats.sessions_per_month && monthlyCanvas) {
+			const rows = workoutStats.sessions_per_month;
+			monthlyChart = upsertChart(monthlyChart, monthlyCanvas, {
+				type: 'bar',
+				data: {
+					labels: rows.map((r) => formatMonthLabel(r.month)),
+					datasets: [
+						{
+							label: 'Sessions',
+							data: rows.map((r) => r.count),
+							backgroundColor: rgba(theme.primary, 0.85),
+							borderColor: theme.primary,
+							borderRadius: 4
+						}
+					]
+				},
+				options: base
+			});
+		}
+
+		// 3. Avg time per exercise (horizontal bar) — using the series if present
+		if (workoutStats.avg_exercise_duration_series && exerciseDurCanvas) {
+			const rows = workoutStats.avg_exercise_duration_series.slice(-12);
+			exerciseDurChart = upsertChart(exerciseDurChart, exerciseDurCanvas, {
 				type: 'line',
 				data: {
 					datasets: [
 						{
 							label: 'Avg minutes / exercise',
-							data: avgExerciseSeries.map((p) => ({
-								x: new Date(p.start_time).getTime(),
-								y: p.avg_minutes
+							data: rows.map((r) => ({
+								x: new Date(r.start_time).getTime(),
+								y: r.avg_minutes
 							})),
-							borderColor: theme.secondary,
-							backgroundColor: rgba(theme.secondary, theme.isDark ? 0.22 : 0.14),
-							pointRadius: 2,
-							tension: 0.25,
-							fill: false
+							borderColor: theme.tertiary,
+							backgroundColor: rgba(theme.tertiary, 0.2),
+							fill: true,
+							borderWidth: 2.4,
+							tension: 0.35,
+							pointRadius: 3
 						}
 					]
 				},
@@ -170,229 +130,106 @@
 					scales: {
 						x: {
 							type: 'time',
-							time: { unit: 'week' },
+							time: { unit: 'month' },
 							ticks: { color: theme.mutedText },
-							grid: { color: theme.grid },
-							title: { display: true, text: 'Session', color: theme.mutedText }
+							grid: { color: theme.grid }
 						},
 						y: {
-							...(baseScales.y ?? {}),
 							beginAtZero: true,
-							title: { display: true, text: 'Min / exercise', color: theme.mutedText }
+							ticks: { color: theme.mutedText },
+							grid: { color: theme.grid }
 						}
 					}
 				}
-			} as unknown as ChartConfiguration<'line'>);
-		} else {
-			avgExerciseDurationChart?.destroy();
-			avgExerciseDurationChart = null;
-		}
-
-		const sessionStartSamples = workoutStats.session_start_samples ?? [];
-		const sessionStartTimes = workoutStats.session_start_times ?? [];
-		const hasSamples = sessionStartSamples.length > 0;
-
-		if (hasSamples || sessionStartTimes.length) {
-			const labels = Array.from({ length: 48 }, (_, i) => {
-				const hour = String(Math.floor(i / 2)).padStart(2, '0');
-				const minute = i % 2 === 0 ? '00' : '30';
-				return `${hour}:${minute}`;
 			});
-			const bins = Array.from({ length: 48 }, () => 0);
-
-			if (hasSamples) {
-				for (const sample of sessionStartSamples) {
-					const msUtc = new Date(sample.start_time).getTime();
-					if (!Number.isFinite(msUtc)) continue;
-
-					const offsetMinutes = sample.timezone_offset_minutes;
-					const hasOffset = typeof offsetMinutes === 'number' && Number.isFinite(offsetMinutes);
-					const msForWorkoutLocal = hasOffset ? msUtc - offsetMinutes * 60_000 : msUtc;
-
-					const date = new Date(msForWorkoutLocal);
-					const hour = hasOffset ? date.getUTCHours() : date.getHours();
-					const minute = hasOffset ? date.getUTCMinutes() : date.getMinutes();
-
-					const idx = hour * 2 + (minute >= 30 ? 1 : 0);
-					if (idx < 0 || idx >= bins.length) continue;
-					bins[idx] += 1;
-				}
-			} else {
-				for (const iso of sessionStartTimes) {
-					const ms = new Date(iso).getTime();
-					if (!Number.isFinite(ms)) continue;
-					const date = new Date(ms);
-					const hour = date.getHours();
-					const minute = date.getMinutes();
-					const idx = hour * 2 + (minute >= 30 ? 1 : 0);
-					if (idx < 0 || idx >= bins.length) continue;
-					bins[idx] += 1;
-				}
-			}
-
-			const nonEmpty = bins
-				.map((count, index) => ({ label: labels[index], count }))
-				.filter((point) => point.count > 0);
-
-			if (nonEmpty.length) {
-				timeDistributionChart = upsertChart(timeDistributionChart, timeCanvas, {
-					type: 'bar',
-					data: {
-						labels: nonEmpty.map((p) => p.label),
-						datasets: [
-							{
-								label: 'Workouts',
-								data: nonEmpty.map((p) => p.count),
-								backgroundColor: rgba(theme.primary, theme.isDark ? 0.72 : 0.62),
-								borderColor: rgba(theme.primary, theme.isDark ? 0.92 : 0.85),
-								borderWidth: 1,
-								borderRadius: 8
-							}
-						]
-					},
-					options: {
-						...base,
-						scales: {
-							x: {
-								...(baseScales.x ?? {}),
-								title: { display: true, text: 'Workout local time', color: theme.mutedText }
-							},
-							y: {
-								...(baseScales.y ?? {}),
-								beginAtZero: true,
-								title: { display: true, text: 'Workouts', color: theme.mutedText }
-							}
-						}
-					}
-				});
-			} else {
-				timeDistributionChart?.destroy();
-				timeDistributionChart = null;
-			}
-		} else {
-			timeDistributionChart?.destroy();
-			timeDistributionChart = null;
 		}
 
-		if (durationDistribution.length) {
-			durationDistributionChart = upsertChart(durationDistributionChart, durationCanvas, {
+		// 4. Time of day
+		if (timeCanvas) {
+			timeChart = upsertChart(timeChart, timeCanvas, {
 				type: 'bar',
 				data: {
-					labels: durationDistribution.map((d) => `${d.range} min`),
+					labels: workoutStats.popular_hours.map((p) => p.hour),
 					datasets: [
 						{
 							label: 'Workouts',
-							data: durationDistribution.map((d) => d.count),
-							backgroundColor: rgba(theme.secondary, theme.isDark ? 0.72 : 0.62),
-							borderColor: rgba(theme.secondary, theme.isDark ? 0.92 : 0.85),
-							borderWidth: 1,
-							borderRadius: 8
+							data: workoutStats.popular_hours.map((p) => p.count),
+							backgroundColor: rgba(theme.primary, 0.85),
+							borderColor: theme.primary,
+							borderRadius: 4
 						}
 					]
 				},
-				options: {
-					...base,
-					scales: {
-						x: {
-							...(baseScales.x ?? {}),
-							title: { display: true, text: 'Duration bucket', color: theme.mutedText }
-						},
-						y: {
-							...(baseScales.y ?? {}),
-							beginAtZero: true,
-							title: { display: true, text: 'Workouts', color: theme.mutedText }
-						}
-					}
-				}
+				options: base
 			});
-		} else {
-			durationDistributionChart?.destroy();
-			durationDistributionChart = null;
+		}
+
+		// 5. Duration distribution
+		if (durationCanvas) {
+			durationChart = upsertChart(durationChart, durationCanvas, {
+				type: 'bar',
+				data: {
+					labels: workoutStats.duration_distribution.map((d) => d.range),
+					datasets: [
+						{
+							label: 'Sessions',
+							data: workoutStats.duration_distribution.map((d) => d.count),
+							backgroundColor: rgba(theme.success, 0.85),
+							borderColor: theme.success,
+							borderRadius: 4
+						}
+					]
+				},
+				options: base
+			});
 		}
 	}
 
-	onMount(() => {
+	function refreshTheme() {
 		theme = readTheme();
-		observer = observeTheme(() => {
-			theme = readTheme();
-		});
+		render();
+	}
+
+	onMount(() => {
+		observer = observeTheme(refreshTheme);
+		render();
 	});
 
-	$: render(
-		workoutStats,
-		feedbackCanvas,
-		timeCanvas,
-		durationCanvas,
-		monthlySessionsCanvas,
-		avgExerciseDurationCanvas,
-		theme
-	);
-
 	onDestroy(() => {
-		destroyCharts();
 		observer?.disconnect();
-		observer = null;
+		destroyAll();
+	});
+
+	$effect(() => {
+		render();
 	});
 </script>
 
-<div class="space-y-4 min-w-0">
-	<div class="card variant-glass-surface p-4 min-w-0">
-		<div class="flex items-start justify-between gap-3">
-			<div>
-				<h3 class="text-base font-semibold">Session feel</h3>
-				<p class="text-sm opacity-70">How sessions have been rated.</p>
-			</div>
-		</div>
-		<div class="mt-3 h-64 relative overflow-hidden">
-			<canvas bind:this={feedbackCanvas}></canvas>
-		</div>
-	</div>
+{#if workoutStats}
+	<ChartCard headline="Session feel" titleEm="last 30 days" height={180}>
+		<canvas bind:this={feedbackCanvas}></canvas>
+	</ChartCard>
 
-	<div class="card variant-glass-surface p-4 min-w-0">
-		<div class="flex items-start justify-between gap-3">
-			<div>
-				<h3 class="text-base font-semibold">Sessions per month</h3>
-				<p class="text-sm opacity-70">Rolling last 12 months.</p>
-			</div>
-		</div>
-		<div class="mt-3 h-64 relative overflow-hidden">
-			<canvas bind:this={monthlySessionsCanvas}></canvas>
-		</div>
-	</div>
+	{#if workoutStats.sessions_per_month && workoutStats.sessions_per_month.length > 0}
+		<ChartCard headline="Sessions per month">
+			<canvas bind:this={monthlyCanvas}></canvas>
+		</ChartCard>
+	{/if}
 
-	<div class="card variant-glass-surface p-4 min-w-0">
-		<div class="flex items-start justify-between gap-3">
-			<div>
-				<h3 class="text-base font-semibold">Avg time per exercise</h3>
-				<p class="text-sm opacity-70">Session pace over time.</p>
-			</div>
-		</div>
-		<div class="mt-3 h-64 relative overflow-hidden">
-			<canvas bind:this={avgExerciseDurationCanvas}></canvas>
-		</div>
-	</div>
+	{#if workoutStats.avg_exercise_duration_series && workoutStats.avg_exercise_duration_series.length > 0}
+		<ChartCard headline="Avg time per exercise" titleEm="rolling">
+			<canvas bind:this={exerciseDurCanvas}></canvas>
+		</ChartCard>
+	{/if}
 
-	<div class="card variant-glass-surface p-4 min-w-0">
-		<div class="flex items-start justify-between gap-3">
-			<div>
-				<h3 class="text-base font-semibold">Time of day</h3>
-				<p class="text-sm opacity-70">When you most often train.</p>
-			</div>
-		</div>
-		<div class="mt-3 h-64 relative overflow-hidden">
-			<canvas bind:this={timeCanvas}></canvas>
-		</div>
-	</div>
+	<ChartCard headline="Time of day" titleEm="when you train">
+		<canvas bind:this={timeCanvas}></canvas>
+	</ChartCard>
 
-	<div class="card variant-glass-surface p-4 min-w-0">
-		<div class="flex items-start justify-between gap-3">
-			<div>
-				<h3 class="text-base font-semibold">Duration distribution</h3>
-				<p class="text-sm opacity-70">Your typical session length.</p>
-			</div>
-		</div>
-		<div class="mt-3 h-64 relative overflow-hidden">
-			<canvas bind:this={durationCanvas}></canvas>
-		</div>
-	</div>
-</div>
+	<ChartCard headline="Duration distribution">
+		<canvas bind:this={durationCanvas}></canvas>
+	</ChartCard>
+{/if}
+
+<style>
+</style>

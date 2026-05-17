@@ -5,13 +5,9 @@ import { logger } from '$lib/logger';
 export const load: PageLoad = async ({ fetch }) => {
 	try {
 		const workouts = await getWorkouts(fetch);
-		return {
-			workouts
-		};
+		return { workouts };
 	} catch (error) {
 		logger.error('workout', 'Failed to load workouts', { error });
-		return {
-			workouts: []
-		};
+		return { workouts: [] };
 	}
 };

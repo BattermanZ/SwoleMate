@@ -2,17 +2,6 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup } from '@testing-library/svelte';
 import { afterEach, beforeEach, vi } from 'vitest';
 
-vi.mock('@skeletonlabs/skeleton-svelte', async () => {
-	const { default: SlotStub } = await import('./SlotStub.svelte');
-	const AppBar = Object.assign(SlotStub, {
-		Toolbar: SlotStub,
-		Lead: SlotStub,
-		Trail: SlotStub
-	});
-
-	return { AppBar };
-});
-
 function installBrowserMocks() {
 	Object.defineProperty(window, 'matchMedia', {
 		writable: true,
@@ -56,5 +45,6 @@ afterEach(() => {
 	sessionStorage.clear();
 	document.documentElement.className = '';
 	document.documentElement.removeAttribute('style');
+	document.documentElement.removeAttribute('data-theme');
 	vi.unstubAllGlobals();
 });

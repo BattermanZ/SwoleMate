@@ -8,6 +8,7 @@ import { createExerciseCoreActions } from './actions/exercise/core';
 import { createExerciseSetActions } from './actions/exercise/sets';
 import { createExerciseSettingsActions } from './actions/exercise/settings';
 import { createExerciseWeightModeActions } from './actions/exercise/weightModes';
+import { persistPlannedTemplate } from './actions/plannedTemplate';
 import { get } from 'svelte/store';
 
 export function createTodayActions(state: TodayState) {
@@ -52,6 +53,10 @@ export function createTodayActions(state: TodayState) {
 			state.plannedTemplateExercises.update((exercises) =>
 				exercises.filter((exercise) => exercise.id !== plannedExerciseId)
 			);
+			const session = get(state.currentSession);
+			if (session) {
+				await persistPlannedTemplate(session.id, get(state.plannedTemplateExercises));
+			}
 		}
 	}
 

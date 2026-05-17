@@ -1,0 +1,1365 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#f3ece1" />
+<title>SwoleMate · Today (Energetic)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800;900&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<style>
+  /* ── Energetic palette (light = default, dark via data-theme) ─────── */
+  :root {
+    --bg: #f3ece1;
+    --bg-2: #ebe2d2;
+    --card: #fbf6ec;
+    --card-2: #f6efe1;
+    --card-3: #f1e8d4;
+    --ink: #18130d;
+    --ink-2: #443c30;
+    --ink-soft: #847562;
+    --ink-dim: #b2a892;
+    --line: #e5dccb;
+    --line-2: #d6cab0;
+    --sage: #4f7d54;
+    --success: #4f7d54;
+    --warn: #c87f1a;
+    --clay: #ff5e1f;
+    --clay-2: #ff7a2a;
+    --clay-deep: #c83a05;  /* darker variant — used for inset shadows / depth */
+    --clay-text: #c83a05;  /* clay used for emphasis text/icons (flips brighter in dark) */
+    --gold: #d5a23a;
+    /* Always-dark contrast surfaces (hero, live row, timer overlay) */
+    --surface-deep: #18130d;
+    --on-deep: #f3ece1;
+    --on-deep-soft: rgba(243, 236, 225, 0.55);
+    --on-deep-dim: rgba(243, 236, 225, 0.12);
+    --on-deep-line: rgba(243, 236, 225, 0.18);
+    /* Shadow tokens — warm in light, near-black in dark */
+    --shadow-card: rgba(60, 40, 20, 0.18);
+    --shadow-strong: rgba(60, 40, 20, 0.35);
+    --shadow-soft: rgba(60, 40, 20, 0.15);
+    /* Body gradient corner accents */
+    --bg-glow-1: #f7efde;
+    --bg-glow-2: #ead7c4;
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #1a1410;
+    --bg-2: #221c16;
+    --card: #251e16;
+    --card-2: #2b231a;
+    --card-3: #2f2619;
+    --ink: #f3ece1;
+    --ink-2: #d4c8b0;
+    --ink-soft: #978a72;
+    --ink-dim: #5a4f42;
+    --line: #362c22;
+    --line-2: #463a2c;
+    --sage: #6fa074;
+    --success: #6fa074;
+    --warn: #e0a460;
+    --clay: #ff7a3d;
+    --clay-2: #ff924d;
+    --clay-deep: #c83a05;
+    --clay-text: #ff924d;
+    --gold: #e3b64f;
+    --surface-deep: #100c08;
+    --on-deep: #f3ece1;
+    --on-deep-soft: rgba(243, 236, 225, 0.55);
+    --on-deep-dim: rgba(243, 236, 225, 0.12);
+    --on-deep-line: rgba(243, 236, 225, 0.18);
+    --shadow-card: rgba(0, 0, 0, 0.4);
+    --shadow-strong: rgba(0, 0, 0, 0.6);
+    --shadow-soft: rgba(0, 0, 0, 0.3);
+    --bg-glow-1: #2a1d12;
+    --bg-glow-2: #1f1611;
+  }
+  :root[data-theme="dark"] { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    min-height: 100dvh; display: grid; place-items: center; padding: 24px;
+    background:
+      radial-gradient(900px 600px at 0% 0%, var(--bg-glow-1) 0%, transparent 60%),
+      radial-gradient(900px 600px at 100% 100%, var(--bg-glow-2) 0%, transparent 55%),
+      var(--bg);
+    font-family: 'Onest', system-ui, sans-serif; color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    transition: background-color 240ms ease;
+  }
+
+  /* ── Device frame ─────────────────────────────────────────────────── */
+  .device {
+    width: 100%; max-width: 420px; aspect-ratio: 390/844;
+    background: var(--bg); border-radius: 48px; padding: 14px;
+    box-shadow: 0 0 0 1.5px #6c5d44, 0 0 0 14px #18130d, 0 40px 80px var(--shadow-strong);
+    position: relative; overflow: hidden;
+  }
+  .screen {
+    height: 100%; width: 100%; border-radius: 34px;
+    background: linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
+    overflow: hidden; display: flex; flex-direction: column; position: relative;
+  }
+  .notch { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); width: 120px; height: 28px; background: #0a0805; border-radius: 14px; z-index: 30; }
+
+  /* ── Top app bar (replicates +layout.svelte mobile shell) ─────────── */
+  .appbar {
+    padding: 12px 16px 10px; display: flex; align-items: center; justify-content: space-between;
+    background: color-mix(in oklab, var(--bg) 82%, transparent); backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; z-index: 20;
+    gap: 8px;
+  }
+  /* sun / moon swap — show the target state (click to switch) */
+  .theme-toggle .ico-sun { display: none; }
+  .theme-toggle .ico-moon { display: inline-block; }
+  [data-theme="dark"] .theme-toggle .ico-sun { display: inline-block; }
+  [data-theme="dark"] .theme-toggle .ico-moon { display: none; }
+  .appbar .brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .appbar .brand .logo {
+    width: 30px; height: 30px; border-radius: 9px; flex: none;
+    background: linear-gradient(135deg, var(--clay-2), var(--clay));
+    color: white; display: grid; place-items: center; font: 800 12px/1 'Onest';
+    box-shadow: 0 4px 10px -3px rgba(255,94,31,0.55);
+  }
+  .appbar .brand .name { font: 800 17px/1 'Onest'; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .appbar .actions { display: flex; align-items: center; gap: 2px; flex: none; }
+  .appbar .icon-btn {
+    width: 34px; height: 34px; border-radius: 999px;
+    background: transparent; border: 0; color: var(--ink-2);
+    display: grid; place-items: center; cursor: pointer;
+  }
+  .appbar .icon-btn:active { background: var(--bg-2); }
+  @keyframes pulse { 50% { opacity: 0.3; transform: scale(0.85); } }
+
+  /* ── Scroll body ──────────────────────────────────────────────────── */
+  main { flex: 1; padding: 12px 18px 96px; overflow-y: auto; position: relative; }
+  main > * + * { margin-top: 14px; }
+
+  /* annotation chip — labels each reproduced component */
+  .anno {
+    margin: 18px 0 -4px; display: flex; align-items: center; gap: 8px;
+    font: 700 9px/1 'Onest'; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-soft);
+  }
+  .anno::before { content: ""; flex: 1; height: 1px; background: var(--line); }
+  .anno::after  { content: ""; width: 20px; height: 1px; background: var(--line); }
+
+  /* ── Notice + pending-sync banner ─────────────────────────────────── */
+  .notice {
+    padding: 12px 14px; background: var(--card); border: 1px solid var(--line);
+    border-radius: 14px; display: flex; flex-direction: column; gap: 8px;
+    box-shadow: 0 4px 12px -8px var(--shadow-card);
+  }
+  .notice .top { display: flex; align-items: center; gap: 10px; font: 500 13px/1.35 'Onest'; color: var(--ink-2); }
+  .notice .top .ico {
+    flex: none; width: 22px; height: 22px; border-radius: 7px;
+    background: color-mix(in oklab, var(--sage) 18%, transparent); color: var(--sage);
+    display: grid; place-items: center; font: 800 13px/1 'Onest';
+  }
+  .notice .top em { color: var(--ink-soft); font-style: normal; font-weight: 500; margin-left: 4px; }
+  .notice .sync-btn {
+    align-self: stretch; padding: 10px 14px; border: 0; border-radius: 10px;
+    background: var(--ink); color: var(--card); font: 700 12px/1 'Onest';
+    letter-spacing: 0.04em; cursor: pointer;
+  }
+
+  /* ── PR flash (signature energetic moment) ────────────────────────── */
+  .pr-flash {
+    padding: 14px 16px; border-radius: 18px;
+    background: linear-gradient(95deg, var(--clay) 0%, var(--clay-2) 60%, var(--gold) 100%);
+    color: #fff;
+    display: grid; grid-template-columns: 46px 1fr auto; align-items: center; gap: 14px;
+    box-shadow: 0 14px 32px -10px rgba(255,94,31,0.5);
+    position: relative; overflow: hidden;
+  }
+  .pr-flash::after {
+    content: ""; position: absolute; inset: -50% -20% auto auto; width: 220px; height: 220px;
+    background: radial-gradient(circle, rgba(255,255,255,0.35), transparent 60%);
+  }
+  .pr-flash .icon { width: 46px; height: 46px; border-radius: 14px; background: rgba(255,255,255,0.18); display: grid; place-items: center; font: 800 22px/1 'Onest'; }
+  .pr-flash .body .k { font: 700 10px/1 'Onest'; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(255,255,255,0.85); }
+  .pr-flash .body .v { font: italic 400 22px/1.1 'Instrument Serif'; margin-top: 4px; }
+  .pr-flash .body .v b { font-style: normal; font-family: 'Onest'; font-weight: 800; }
+  .pr-flash .arr { font: 800 22px/1 'Onest'; }
+
+  /* ── Hero session card ────────────────────────────────────────────── */
+  .hero {
+    background: var(--surface-deep); color: var(--on-deep); border-radius: 28px;
+    padding: 22px 22px 22px; position: relative; overflow: hidden;
+    box-shadow: 0 24px 48px -16px var(--shadow-strong);
+  }
+  .hero::before {
+    content: ""; position: absolute; top: -120px; right: -100px; width: 320px; height: 320px;
+    border-radius: 50%; background: radial-gradient(circle, rgba(255,94,31,0.55), transparent 65%);
+    animation: drift 12s ease-in-out infinite alternate;
+  }
+  .hero::after {
+    content: ""; position: absolute; bottom: -140px; left: -80px; width: 300px; height: 300px;
+    border-radius: 50%; background: radial-gradient(circle, rgba(213,162,58,0.35), transparent 65%);
+    animation: drift 14s ease-in-out infinite alternate-reverse;
+  }
+  @keyframes drift { to { transform: translate(20px,-10px) scale(1.05); } }
+
+  .hero .kicker { font: 700 11px/1 'Onest'; letter-spacing: 0.22em; text-transform: uppercase; color: var(--clay-2); position: relative; }
+  .hero h1 { margin: 8px 0 0; font: 800 28px/1.02 'Onest'; letter-spacing: -0.025em; position: relative; }
+  .hero h1 em { font: italic 400 28px/1.02 'Instrument Serif'; color: var(--clay-2); }
+  .hero .started { margin-top: 6px; font: italic 400 13px/1 'Instrument Serif'; color: var(--on-deep-soft); position: relative; }
+
+  .timer-block { margin-top: 18px; display: flex; flex-direction: column; align-items: center; gap: 16px; position: relative; }
+  .timer-block > .stats-wrap { width: 100%; min-width: 0; }
+  .ring { width: 150px; height: 150px; position: relative; animation: breathe 4s ease-in-out infinite; flex: none; }
+  @keyframes breathe { 50% { transform: scale(1.03); } }
+  .ring svg { transform: rotate(-90deg); }
+  .ring .center {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    text-align: center;
+  }
+  /* Sized so it comfortably fits H:MM:SS (1:42:18) as well as MM:SS */
+  .ring .big {
+    font: 800 30px/1 'Onest'; letter-spacing: -0.04em; font-variant-numeric: tabular-nums;
+    /* nudge up ~1px for optical centering against the heavier baseline of digits */
+    transform: translateY(-1px);
+    padding: 0 14px; max-width: 100%;
+  }
+
+  .stat-grid {
+    position: relative;
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
+  }
+  .stat-grid .cell {
+    background: rgba(243,236,225,0.07); border: 1px solid rgba(243,236,225,0.12);
+    border-radius: 12px; padding: 12px 14px; min-width: 0;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .stat-grid .k {
+    font: 700 10px/1 'Onest'; letter-spacing: 0.18em; text-transform: uppercase;
+    color: rgba(243,236,225,0.55);
+  }
+  .stat-grid .v {
+    font: 800 24px/1 'Onest'; letter-spacing: -0.025em;
+    font-variant-numeric: tabular-nums;
+    display: flex; align-items: baseline; gap: 4px;
+  }
+  .stat-grid .v small { font: 500 11px/1 'Onest'; color: rgba(243,236,225,0.55); font-weight: 600; }
+
+  .hero-actions { margin-top: 14px; display: grid; grid-template-columns: 1fr 2fr; gap: 8px; position: relative; }
+  .hero-actions .cancel {
+    padding: 14px; border-radius: 14px; border: 1px solid var(--on-deep-line);
+    background: color-mix(in oklab, var(--on-deep) 6%, transparent);
+    color: var(--on-deep);
+    font: 700 13px/1 'Onest';
+  }
+  .hero-actions .end {
+    padding: 14px; border-radius: 14px; border: 0;
+    background: linear-gradient(180deg, var(--clay-2), var(--clay)); color: white;
+    font: 800 14px/1 'Onest';
+    box-shadow: 0 10px 22px -8px rgba(255,94,31,0.55), inset 0 -3px 0 var(--clay-deep);
+  }
+
+  /* ── Session notes ────────────────────────────────────────────────── */
+  .session-notes {
+    background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 14px;
+  }
+  .session-notes label { font: 700 10px/1 'Onest'; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-soft); }
+  .session-notes textarea {
+    margin-top: 8px; width: 100%; min-height: 56px; resize: vertical;
+    background: transparent; border: 0; outline: 0;
+    color: var(--ink); font: 500 14px/1.45 'Onest';
+  }
+
+  /* ── Exercise card (the main complex component) ───────────────────── */
+  .ex {
+    background: var(--card); border-radius: 22px; padding: 16px;
+    border: 1px solid var(--line);
+    box-shadow: 0 8px 20px -12px var(--shadow-card);
+  }
+  .ex.live {
+    border-color: rgba(255,94,31,0.4);
+    box-shadow: 0 14px 32px -14px rgba(255,94,31,0.32), inset 0 0 0 1px rgba(255,94,31,0.18);
+  }
+  .ex-head {
+    display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: start;
+  }
+  .ex-head .title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+  .ex-head h3 { margin: 0; font: 800 18px/1.1 'Onest'; letter-spacing: -0.01em; }
+  .ex-head h3 em { font: italic 400 14px/1 'Instrument Serif'; color: var(--ink-soft); margin-left: 4px; font-weight: 400; letter-spacing: 0; }
+  .ex-summary { margin-top: 6px; font: 500 12px/1.4 'Onest'; color: var(--ink-soft); display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+  .ex-summary .dot { color: var(--ink-dim); }
+  .ex-summary .pr-tag {
+    color: var(--clay-text); font-weight: 800; white-space: nowrap;
+    background: rgba(255,94,31,0.1); padding: 3px 8px; border-radius: 999px;
+    font-size: 11px; letter-spacing: 0.04em;
+  }
+
+  .ex-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+  .ex-actions .toggle {
+    width: 38px; height: 38px; border-radius: 10px; border: 0;
+    background: var(--bg-2); color: var(--ink-soft); font: 700 14px/1 'Onest'; cursor: pointer;
+  }
+  .ex-actions .toggle:active { background: var(--ink); color: var(--bg); }
+  .ex-actions .del {
+    width: 38px; height: 38px; border-radius: 10px; border: 0;
+    background: rgba(200,58,5,0.1); color: var(--clay-text); cursor: pointer;
+    font: 700 13px/1 'Onest';
+  }
+
+  .badge {
+    font: 700 9px/1 'Onest'; letter-spacing: 0.16em; text-transform: uppercase;
+    padding: 5px 8px; border-radius: 999px; display: inline-flex; align-items: center; gap: 4px;
+  }
+  .badge.done { background: rgba(80,125,84,0.18); color: var(--success); }
+  .badge.live { background: var(--clay); color: white; }
+  .badge.live::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: white; animation: pulse 1s ease-in-out infinite; }
+  .badge.soft { background: var(--bg-2); color: var(--ink-2); }
+
+  /* expanded body sub-sections */
+  .sub {
+    margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line);
+  }
+  .sub-head { display: flex; align-items: baseline; justify-content: space-between; }
+  .sub-head h4 { margin: 0; font: 700 11px/1 'Onest'; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-soft); }
+  .sub-head .help { font: italic 400 11px/1 'Instrument Serif'; color: var(--ink-dim); }
+
+  /* settings rows */
+  .settings { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .setting-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px; align-items: center; }
+  .input {
+    background: var(--card-3); border: 1px solid var(--line); border-radius: 10px;
+    padding: 9px 10px; font: 500 13px/1.2 'Onest'; color: var(--ink);
+    outline: 0; min-width: 0; width: 100%;
+  }
+  .input:focus { border-color: var(--clay); box-shadow: 0 0 0 3px rgba(255,94,31,0.16); }
+  .x-btn {
+    border: 0; border-radius: 10px; background: rgba(200,58,5,0.1); color: var(--clay-text);
+    font: 800 13px/1 'Onest'; cursor: pointer;
+    min-width: 38px; height: 38px;
+  }
+  .add-btn {
+    border: 0; border-radius: 10px; background: var(--ink); color: var(--card);
+    font: 700 12px/1 'Onest'; padding: 0 14px; min-width: 56px; height: 38px;
+  }
+
+  /* last-time recap */
+  .last-time {
+    margin-top: 12px; padding: 12px; border-radius: 14px;
+    background: var(--card-3); border: 1px solid var(--line);
+  }
+  .last-time .head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font: 500 12px/1 'Onest'; color: var(--ink-2); }
+  .last-time .head b { font-weight: 800; }
+  .last-time .head .date { color: var(--ink-soft); font-style: italic; font-family: 'Instrument Serif'; font-size: 13px; }
+  .last-time .pills { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px; }
+  /* Flat .pill — small chip used for settings/badges (grip: pronated, etc.) */
+  .pill {
+    font: 700 11px/1 'Onest'; letter-spacing: 0.02em;
+    padding: 5px 8px; border-radius: 8px; background: var(--bg-2); color: var(--ink-2);
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .pill.xs { font-size: 10px; padding: 4px 7px; }
+
+  /* ── .spill — segmented "set pill" (mirrors real SetPillsHybrid) ───
+     Sections in order: count? · reps? · duration? · weight?
+     Weight cell shades by relative intensity within the group (--w). */
+  .spill {
+    display: inline-flex; align-items: stretch; overflow: hidden;
+    border-radius: 999px;
+    border: 1px solid color-mix(in oklab, var(--ink) 10%, transparent);
+    box-shadow: 0 4px 10px -4px var(--shadow-soft);
+    font: 800 12px/1 'Onest'; letter-spacing: 0;
+    font-variant-numeric: tabular-nums;
+    vertical-align: middle;
+  }
+  .spill > span {
+    padding: 7px 10px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-left: 1px solid color-mix(in oklab, var(--ink) 10%, transparent);
+    white-space: nowrap;
+  }
+  .spill > span:first-child { border-left: 0; }
+
+  .spill .count    { background: var(--gold); color: #fff; padding: 7px 11px; }
+  .spill .reps     { background: var(--bg-2); color: var(--ink-2); }
+  .spill .duration { background: rgba(255,122,42,0.20); color: var(--clay-text); }
+  .spill .weight   {
+    background: color-mix(in oklab, var(--clay) var(--w, 60%), var(--bg-2));
+    color: var(--ink); font-weight: 800;
+  }
+  /* Bodyweight tag — same slot as weight but neutral */
+  .spill .weight.bw {
+    background: color-mix(in oklab, var(--ink) 14%, var(--bg-2));
+    color: var(--ink);
+  }
+
+  /* PR variant: gold border + glow + star suffix */
+  .spill.pr { border-color: var(--gold); box-shadow: 0 6px 14px -4px color-mix(in oklab, var(--gold) 55%, transparent); }
+  .spill.pr .weight::after { content: " ★"; color: var(--gold); margin-left: 3px; }
+
+  /* xs size used inside dense Past-2-Sessions cards */
+  .spill.xs { font-size: 10.5px; box-shadow: 0 2px 6px -2px var(--shadow-soft); }
+  .spill.xs > span { padding: 5px 8px; }
+  .spill.xs .count { padding: 5px 9px; }
+  .last-time .notes { margin-top: 6px; font: italic 400 13px/1.4 'Instrument Serif'; color: var(--ink-2); }
+
+  /* tracking toggles row */
+  .tracking { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .chk {
+    display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px;
+    background: var(--bg-2); border: 1px solid transparent; border-radius: 999px;
+    font: 700 11px/1 'Onest'; color: var(--ink-2); cursor: pointer;
+  }
+  .chk.on { background: var(--ink); color: var(--card); }
+  .chk.on .box { background: var(--clay); border-color: var(--clay); }
+  .chk.on .box::after { content: ""; width: 5px; height: 9px; border-right: 2px solid white; border-bottom: 2px solid white; transform: rotate(45deg) translate(-1px,-1px); display: block; }
+  .chk .box { width: 14px; height: 14px; border: 1.5px solid var(--ink-dim); border-radius: 4px; display: grid; place-items: center; }
+  .chk.use-last { background: rgba(255,94,31,0.1); color: var(--clay-text); }
+
+  /* set pills row (current sets) */
+  .set-pills { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+  .set-pills .lbl { font: 700 10px/1 'Onest'; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-soft); margin-right: 4px; }
+
+  /* add-set form */
+  .add-set-form { margin-top: 12px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; align-items: end; }
+  .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .field > label {
+    font: 700 10px/1 'Onest'; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--ink-soft); padding-left: 4px;
+  }
+
+  /* Unified rounded "stepper pill": [−] [value · unit] [+] */
+  .stepper-pill {
+    display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px;
+    align-items: stretch; height: 52px; overflow: hidden;
+    background: var(--card-3); border: 1px solid var(--line); border-radius: 999px;
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+  }
+  .stepper-pill:focus-within {
+    border-color: var(--clay);
+    box-shadow: 0 0 0 3px rgba(255,94,31,0.16);
+  }
+  .stepper-pill .step {
+    background: transparent; border: 0; padding: 0; cursor: pointer;
+    font: 800 22px/1 'Onest'; color: var(--ink-soft);
+    display: grid; place-items: center;
+    transition: background 100ms ease, color 100ms ease;
+  }
+  .stepper-pill .step:hover { background: color-mix(in oklab, var(--ink) 6%, transparent); color: var(--ink); }
+  .stepper-pill .step:active { background: var(--ink); color: var(--card); }
+  .stepper-pill .v-wrap {
+    /* center value+unit group both horizontally AND vertically inside the pill */
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    min-width: 0; padding: 0 4px;
+  }
+  .stepper-pill .value {
+    font: 800 22px/1 'Onest'; color: var(--ink);
+    font-variant-numeric: tabular-nums; letter-spacing: -0.03em;
+    /* content-sized so the flex container can center the (value+unit) group */
+  }
+  .stepper-pill .unit {
+    font: 600 12px/1 'Onest'; color: var(--ink-soft);
+    letter-spacing: 0.04em; text-transform: lowercase;
+    flex: none;
+    /* nudge down so the unit's optical baseline aligns with the value */
+    transform: translateY(3px);
+  }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+
+  /* split-L/R layout: Reps spans both cols, then Left|Right, then commit */
+  .add-set-form.split-lr {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 10px;
+  }
+  .add-set-form.split-lr .field-reps { grid-column: 1 / -1; }
+
+  /* mode-preview mini-cards */
+  .mode-preview {
+    background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+    padding: 14px; box-shadow: 0 4px 12px -8px var(--shadow-soft);
+  }
+  .mode-preview + .mode-preview { margin-top: 12px; }
+  .mode-preview .mp-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+    padding-bottom: 10px; border-bottom: 1px dashed var(--line); margin-bottom: 12px;
+  }
+  .mode-preview .mp-title { font: 800 14px/1 'Onest'; letter-spacing: -0.01em; }
+  .mode-preview .mp-title em {
+    font: italic 400 13px/1 'Instrument Serif'; color: var(--ink-soft);
+    margin-left: 4px; font-weight: 400; letter-spacing: 0;
+  }
+  .mode-preview .mp-eg { font: italic 400 12px/1 'Instrument Serif'; color: var(--ink-soft); }
+  .timer-controls { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .btn-soft { background: var(--bg-2); border: 0; padding: 8px 12px; border-radius: 999px; font: 700 11px/1 'Onest'; color: var(--ink-2); cursor: pointer; }
+  .btn-ghost { background: transparent; border: 1px solid var(--line); padding: 8px 12px; border-radius: 999px; font: 700 11px/1 'Onest'; color: var(--ink-2); cursor: pointer; }
+
+  .commit-set {
+    grid-column: 1 / -1; margin-top: 6px; padding: 16px 10px; border: 0; border-radius: 999px;
+    background: linear-gradient(180deg, var(--clay-2), var(--clay)); color: white;
+    font: 800 14px/1 'Onest'; letter-spacing: 0;
+    box-shadow: 0 14px 28px -10px rgba(255,94,31,0.55), inset 0 -3px 0 var(--clay-deep);
+    display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer;
+    min-width: 0; max-width: 100%; white-space: nowrap;
+  }
+
+  .ex-foot { margin-top: 14px; display: flex; justify-content: flex-end; gap: 8px; }
+  .ex-foot .collapse { background: var(--bg-2); border: 0; padding: 11px 16px; border-radius: 999px; font: 700 13px/1 'Onest'; color: var(--ink-2); cursor: pointer; }
+  .ex-foot .mark-done {
+    border: 0; padding: 11px 18px; border-radius: 999px; color: white; cursor: pointer;
+    background: linear-gradient(180deg, #5e9264, var(--sage));
+    font: 800 13px/1 'Onest';
+    box-shadow: 0 8px 18px -6px rgba(79,125,84,0.5);
+  }
+
+  /* exercise notes textarea */
+  .ex-notes textarea {
+    margin-top: 8px; width: 100%; min-height: 48px; resize: vertical;
+    background: var(--card-3); border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 12px; font: 500 13px/1.45 'Onest'; color: var(--ink); outline: 0;
+  }
+  .ex-notes textarea:focus { border-color: var(--clay); }
+
+  /* ── Timer overlay (rendered inline as preview card) ──────────────── */
+  .timer-overlay {
+    position: relative; padding: 24px 18px 22px; border-radius: 24px;
+    background: radial-gradient(circle at center, rgba(255,94,31,0.18), rgba(0,0,0,0.55) 60%), var(--surface-deep);
+    color: var(--on-deep); text-align: center; overflow: hidden;
+  }
+  .timer-overlay .kicker { font: 800 10px/1 'Onest'; letter-spacing: 0.22em; text-transform: uppercase; color: var(--clay-2); }
+  .timer-overlay .ex-name { margin-top: 4px; font: 800 14px/1 'Onest'; }
+  .timer-overlay .dial {
+    margin: 14px auto 14px; width: 210px; height: 210px;
+    border-radius: 50%; padding: 10px;
+    background:
+      conic-gradient(from 0deg, var(--clay) 0 62%, rgba(243,236,225,0.22) 62% 100%);
+    display: grid; place-items: center;
+    animation: breathe 1.8s ease-in-out infinite;
+    box-shadow: 0 20px 40px -16px rgba(255,94,31,0.45);
+  }
+  .timer-overlay .dial-inner {
+    width: 100%; height: 100%; border-radius: 50%;
+    background: #241a11;
+    display: grid; place-items: center; align-content: center; gap: 4px;
+    box-shadow: inset 0 0 0 1px rgba(243,236,225,0.06);
+  }
+  .timer-overlay .state { font: 800 10px/1 'Onest'; letter-spacing: 0.18em; text-transform: uppercase; color: var(--on-deep-soft); }
+  .timer-overlay .value { font: 900 56px/1 'Onest'; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; color: var(--on-deep); }
+  .timer-overlay .caption { font: italic 400 12px/1.3 'Instrument Serif'; color: var(--on-deep-soft); }
+  .timer-overlay .actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  .timer-overlay .actions button {
+    border: 1px solid var(--on-deep-line); background: color-mix(in oklab, var(--on-deep) 6%, transparent);
+    color: var(--on-deep); padding: 9px 14px; border-radius: 999px; font: 700 11px/1 'Onest'; cursor: pointer;
+  }
+  .timer-overlay .actions button.primary { background: var(--clay); border-color: var(--clay); color: white; }
+
+  /* ── Exercise composer ────────────────────────────────────────────── */
+  .composer {
+    background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 14px;
+  }
+  .composer .row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+  .composer .row input {
+    background: var(--card-3); border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px 14px; font: 500 14px/1.2 'Onest'; color: var(--ink); outline: 0;
+  }
+  .composer .row input:focus { border-color: var(--clay); box-shadow: 0 0 0 3px rgba(255,94,31,0.16); }
+  .composer .row .add {
+    border: 0; border-radius: 12px; padding: 0 18px;
+    background: var(--ink); color: var(--card); font: 700 13px/1 'Onest';
+  }
+  .suggestions { margin-top: 8px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .suggestions button {
+    width: 100%; text-align: left; padding: 12px 14px; background: transparent; border: 0; border-bottom: 1px solid var(--line);
+    font: 600 13px/1 'Onest'; color: var(--ink-2); cursor: pointer;
+  }
+  .suggestions button:last-child { border-bottom: 0; }
+  .suggestions button:hover { background: var(--card-3); color: var(--clay-text); }
+  .suggestions .match { color: var(--clay); font-weight: 800; }
+
+  .template-plan {
+    margin-top: 12px; padding: 12px; border-radius: 14px;
+    background: rgba(255,94,31,0.06); border: 1px solid rgba(255,94,31,0.22);
+  }
+  .template-plan .top { display: flex; justify-content: space-between; align-items: center; }
+  .template-plan .lbl { font: 700 10px/1 'Onest'; letter-spacing: 0.18em; text-transform: uppercase; color: var(--clay-text); }
+  .template-plan .count { font: 700 10px/1 'Onest'; color: var(--clay); background: rgba(255,94,31,0.12); padding: 4px 8px; border-radius: 999px; }
+  .template-plan .picks { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .template-plan .pick {
+    background: var(--card); border: 1px solid rgba(255,94,31,0.32); color: var(--clay-text);
+    padding: 7px 11px; border-radius: 999px; font: 700 12px/1 'Onest'; cursor: pointer;
+  }
+  .template-plan .pick::before { content: "+ "; }
+
+  .quick-picks { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .quick-picks .lbl { font: 700 10px/1 'Onest'; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-soft); margin-right: 4px; }
+  .chip {
+    padding: 7px 12px; border-radius: 999px;
+    background: var(--bg-2); color: var(--ink-2);
+    font: 700 12px/1 'Onest'; cursor: pointer; border: 0;
+  }
+
+  /* ── Recent sessions ──────────────────────────────────────────────── */
+  .recent-head { padding: 4px 4px 0; }
+  .recent-head h2 { margin: 0; font: 800 18px/1 'Onest'; letter-spacing: -0.015em; }
+  .recent-head h2 em { font: italic 400 14px/1 'Instrument Serif'; color: var(--ink-soft); margin-left: 6px; font-weight: 400; letter-spacing: 0; }
+  .recent-head p { margin: 4px 0 0; font: 500 12px/1.4 'Onest'; color: var(--ink-soft); }
+
+  .session-card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+    padding: 14px; box-shadow: 0 4px 12px -8px var(--shadow-card);
+  }
+  .session-card .meta { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .session-card .meta .day { font: 800 16px/1 'Onest'; }
+  .session-card .meta .mood { font: 400 14px/1 'Onest'; opacity: 0.85; }
+  .session-card .meta .time { font: 500 12px/1 'Onest'; color: var(--ink-soft); }
+  .session-card .notes { margin-top: 6px; font: italic 400 13px/1.4 'Instrument Serif'; color: var(--ink-2); }
+  .session-card .ex-mini {
+    margin-top: 10px; padding: 10px 12px; border-radius: 12px;
+    background: var(--card-3); border: 1px solid var(--line);
+    display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: start;
+  }
+  .session-card .ex-mini .name { font: 800 14px/1 'Onest'; }
+  .session-card .ex-mini .name .mode-tag {
+    font: italic 400 12px/1 'Instrument Serif'; color: var(--ink-soft);
+    font-weight: 400; letter-spacing: 0; margin-left: 4px;
+  }
+  .session-card .ex-mini .setbadges { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+  .session-card .ex-mini .setbadges .b { font: 700 9px/1 'Onest'; letter-spacing: 0.08em; padding: 4px 7px; background: var(--bg-2); border-radius: 999px; color: var(--ink-2); }
+  .session-card .ex-mini .pills { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+  .session-card .ex-mini .ex-notes { margin-top: 6px; font: italic 400 12px/1.4 'Instrument Serif'; color: var(--ink-soft); }
+  .session-card .ex-mini .add-prev {
+    align-self: start; padding: 7px 11px; border-radius: 999px; border: 0;
+    background: linear-gradient(180deg, var(--clay-2), var(--clay)); color: white;
+    font: 700 11px/1 'Onest'; cursor: pointer; white-space: nowrap;
+    box-shadow: 0 6px 14px -6px rgba(255,94,31,0.55);
+  }
+
+  /* ── End-session modal (rendered inline as labeled preview) ───────── */
+  .end-modal {
+    background: var(--card); border-radius: 22px; padding: 20px;
+    border: 1px solid var(--line);
+    box-shadow: 0 20px 40px -12px var(--shadow-strong);
+  }
+  .end-modal h3 { margin: 0; text-align: center; font: 800 20px/1 'Onest'; letter-spacing: -0.015em; }
+  .end-modal p { text-align: center; margin: 4px 0 14px; font: 500 13px/1.4 'Onest'; color: var(--ink-soft); }
+  .moods { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  /* scope mood-card styles to the end-modal picker so the bare `.mood`
+     selector doesn't leak into <span class="mood"> in session-cards */
+  .moods .mood {
+    padding: 14px 0; border-radius: 14px; border: 1.5px solid var(--line);
+    background: var(--card-3); font: 400 32px/1 'Onest'; text-align: center; cursor: pointer;
+    transition: transform 120ms ease;
+  }
+  .moods .mood:active { transform: scale(0.97); }
+  .moods .mood.selected {
+    background: linear-gradient(180deg, var(--clay-2), var(--clay));
+    border-color: var(--clay-text); color: white;
+    box-shadow: 0 12px 26px -10px rgba(255,94,31,0.55);
+  }
+  .end-modal .mood-label {
+    margin-top: 8px; font: 700 11px/1 'Onest'; letter-spacing: 0.16em; text-transform: uppercase;
+    text-align: center; color: var(--ink-soft);
+  }
+  .end-modal label { display: block; margin-top: 14px; font: 700 10px/1 'Onest'; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-soft); }
+  .end-modal textarea {
+    margin-top: 6px; width: 100%; min-height: 72px; resize: vertical;
+    background: var(--card-3); border: 1px solid var(--line); border-radius: 12px;
+    padding: 11px 12px; font: 500 14px/1.4 'Onest'; color: var(--ink); outline: 0;
+  }
+  .end-modal .actions { margin-top: 14px; display: grid; grid-template-columns: 1fr 2fr; gap: 8px; }
+  .end-modal .actions .cancel { background: var(--bg-2); border: 0; padding: 13px; border-radius: 999px; font: 700 13px/1 'Onest'; color: var(--ink-2); }
+  .end-modal .actions .submit {
+    border: 0; padding: 13px; border-radius: 999px; color: white; font: 800 14px/1 'Onest';
+    background: linear-gradient(180deg, var(--clay-2), var(--clay));
+    box-shadow: 0 12px 24px -10px rgba(255,94,31,0.55), inset 0 -3px 0 var(--clay-deep);
+  }
+
+  /* ── Template picker (replicates section in +page.svelte) ─────────── */
+  .template-picker {
+    background: var(--card); border-radius: 22px; padding: 16px; border: 1px solid var(--line);
+  }
+  .template-picker .head { display: flex; justify-content: space-between; align-items: baseline; }
+  .template-picker .head h3 { margin: 0; font: 800 17px/1 'Onest'; }
+  .template-picker .head h3 em { font: italic 400 13px/1 'Instrument Serif'; color: var(--ink-soft); margin-left: 4px; font-weight: 400; }
+  .template-picker .head .close { background: var(--bg-2); border: 0; padding: 7px 12px; border-radius: 999px; font: 700 11px/1 'Onest'; color: var(--ink-2); cursor: pointer; }
+  .template-grid { margin-top: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .template-card {
+    text-align: left; background: var(--card-3); border: 1px solid var(--line);
+    border-radius: 14px; padding: 12px; cursor: pointer;
+  }
+  .template-card:hover, .template-card:focus { border-color: var(--clay); }
+  .template-card .name { font: 800 14px/1.1 'Onest'; }
+  .template-card .count { margin-top: 4px; font: 500 12px/1 'Onest'; color: var(--ink-soft); }
+
+  /* ── No-session state (alt header) ────────────────────────────────── */
+  .no-session {
+    background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: 18px;
+  }
+  .no-session .kicker { font: 700 10px/1 'Onest'; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-soft); }
+  .no-session h2 { margin: 8px 0 4px; font: 800 26px/1 'Onest'; letter-spacing: -0.025em; }
+  .no-session h2 em { font: italic 400 26px/1 'Instrument Serif'; color: var(--clay); }
+  .no-session p { margin: 0; font: 500 13px/1.45 'Onest'; color: var(--ink-soft); }
+  .no-session .ctas { margin-top: 14px; display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .no-session .start {
+    padding: 16px; border: 0; border-radius: 999px;
+    background: linear-gradient(180deg, var(--clay-2), var(--clay)); color: white;
+    font: 800 14px/1 'Onest';
+    box-shadow: 0 14px 28px -10px rgba(255,94,31,0.55), inset 0 -3px 0 var(--clay-deep);
+  }
+  .no-session .secondary {
+    padding: 14px; background: var(--bg-2); border: 0; border-radius: 999px;
+    font: 700 13px/1 'Onest'; color: var(--ink-2);
+  }
+  .no-session .ghost {
+    padding: 12px; background: transparent; border: 1px solid var(--line); border-radius: 999px;
+    font: 700 12px/1 'Onest'; color: var(--ink-soft);
+  }
+
+  /* ── Bottom nav (replicates mobile-bottom-nav) ────────────────────── */
+  nav.tabs {
+    position: absolute; left: 16px; right: 16px; bottom: 14px; height: 72px;
+    background: color-mix(in oklab, var(--card) 92%, transparent); backdrop-filter: blur(14px);
+    border-radius: 28px; border: 1px solid var(--line);
+    display: grid; grid-template-columns: repeat(5, 1fr); align-items: center;
+    z-index: 25; box-shadow: 0 16px 32px -10px var(--shadow-card);
+  }
+  nav.tabs a { display: grid; place-items: center; gap: 4px; color: var(--ink-soft); text-decoration: none; font: 700 10px/1 'Onest'; padding: 8px 0; }
+  nav.tabs a .pill-nav { width: 32px; height: 32px; border-radius: 16px; display: grid; place-items: center; background: var(--bg-2); }
+  nav.tabs a.active { color: var(--clay); }
+  nav.tabs a.active .pill-nav { background: var(--clay); color: white; box-shadow: 0 6px 14px -6px var(--clay); }
+
+  /* ── Floating "back to gallery" link ──────────────────────────────── */
+  .home {
+    position: fixed; bottom: 20px; right: 20px; z-index: 100;
+    color: var(--bg); font: 700 10px/1 'Onest'; letter-spacing: 0.08em; text-decoration: none;
+    background: color-mix(in oklab, var(--ink) 88%, transparent);
+    padding: 10px 14px; border-radius: 999px;
+    border: 1px solid color-mix(in oklab, var(--ink) 15%, transparent);
+    box-shadow: 0 12px 24px -8px var(--shadow-strong);
+    backdrop-filter: blur(8px);
+  }
+  .home:hover { background: var(--clay); color: white; }
+
+  /* ── Mobile breakout ──────────────────────────────────────────────── */
+  @media (max-width: 480px) {
+    body { padding: 0; background: var(--bg); }
+    .device { max-width: 100%; aspect-ratio: auto; min-height: 100dvh; border-radius: 0; padding: 0; box-shadow: none; }
+    .screen { border-radius: 0; }
+    .notch { display: none; }
+    .home { display: none; }
+  }
+</style>
+</head>
+<body>
+  <a class="home" href="index.html">← gallery</a>
+
+  <div class="device">
+    <div class="notch"></div>
+    <div class="screen">
+
+      <!-- ─── TOP APP BAR ─────────────────────────────────────────── -->
+      <header class="appbar">
+        <div class="brand">
+          <span class="logo">SM</span>
+          <span class="name">SwoleMate</span>
+        </div>
+        <div class="actions">
+          <button class="icon-btn theme-toggle" id="theme-toggle" aria-label="Toggle dark mode">
+            <svg class="ico-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            <svg class="ico-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+          </button>
+          <button class="icon-btn" aria-label="Log out">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <main>
+
+        <!-- ─── PENDING SYNC NOTICE ─────────────────────────────── -->
+        <span class="anno">Pending-sync banner</span>
+        <div class="notice">
+          <div class="top">
+            <span class="ico">↻</span>
+            Session saved locally. <em>2 changes pending sync</em>
+          </div>
+          <button class="sync-btn">Sync now</button>
+        </div>
+
+        <!-- ─── PR FLASH (energetic centerpiece) ────────────────── -->
+        <span class="anno">PR moment · energetic flash</span>
+        <div class="pr-flash">
+          <div class="icon">⚡</div>
+          <div class="body">
+            <div class="k">New personal record</div>
+            <div class="v">Bench <b>105 kg × 8</b> — +2.5kg</div>
+          </div>
+          <div class="arr">→</div>
+        </div>
+
+        <!-- ─── HERO · ACTIVE SESSION ───────────────────────────── -->
+        <span class="anno">Hero · session live (Today header)</span>
+        <section class="hero">
+          <div class="kicker">► Session live · 42 min in</div>
+          <h1>Push day, <em>going off.</em></h1>
+          <div class="started">Started 19:00 · Tue 14 May</div>
+
+          <div class="timer-block">
+            <div class="ring">
+              <svg width="150" height="150" viewBox="0 0 150 150">
+                <circle cx="75" cy="75" r="68" stroke="rgba(243,236,225,0.1)" stroke-width="10" fill="none" />
+                <circle cx="75" cy="75" r="68" stroke="url(#hg)" stroke-width="10" fill="none"
+                  stroke-dasharray="427" stroke-dashoffset="150" stroke-linecap="round" />
+                <defs>
+                  <linearGradient id="hg" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#ff7a2a"/>
+                    <stop offset="100%" stop-color="#ff5e1f"/>
+                  </linearGradient>
+                </defs>
+              </svg>
+              <div class="center">
+                <div class="big">42:18</div>
+              </div>
+            </div>
+            <div class="stats-wrap">
+              <div class="stat-grid">
+                <div class="cell"><div class="k">Exercises</div><div class="v">4<small>/ 5</small></div></div>
+                <div class="cell"><div class="k">Sets done</div><div class="v">18</div></div>
+                <div class="cell"><div class="k">Volume</div><div class="v">4,820<small>kg</small></div></div>
+                <div class="cell"><div class="k">Records</div><div class="v" style="color:var(--clay-2)">1<small>★</small></div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="hero-actions">
+            <button class="cancel">Cancel</button>
+            <button class="end">End session →</button>
+          </div>
+        </section>
+
+        <!-- ─── SESSION NOTES TEXTAREA ──────────────────────────── -->
+        <span class="anno">Session notes</span>
+        <div class="session-notes">
+          <label>Session notes</label>
+          <textarea placeholder="How did it feel? Any cues to remember…">Felt strong on bench from set 2. Right pec a little tight on lockout — back off on overhead today.</textarea>
+        </div>
+
+        <!-- ─── ACTIVE EXERCISE (expanded · all sub-components) ─── -->
+        <span class="anno">Exercise · live · all controls expanded</span>
+        <article class="ex live">
+          <header class="ex-head">
+            <div>
+              <div class="title">
+                <h3>Bench Press <em>— heavy</em></h3>
+                <span class="badge live">In progress</span>
+              </div>
+              <div class="ex-summary">
+                <span>3 sets</span><span class="dot">•</span><span>last 105 kg × 8</span>
+                <span class="pr-tag">⚡ PR set 3</span>
+              </div>
+            </div>
+            <div class="ex-actions">
+              <button class="toggle" aria-label="Collapse">▾</button>
+              <button class="del" aria-label="Remove">✕</button>
+            </div>
+          </header>
+
+          <!-- Settings -->
+          <section class="sub">
+            <div class="sub-head">
+              <h4>Settings</h4>
+              <span class="help">optional equipment setup</span>
+            </div>
+            <div class="settings">
+              <div class="setting-row">
+                <input class="input" value="Bench angle" />
+                <input class="input" value="Flat" />
+                <button class="x-btn" aria-label="Remove setting">✕</button>
+              </div>
+              <div class="setting-row">
+                <input class="input" placeholder="Grip width" />
+                <input class="input" placeholder="Index on ring" />
+                <button class="add-btn">Add</button>
+              </div>
+            </div>
+          </section>
+
+          <!-- Last time -->
+          <section class="sub">
+            <div class="sub-head"><h4>Last time</h4><span class="help">Tue, last week</span></div>
+            <div class="last-time">
+              <div class="head"><b>4 sets</b> <span>logged</span> <span class="date">— Tuesday 7 May</span></div>
+              <div class="pills">
+                <span class="spill xs"><span class="reps">10×</span><span class="weight" style="--w:38%">100kg</span></span>
+                <span class="spill xs"><span class="reps">8×</span><span class="weight" style="--w:85%">102.5kg</span></span>
+                <span class="spill xs"><span class="reps">7×</span><span class="weight" style="--w:85%">102.5kg</span></span>
+                <span class="spill xs"><span class="reps">8×</span><span class="weight" style="--w:38%">100kg</span></span>
+              </div>
+              <p class="notes">Notes: paused last rep felt good, push 105 next.</p>
+            </div>
+          </section>
+
+          <!-- Current sets · tracking · pills · add-set form -->
+          <section class="sub">
+            <div class="sub-head"><h4>Current sets</h4><span class="help">tap pills to edit</span></div>
+
+            <div class="tracking">
+              <span class="chk on"><span class="box"></span>Reps</span>
+              <span class="chk"><span class="box"></span>Time</span>
+              <span class="chk on"><span class="box"></span>Weight</span>
+              <span class="chk"><span class="box"></span>Per-side</span>
+              <span class="chk use-last">↺ Use last</span>
+            </div>
+
+            <div class="set-pills">
+              <span class="lbl">3 done</span>
+              <span class="spill xs"><span class="reps">10×</span><span class="weight" style="--w:38%">100kg</span></span>
+              <span class="spill xs"><span class="reps">9×</span><span class="weight" style="--w:62%">102.5kg</span></span>
+              <span class="spill xs pr"><span class="reps">8×</span><span class="weight" style="--w:85%">105kg</span></span>
+            </div>
+
+            <div class="add-set-form">
+              <div class="field">
+                <label>Reps</label>
+                <div class="stepper-pill">
+                  <button class="step" type="button" aria-label="Decrease reps">−</button>
+                  <div class="v-wrap"><span class="value">8</span></div>
+                  <button class="step" type="button" aria-label="Increase reps">+</button>
+                </div>
+              </div>
+              <div class="field">
+                <label>Weight</label>
+                <div class="stepper-pill">
+                  <button class="step" type="button" aria-label="Decrease weight">−</button>
+                  <div class="v-wrap"><span class="value">105</span><span class="unit">kg</span></div>
+                  <button class="step" type="button" aria-label="Increase weight">+</button>
+                </div>
+              </div>
+              <button class="commit-set">▶ Log set 4 of 5</button>
+            </div>
+          </section>
+
+          <!-- Notes -->
+          <section class="sub ex-notes">
+            <div class="sub-head"><h4>Notes</h4></div>
+            <textarea placeholder="Cues, tempo, how it felt…">Drove off chest, slight uneven lockout right side. Paused 1s on chest from set 3.</textarea>
+          </section>
+
+          <!-- Footer actions -->
+          <footer class="ex-foot">
+            <button class="collapse">Collapse</button>
+            <button class="mark-done">✓ Mark done</button>
+          </footer>
+        </article>
+
+        <!-- ─── INPUT FORM · 3 WEIGHT MODES ─────────────────────── -->
+        <span class="anno">Add-set form · 3 weight modes</span>
+
+        <!-- Standard mode -->
+        <div class="mode-preview">
+          <div class="mp-head">
+            <div class="mp-title">Standard <em>— one weight value</em></div>
+            <div class="mp-eg">e.g. Bench, Squat</div>
+          </div>
+          <div class="tracking">
+            <span class="chk on"><span class="box"></span>Reps</span>
+            <span class="chk on"><span class="box"></span>Weight</span>
+            <span class="chk"><span class="box"></span>Per-side</span>
+          </div>
+          <div class="add-set-form" style="margin-top:14px">
+            <div class="field">
+              <label>Reps</label>
+              <div class="stepper-pill">
+                <button class="step" type="button">−</button>
+                <div class="v-wrap"><span class="value">8</span></div>
+                <button class="step" type="button">+</button>
+              </div>
+            </div>
+            <div class="field">
+              <label>Weight</label>
+              <div class="stepper-pill">
+                <button class="step" type="button">−</button>
+                <div class="v-wrap"><span class="value">105</span><span class="unit">kg</span></div>
+                <button class="step" type="button">+</button>
+              </div>
+            </div>
+            <button class="commit-set">▶ Log set</button>
+          </div>
+        </div>
+
+        <!-- Per-side mode -->
+        <div class="mode-preview">
+          <div class="mp-head">
+            <div class="mp-title">Per-side <em>— one value × both sides</em></div>
+            <div class="mp-eg">e.g. DB Row, DB Press</div>
+          </div>
+          <div class="tracking">
+            <span class="chk on"><span class="box"></span>Reps</span>
+            <span class="chk on"><span class="box"></span>Weight</span>
+            <span class="chk on"><span class="box"></span>Per-side</span>
+          </div>
+          <div class="add-set-form" style="margin-top:14px">
+            <div class="field">
+              <label>Reps</label>
+              <div class="stepper-pill">
+                <button class="step" type="button">−</button>
+                <div class="v-wrap"><span class="value">8</span></div>
+                <button class="step" type="button">+</button>
+              </div>
+            </div>
+            <div class="field">
+              <label>Per side · kg</label>
+              <div class="stepper-pill">
+                <button class="step" type="button">−</button>
+                <div class="v-wrap"><span class="value">22.5</span></div>
+                <button class="step" type="button">+</button>
+              </div>
+            </div>
+            <button class="commit-set">▶ Log set</button>
+          </div>
+        </div>
+
+        <!-- Split L/R mode -->
+        <div class="mode-preview">
+          <div class="mp-head">
+            <div class="mp-title">Split L/R <em>— separate values per side</em></div>
+            <div class="mp-eg">e.g. Bulgarian SS</div>
+          </div>
+          <div class="tracking">
+            <span class="chk on"><span class="box"></span>Reps</span>
+            <span class="chk on"><span class="box"></span>Weight</span>
+            <span class="chk on"><span class="box"></span>Per-side</span>
+            <span class="chk on"><span class="box"></span>Split L/R</span>
+          </div>
+          <div class="add-set-form split-lr" style="margin-top:14px">
+            <div class="field field-reps">
+              <label>Reps</label>
+              <div class="stepper-pill">
+                <button class="step" type="button">−</button>
+                <div class="v-wrap"><span class="value">8</span></div>
+                <button class="step" type="button">+</button>
+              </div>
+            </div>
+            <div class="field">
+              <label>Left</label>
+              <div class="stepper-pill">
+                <button class="step" type="button">−</button>
+                <div class="v-wrap"><span class="value">27.5</span><span class="unit">kg</span></div>
+                <button class="step" type="button">+</button>
+              </div>
+            </div>
+            <div class="field">
+              <label>Right</label>
+              <div class="stepper-pill">
+                <button class="step" type="button">−</button>
+                <div class="v-wrap"><span class="value">22.5</span><span class="unit">kg</span></div>
+                <button class="step" type="button">+</button>
+              </div>
+            </div>
+            <button class="commit-set">▶ Log set</button>
+          </div>
+        </div>
+
+        <!-- ─── COLLAPSED · DONE EXERCISE ───────────────────────── -->
+        <span class="anno">Exercise · collapsed · done state</span>
+        <article class="ex">
+          <header class="ex-head">
+            <div>
+              <div class="title">
+                <h3>Squat <em>— back, beltless</em></h3>
+                <span class="badge done">Done</span>
+              </div>
+              <div class="ex-summary">4 sets <span class="dot">•</span> top 140 kg × 5 <span class="dot">•</span> 2400 kg volume</div>
+            </div>
+            <div class="ex-actions">
+              <button class="toggle" aria-label="Expand">▸</button>
+              <span class="badge soft" style="cursor:pointer">Edit</span>
+              <button class="del" aria-label="Remove">✕</button>
+            </div>
+          </header>
+        </article>
+
+        <!-- ─── COLLAPSED · IN-PROGRESS EXERCISE (settings preview) ─── -->
+        <span class="anno">Exercise · collapsed · in progress (settings visible as pills)</span>
+        <article class="ex">
+          <header class="ex-head">
+            <div>
+              <div class="title">
+                <h3>Barbell Row</h3>
+                <span class="badge soft">In progress</span>
+              </div>
+              <div class="ex-summary">
+                <span class="pill xs">grip: pronated</span>
+                <span class="pill xs">rom: full</span>
+                <span class="pill xs">+1</span>
+              </div>
+            </div>
+            <div class="ex-actions">
+              <button class="toggle" aria-label="Expand">▸</button>
+              <button class="del" aria-label="Remove">✕</button>
+            </div>
+          </header>
+        </article>
+
+        <!-- ─── TIMER OVERLAY (rendered inline as preview) ──────── -->
+        <span class="anno">Timer overlay · used for timed exercises</span>
+        <div class="timer-overlay">
+          <div class="kicker">▶ Timed set running</div>
+          <div class="ex-name">Plank · set 2</div>
+          <div class="dial">
+            <div class="dial-inner">
+              <div class="state">Running</div>
+              <div class="value">0:23</div>
+              <div class="caption">Target 0:60 · weight preserved</div>
+            </div>
+          </div>
+          <div class="actions">
+            <button>▮▮ Pause</button>
+            <button class="primary">+ Add set</button>
+            <button>↺ Reset</button>
+            <button>Close</button>
+          </div>
+        </div>
+
+        <!-- ─── EXERCISE COMPOSER ───────────────────────────────── -->
+        <span class="anno">Add-exercise composer · search · autocomplete · template plan · quick picks</span>
+        <section class="composer">
+          <div class="row">
+            <input value="Over" placeholder="Search (e.g. Bench Press, Squat)…" />
+            <button class="add">Add</button>
+          </div>
+
+          <div class="suggestions">
+            <button><span class="match">Over</span>head Press</button>
+            <button><span class="match">Over</span>head Triceps Extension</button>
+            <button>B<span class="match">over</span> Row</button>
+          </div>
+
+          <div class="template-plan">
+            <div class="top">
+              <span class="lbl">▸ Template plan</span>
+              <span class="count">2 left</span>
+            </div>
+            <div class="picks">
+              <button class="pick">Overhead Press</button>
+              <button class="pick">Tricep Pushdown</button>
+            </div>
+          </div>
+
+          <div class="quick-picks">
+            <span class="lbl">Quick picks</span>
+            <button class="chip">Pull-up</button>
+            <button class="chip">Lateral Raise</button>
+            <button class="chip">Face Pull</button>
+            <button class="chip">Plank</button>
+          </div>
+        </section>
+
+        <!-- ─── RECENT SESSIONS · PAST 2 ───────────────────────── -->
+        <span class="anno">Past 2 sessions · quick recall</span>
+        <div class="recent-head">
+          <h2>Past 2 sessions <em>— quick recall</em></h2>
+          <p>Tap "Add" on any exercise to drop it into today's session.</p>
+        </div>
+
+        <article class="session-card">
+          <div class="meta">
+            <span class="day">Yesterday</span>
+            <span class="mood">😊</span>
+            <span class="time">7:12 – 8:04 · 52m</span>
+          </div>
+          <p class="notes">Pull day. Felt strong on rows, weak on biceps last set.</p>
+          <div class="ex-mini">
+            <div>
+              <div class="name">Deadlift</div>
+              <div class="setbadges">
+                <span class="b">stance: conv</span>
+                <span class="b">grip: mixed</span>
+              </div>
+              <div class="pills">
+                <span class="spill xs"><span class="reps">5×</span><span class="weight" style="--w:38%">100kg</span></span>
+                <span class="spill xs"><span class="reps">5×</span><span class="weight" style="--w:62%">120kg</span></span>
+                <span class="spill xs"><span class="reps">3×</span><span class="weight" style="--w:85%">140kg</span></span>
+              </div>
+              <div class="ex-notes">Notes: back tight in warm-ups, opened up by set 2.</div>
+            </div>
+            <button class="add-prev">Add →</button>
+          </div>
+          <div class="ex-mini">
+            <div>
+              <div class="name">Pull-up</div>
+              <div class="pills">
+                <!-- two identical sets group as 2× 10× BW, then the back-off 8× sits separate -->
+                <span class="spill xs"><span class="count">2×</span><span class="reps">10×</span><span class="weight bw">BW</span></span>
+                <span class="spill xs"><span class="reps">8×</span><span class="weight bw">BW</span></span>
+              </div>
+            </div>
+            <button class="add-prev">Add →</button>
+          </div>
+          <div class="ex-mini">
+            <div>
+              <div class="name">DB Row <span class="mode-tag">· per-side</span></div>
+              <div class="pills">
+                <!-- 3 identical per-side sets: 8 reps × 22.5kg/side -->
+                <span class="spill xs"><span class="count">3×</span><span class="reps">8×</span><span class="weight" style="--w:60%">22.5kg/side</span></span>
+                <!-- back-off heavier single -->
+                <span class="spill xs"><span class="reps">6×</span><span class="weight" style="--w:85%">25kg/side</span></span>
+              </div>
+            </div>
+            <button class="add-prev">Add →</button>
+          </div>
+        </article>
+
+        <article class="session-card">
+          <div class="meta">
+            <span class="day">Saturday</span>
+            <span class="mood">😐</span>
+            <span class="time">10:02 – 11:08 · 66m</span>
+          </div>
+          <div class="ex-mini">
+            <div>
+              <div class="name">Squat</div>
+              <div class="pills">
+                <span class="spill xs"><span class="reps">8×</span><span class="weight" style="--w:38%">100kg</span></span>
+                <span class="spill xs"><span class="reps">5×</span><span class="weight" style="--w:62%">120kg</span></span>
+                <span class="spill xs"><span class="reps">5×</span><span class="weight" style="--w:85%">140kg</span></span>
+              </div>
+            </div>
+            <button class="add-prev">Add →</button>
+          </div>
+          <div class="ex-mini">
+            <div>
+              <div class="name">Bulgarian Split Squat <span class="mode-tag">· split L/R</span></div>
+              <div class="pills">
+                <!-- L=R equal → renders 25kg/side -->
+                <span class="spill xs"><span class="reps">8×</span><span class="weight" style="--w:78%">25kg/side</span></span>
+                <!-- L≠R → renders 27.5/22.5kg -->
+                <span class="spill xs"><span class="reps">8×</span><span class="weight" style="--w:85%">27.5/22.5kg</span></span>
+                <!-- L≠R, lighter overall -->
+                <span class="spill xs"><span class="reps">6×</span><span class="weight" style="--w:38%">25/22.5kg</span></span>
+              </div>
+              <div class="ex-notes">Notes: right side weak again; back off and even out next time.</div>
+            </div>
+            <button class="add-prev">Add →</button>
+          </div>
+          <div class="ex-mini">
+            <div>
+              <div class="name">Plank</div>
+              <div class="pills">
+                <!-- 3 identical timed sets group as 3× 0:30 (no weight segment) -->
+                <span class="spill xs"><span class="count">3×</span><span class="duration">0:30</span></span>
+              </div>
+            </div>
+            <button class="add-prev">Add →</button>
+          </div>
+        </article>
+
+        <!-- ─── END-SESSION MODAL · INLINE PREVIEW ──────────────── -->
+        <span class="anno">End-session modal · mood + notes</span>
+        <div class="end-modal">
+          <h3>End session</h3>
+          <p>Pick how it felt and add a quick note.</p>
+          <div class="moods">
+            <button class="mood">😞</button>
+            <button class="mood">😐</button>
+            <button class="mood selected">😊</button>
+          </div>
+          <div class="mood-label">Good</div>
+          <label>Session notes</label>
+          <textarea placeholder="Anything to remember for next time…">Heavy bench paid off — set up the 110×5 push for next week.</textarea>
+          <div class="actions">
+            <button class="cancel">Cancel</button>
+            <button class="submit">▶ Submit & end</button>
+          </div>
+        </div>
+
+        <!-- ─── TEMPLATE PICKER · INLINE PREVIEW ────────────────── -->
+        <span class="anno">Template picker · shown when "Use template" tapped</span>
+        <div class="template-picker">
+          <div class="head">
+            <h3>Start from template <em>preloads exercise plan</em></h3>
+            <button class="close">Close</button>
+          </div>
+          <div class="template-grid">
+            <button class="template-card">
+              <div class="name">Push Day A</div>
+              <div class="count">5 exercises</div>
+            </button>
+            <button class="template-card">
+              <div class="name">Pull Day B</div>
+              <div class="count">6 exercises</div>
+            </button>
+            <button class="template-card">
+              <div class="name">Squat Heavy</div>
+              <div class="count">4 exercises</div>
+            </button>
+            <button class="template-card">
+              <div class="name">Conditioning</div>
+              <div class="count">3 exercises</div>
+            </button>
+          </div>
+        </div>
+
+        <!-- ─── NO-SESSION STATE (alt hero) ─────────────────────── -->
+        <span class="anno">No-session state · start / template / demo</span>
+        <div class="no-session">
+          <div class="kicker">► No session yet</div>
+          <h2>Ready when <em>you are.</em></h2>
+          <p>Start a fresh session, load a template plan, or run the demo to explore the flow.</p>
+          <div class="ctas">
+            <button class="start">▶ Start session</button>
+            <button class="secondary">Use template</button>
+            <button class="ghost">Load demo</button>
+          </div>
+        </div>
+
+      </main>
+
+      <!-- ─── BOTTOM NAV ──────────────────────────────────────── -->
+      <nav class="tabs">
+        <a class="active" href="#"><span class="pill-nav">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 21s-7-4.5-7-11a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 6.5-7 11-7 11z"/></svg>
+        </span>Today</a>
+        <a href="#"><span class="pill-nav">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 9h16"/></svg>
+        </span>Plans</a>
+        <a href="#"><span class="pill-nav">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        </span>History</a>
+        <a href="#"><span class="pill-nav">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19h16"/><path d="M6 16l4-5 4 3 5-7"/></svg>
+        </span>Progress</a>
+        <a href="#"><span class="pill-nav">⋯</span>More</a>
+      </nav>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const root = document.documentElement;
+      const KEY = 'swolemate-mockup-theme';
+      function apply(theme) {
+        if (theme === 'dark') root.setAttribute('data-theme', 'dark');
+        else root.removeAttribute('data-theme');
+      }
+      // initial: stored > system > light
+      let stored = null;
+      try { stored = localStorage.getItem(KEY); } catch (e) {}
+      if (stored === 'dark' || stored === 'light') {
+        apply(stored);
+      } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        apply('dark');
+      }
+      // wire toggle
+      document.addEventListener('DOMContentLoaded', function () {
+        const btn = document.getElementById('theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', function () {
+          const isDark = root.getAttribute('data-theme') === 'dark';
+          const next = isDark ? 'light' : 'dark';
+          apply(next);
+          try { localStorage.setItem(KEY, next); } catch (e) {}
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

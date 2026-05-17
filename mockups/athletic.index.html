@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#1f1c18" />
+<title>Soft Athletic · Three Variants</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<style>
+  :root { --bg: #161311; --panel: #1d1a17; --line: #2c2823; --ink: #ecebe6; --ink-mid: #a09a8e; --ink-dim: #6a6357; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font-family: 'Onest', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  body {
+    min-height: 100dvh;
+    background:
+      radial-gradient(1000px 600px at 0% 0%, #25201a 0%, transparent 60%),
+      radial-gradient(900px 600px at 100% 100%, #2a1e16 0%, transparent 60%),
+      var(--bg);
+  }
+  header.page { padding: 48px 32px 8px; max-width: 1400px; margin: 0 auto; }
+  .crumb {
+    display: inline-flex; align-items: center; gap: 10px;
+    color: var(--ink-mid); text-decoration: none; font: 600 11px/1 'Onest'; letter-spacing: 0.18em; text-transform: uppercase;
+  }
+  header.page h1 {
+    margin: 16px 0 0; font: italic 400 56px/0.95 'Instrument Serif'; letter-spacing: -0.015em; color: var(--ink); max-width: 18ch;
+  }
+  header.page h1 .b { font-style: normal; font-family: 'Onest'; font-weight: 800; color: #d4a063; }
+  header.page p { margin: 16px 0 0; max-width: 64ch; font: 500 15px/1.55 'Onest'; color: var(--ink-mid); }
+
+  .grid {
+    max-width: 1400px; margin: 32px auto 80px; padding: 0 32px;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 28px;
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 28px;
+    overflow: hidden; display: flex; flex-direction: column;
+    transition: transform 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
+  }
+  .card:hover { transform: translateY(-4px); border-color: #423b30; box-shadow: 0 30px 60px -20px rgba(0,0,0,0.6); }
+  .frame { aspect-ratio: 9 / 13.5; position: relative; overflow: hidden; display: grid; place-items: center; border-bottom: 1px solid var(--line); }
+  .frame iframe {
+    width: 380px; height: 820px; border: 0;
+    transform: scale(0.82); transform-origin: top center;
+    pointer-events: none; border-radius: 32px;
+    box-shadow: 0 30px 60px -20px rgba(0,0,0,0.5);
+    margin-top: 20px;
+  }
+  .card.a .frame { background: radial-gradient(700px 400px at 50% 0%, #3a221a, transparent 60%), #1c1410; }
+  .card.b .frame { background: radial-gradient(700px 400px at 50% 0%, #2b261d, transparent 60%), #181612; }
+  .card.c .frame { background: radial-gradient(700px 400px at 50% 0%, #4a2b15, transparent 60%), #1a1108; }
+
+  .meta { padding: 22px 22px 24px; display: flex; flex-direction: column; gap: 12px; }
+  .tag { font: 700 10px/1 'Onest'; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-dim); }
+  .meta h2 { margin: 0; font: 800 26px/1 'Onest'; letter-spacing: -0.02em; }
+  .meta h2 em { font: italic 400 26px/1 'Instrument Serif'; color: var(--ink-mid); }
+  .desc { font: 500 14px/1.55 'Onest'; color: var(--ink-mid); }
+  .bullets { margin: 4px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+  .bullets li { font: 500 13px/1.4 'Onest'; color: var(--ink-mid); padding-left: 14px; position: relative; }
+  .bullets li::before { content: ""; position: absolute; left: 0; top: 8px; width: 6px; height: 6px; border-radius: 50%; background: var(--ink-dim); }
+  .palette { display: flex; gap: 6px; margin-top: 6px; }
+  .palette span { width: 22px; height: 22px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05); }
+  .row2 { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; gap: 12px; }
+  .open { display: inline-flex; align-items: center; gap: 10px; padding: 12px 18px; border-radius: 999px; font: 700 13px/1 'Onest'; text-decoration: none; }
+  .open .arr { font: italic 400 16px/1 'Instrument Serif'; }
+  .card.a .open { background: #ff5e1f; color: #fff; }
+  .card.b .open { background: #1a1714; color: #fbf6ee; border-radius: 4px; }
+  .card.c .open { background: linear-gradient(180deg, #d4733a, #b6562a); color: #fff; }
+
+  footer.page { max-width: 1400px; margin: 0 auto 60px; padding: 0 32px; border-top: 1px solid var(--line); padding-top: 24px; color: var(--ink-dim); font: 500 12px/1.5 'Onest'; display: flex; justify-content: space-between; }
+  footer.page a { color: var(--ink-mid); }
+
+  @media (max-width: 720px) {
+    header.page h1 { font-size: 38px; }
+    .grid { gap: 18px; padding: 0 18px; }
+    .frame iframe { transform: scale(0.6); margin-top: 10px; }
+  }
+</style>
+</head>
+<body>
+  <header class="page">
+    <a class="crumb" href="index.html">◂ back to all six directions</a>
+    <h1>Soft athletic, <span class="b">three ways.</span></h1>
+    <p>
+      You said the original is close. Here are three pulls on it — same DNA, different intensities.
+      A pushes the accent and the energy. B strips everything back to a single signal color and sharper edges.
+      C deepens the palette into golden-hour terracotta. Pick one (or call out the bits you want mixed) and we'll build v2.
+    </p>
+  </header>
+
+  <main class="grid">
+
+    <article class="card a">
+      <div class="frame">
+        <iframe src="athletic-a-energetic.html" title="Variant A · Energetic" loading="lazy" tabindex="-1"></iframe>
+      </div>
+      <div class="meta">
+        <span class="tag">▸ Variant A</span>
+        <h2>Energetic <em>— more punch</em></h2>
+        <div class="desc">Same warm base, but the clay-orange is dialled to 11. Loud PR banner, breathing timer ring with motion, hot-orange CTAs. The page has more "going off" energy.</div>
+        <ul class="bullets">
+          <li>Accent #ff5e1f — used on PR, live state, CTA, ring</li>
+          <li>Big animated timer ring (breathes, glows)</li>
+          <li>PR appears as a full gradient banner above the hero</li>
+        </ul>
+        <div class="palette">
+          <span style="background:#f3ece1"></span>
+          <span style="background:#18130d"></span>
+          <span style="background:#ff5e1f"></span>
+          <span style="background:#ff7a2a"></span>
+          <span style="background:#d5a23a"></span>
+        </div>
+        <div class="row2">
+          <span class="tag">Onest · Instrument Serif</span>
+          <a class="open" href="athletic-a-energetic.html">Open <span class="arr">→</span></a>
+        </div>
+      </div>
+    </article>
+
+    <article class="card b">
+      <div class="frame">
+        <iframe src="athletic-b-restrained.html" title="Variant B · Restrained" loading="lazy" tabindex="-1"></iframe>
+      </div>
+      <div class="meta">
+        <span class="tag">▸ Variant B</span>
+        <h2>Restrained <em>— grown up</em></h2>
+        <div class="desc">No dark hero card. No avatar. No pill chips. Just typography and hairlines. One signal color (a single warm clay) used on PR, live state, and the commit arrow — three places per screen, max.</div>
+        <ul class="bullets">
+          <li>Light-on-light hero — timer is the biggest type on the page</li>
+          <li>Sharp 2–4px corners, hairline 1px rules, no shadows</li>
+          <li>One signal color · everything else is a neutral scale</li>
+        </ul>
+        <div class="palette">
+          <span style="background:#fbf6ee"></span>
+          <span style="background:#e5dcc8"></span>
+          <span style="background:#847e72"></span>
+          <span style="background:#1a1714"></span>
+          <span style="background:#c66a3a"></span>
+        </div>
+        <div class="row2">
+          <span class="tag">Onest · Instrument Serif</span>
+          <a class="open" href="athletic-b-restrained.html">Open <span class="arr">→</span></a>
+        </div>
+      </div>
+    </article>
+
+    <article class="card c">
+      <div class="frame">
+        <iframe src="athletic-c-dusk.html" title="Variant C · Dusk" loading="lazy" tabindex="-1"></iframe>
+      </div>
+      <div class="meta">
+        <span class="tag">▸ Variant C</span>
+        <h2>Dusk <em>— moodier</em></h2>
+        <div class="desc">Drop the white. Lean into terracotta, amber, and shade. The hero becomes a lit room at dusk. Premium, slower, the app you open even on a rest day.</div>
+        <ul class="bullets">
+          <li>Deeper base (amber-cream instead of off-white)</li>
+          <li>Hero is a dark gradient with ember + gold orbs</li>
+          <li>Italic serif voice carries the copy ("the room is warm")</li>
+        </ul>
+        <div class="palette">
+          <span style="background:#ebdcc4"></span>
+          <span style="background:#2a1d12"></span>
+          <span style="background:#b6562a"></span>
+          <span style="background:#d99340"></span>
+          <span style="background:#5a3a20"></span>
+        </div>
+        <div class="row2">
+          <span class="tag">Onest · Instrument Serif</span>
+          <a class="open" href="athletic-c-dusk.html">Open <span class="arr">→</span></a>
+        </div>
+      </div>
+    </article>
+
+  </main>
+
+  <footer class="page">
+    <div>Soft athletic · three variants · 2026-05-15</div>
+    <a href="index.html">back to all six directions ◂</a>
+  </footer>
+</body>
+</html>

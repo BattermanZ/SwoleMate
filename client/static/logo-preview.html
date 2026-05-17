@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>SwoleMate · Logo brainstorm</title>
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			rel="stylesheet"
+			href="https://fonts.googleapis.com/css2?family=Onest:wght@400;600;700;800;900&family=Instrument+Serif:ital@0;1&display=swap"
+		/>
+		<style>
+			:root {
+				--clay: #ff5e1f;
+				--clay-2: #ff7a2a;
+				--clay-deep: #c83a05;
+				--ink: #211915;
+				--ink-soft: #6b5b51;
+				--ink-dim: #a0907f;
+				--bg: #f7f1e6;
+				--card: #fffaf2;
+				--line: rgba(33, 25, 21, 0.1);
+			}
+			* {
+				box-sizing: border-box;
+			}
+			body {
+				margin: 0;
+				font:
+					500 14px/1.5 'Onest',
+					system-ui,
+					sans-serif;
+				color: var(--ink);
+				background:
+					radial-gradient(900px 600px at 0% 0%, #ffe8d6 0%, transparent 60%),
+					radial-gradient(900px 600px at 100% 100%, #f8dac2 0%, transparent 55%), var(--bg);
+				min-height: 100vh;
+				padding: 64px 24px 96px;
+			}
+			.wrap {
+				max-width: 1100px;
+				margin: 0 auto;
+			}
+			.headline {
+				margin-bottom: 48px;
+				text-align: center;
+			}
+			.kicker {
+				font: italic 400 18px/1 'Instrument Serif';
+				color: var(--ink-soft);
+				letter-spacing: 0.04em;
+			}
+			h1 {
+				margin: 8px 0 12px;
+				font:
+					800 44px/1.05 'Onest',
+					system-ui,
+					sans-serif;
+				letter-spacing: -0.02em;
+			}
+			h1 em {
+				font: italic 400 1em/1 'Instrument Serif';
+				color: var(--clay-deep);
+			}
+			.lede {
+				max-width: 620px;
+				margin: 0 auto;
+				color: var(--ink-soft);
+			}
+
+			.grid {
+				display: grid;
+				grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+				gap: 24px;
+			}
+
+			.card {
+				background: var(--card);
+				border: 1px solid var(--line);
+				border-radius: 28px;
+				padding: 28px 24px;
+				box-shadow: 0 22px 40px -28px rgba(33, 25, 21, 0.25);
+				display: flex;
+				flex-direction: column;
+				gap: 20px;
+			}
+			.card .badge {
+				display: inline-flex;
+				align-items: center;
+				gap: 8px;
+				font:
+					700 10px/1 'Onest',
+					system-ui,
+					sans-serif;
+				letter-spacing: 0.22em;
+				text-transform: uppercase;
+				color: var(--clay-deep);
+			}
+			.card .badge::before {
+				content: '';
+				width: 6px;
+				height: 6px;
+				border-radius: 50%;
+				background: var(--clay);
+			}
+			.card h2 {
+				margin: 0;
+				font:
+					800 22px/1.1 'Onest',
+					system-ui,
+					sans-serif;
+				letter-spacing: -0.01em;
+			}
+			.card p {
+				margin: 0;
+				color: var(--ink-soft);
+				font-size: 13px;
+			}
+			.stage {
+				background:
+					repeating-linear-gradient(
+						45deg,
+						rgba(33, 25, 21, 0.04) 0 8px,
+						transparent 8px 16px
+					),
+					#fdf6ea;
+				border-radius: 20px;
+				border: 1px dashed rgba(33, 25, 21, 0.15);
+				padding: 32px;
+				display: grid;
+				place-items: center;
+			}
+			.sizes {
+				display: flex;
+				align-items: end;
+				gap: 28px;
+				justify-content: center;
+			}
+			.tile-wrap {
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				gap: 10px;
+			}
+			.tile-wrap .px {
+				font:
+					700 10px/1 'Onest',
+					system-ui,
+					sans-serif;
+				letter-spacing: 0.18em;
+				text-transform: uppercase;
+				color: var(--ink-dim);
+			}
+
+			footer {
+				margin-top: 64px;
+				text-align: center;
+				color: var(--ink-dim);
+				font-size: 12px;
+			}
+			footer code {
+				background: rgba(33, 25, 21, 0.06);
+				padding: 2px 6px;
+				border-radius: 6px;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="wrap">
+			<header class="headline">
+				<div class="kicker">brainstorm · 3 directions</div>
+				<h1>Bicep <em>callback,</em> SM front and centre.</h1>
+				<p class="lede">
+					Each tile keeps the clay gradient and the bold SM mark. They differ in how the flexed-arm
+					emoji silhouette returns as a structural element behind the letters.
+				</p>
+			</header>
+
+			<!-- Shared symbol library: gradient + emoji silhouette mask per variant -->
+			<svg width="0" height="0" style="position: absolute" aria-hidden="true">
+				<defs>
+					<linearGradient id="clay" x1="0" y1="0" x2="1" y2="1">
+						<stop offset="0%" stop-color="#ff7a2a" />
+						<stop offset="100%" stop-color="#ff5e1f" />
+					</linearGradient>
+					<linearGradient id="clayDark" x1="0" y1="0" x2="1" y2="1">
+						<stop offset="0%" stop-color="#c83a05" />
+						<stop offset="100%" stop-color="#9f2d04" />
+					</linearGradient>
+
+					<!-- Variant A · Watermark: OS emoji silhouette at 28% opacity, centred -->
+					<symbol id="logoA" viewBox="0 0 512 512">
+						<defs>
+							<clipPath id="clipA"><rect width="512" height="512" rx="118" ry="118" /></clipPath>
+							<mask id="maskA" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+								<rect width="512" height="512" fill="black" />
+								<text
+									x="256"
+									y="280"
+									text-anchor="middle"
+									dominant-baseline="central"
+									font-size="380"
+									font-family="'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji','Twemoji Mozilla',sans-serif"
+									fill="white"
+								>💪</text>
+							</mask>
+						</defs>
+						<g clip-path="url(#clipA)">
+							<rect width="512" height="512" fill="url(#clay)" />
+							<rect width="512" height="512" fill="white" opacity="0.28" mask="url(#maskA)" />
+						</g>
+						<text
+							x="256"
+							y="278"
+							text-anchor="middle"
+							dominant-baseline="central"
+							font-family="'Onest','Segoe UI',system-ui,sans-serif"
+							font-weight="800"
+							font-size="220"
+							letter-spacing="-6"
+							fill="#ffffff"
+						>SM</text>
+					</symbol>
+
+					<!-- Variant B · Diagonal cameo: bicep tilted, fading off the bottom-right edge -->
+					<symbol id="logoB" viewBox="0 0 512 512">
+						<defs>
+							<clipPath id="clipB"><rect width="512" height="512" rx="118" ry="118" /></clipPath>
+							<mask id="maskB" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+								<rect width="512" height="512" fill="black" />
+								<g transform="translate(360 360) rotate(-22) translate(-256 -256)">
+									<text
+										x="256"
+										y="280"
+										text-anchor="middle"
+										dominant-baseline="central"
+										font-size="520"
+										font-family="'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji','Twemoji Mozilla',sans-serif"
+										fill="white"
+									>💪</text>
+								</g>
+							</mask>
+						</defs>
+						<g clip-path="url(#clipB)">
+							<rect width="512" height="512" fill="url(#clay)" />
+							<rect width="512" height="512" fill="white" opacity="0.28" mask="url(#maskB)" />
+						</g>
+						<text
+							x="256"
+							y="278"
+							text-anchor="middle"
+							dominant-baseline="central"
+							font-family="'Onest','Segoe UI',system-ui,sans-serif"
+							font-weight="800"
+							font-size="220"
+							letter-spacing="-6"
+							fill="#ffffff"
+						>SM</text>
+					</symbol>
+
+					<!-- Variant C · Knockout relief: bicep stamped in the deeper clay tone -->
+					<symbol id="logoC" viewBox="0 0 512 512">
+						<defs>
+							<clipPath id="clipC"><rect width="512" height="512" rx="118" ry="118" /></clipPath>
+							<mask id="maskC" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+								<rect width="512" height="512" fill="black" />
+								<text
+									x="256"
+									y="280"
+									text-anchor="middle"
+									dominant-baseline="central"
+									font-size="440"
+									font-family="'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji','Twemoji Mozilla',sans-serif"
+									fill="white"
+								>💪</text>
+							</mask>
+						</defs>
+						<g clip-path="url(#clipC)">
+							<rect width="512" height="512" fill="url(#clay)" />
+							<rect width="512" height="512" fill="url(#clayDark)" mask="url(#maskC)" />
+						</g>
+						<text
+							x="256"
+							y="278"
+							text-anchor="middle"
+							dominant-baseline="central"
+							font-family="'Onest','Segoe UI',system-ui,sans-serif"
+							font-weight="800"
+							font-size="220"
+							letter-spacing="-6"
+							fill="#ffffff"
+						>SM</text>
+					</symbol>
+				</defs>
+			</svg>
+
+			<section class="grid">
+				<article class="card">
+					<div>
+						<span class="badge">Option A</span>
+						<h2>Whisper watermark · 28%</h2>
+						<p>
+							The bicep emoji silhouette is masked out of your system's color-emoji glyph, centred and
+							fully contained, composited over the clay gradient at 28% white.
+						</p>
+					</div>
+					<div class="stage">
+						<div class="sizes">
+							<div class="tile-wrap">
+								<svg width="160" height="160" aria-label="Option A · 160px"><use href="#logoA" /></svg>
+								<span class="px">160 px</span>
+							</div>
+							<div class="tile-wrap">
+								<svg width="80" height="80" aria-label="Option A · 80px"><use href="#logoA" /></svg>
+								<span class="px">80 px</span>
+							</div>
+							<div class="tile-wrap">
+								<svg width="32" height="32" aria-label="Option A · 32px"><use href="#logoA" /></svg>
+								<span class="px">32 px</span>
+							</div>
+						</div>
+					</div>
+				</article>
+
+				<article class="card">
+					<div>
+						<span class="badge">Option B</span>
+						<h2>Diagonal cameo</h2>
+						<p>
+							The bicep crops off the bottom-right corner at a confident tilt, like a sticker
+							underlay. More movement and personality, still SM-first.
+						</p>
+					</div>
+					<div class="stage">
+						<div class="sizes">
+							<div class="tile-wrap">
+								<svg width="160" height="160" aria-label="Option B · 160px"><use href="#logoB" /></svg>
+								<span class="px">160 px</span>
+							</div>
+							<div class="tile-wrap">
+								<svg width="80" height="80" aria-label="Option B · 80px"><use href="#logoB" /></svg>
+								<span class="px">80 px</span>
+							</div>
+							<div class="tile-wrap">
+								<svg width="32" height="32" aria-label="Option B · 32px"><use href="#logoB" /></svg>
+								<span class="px">32 px</span>
+							</div>
+						</div>
+					</div>
+				</article>
+
+				<article class="card">
+					<div>
+						<span class="badge">Option C</span>
+						<h2>Embossed relief</h2>
+						<p>
+							The bicep is stamped into the tile in deeper clay, like an embossed badge. Feels
+							physical, like merch — the strongest "callback" of the three.
+						</p>
+					</div>
+					<div class="stage">
+						<div class="sizes">
+							<div class="tile-wrap">
+								<svg width="160" height="160" aria-label="Option C · 160px"><use href="#logoC" /></svg>
+								<span class="px">160 px</span>
+							</div>
+							<div class="tile-wrap">
+								<svg width="80" height="80" aria-label="Option C · 80px"><use href="#logoC" /></svg>
+								<span class="px">80 px</span>
+							</div>
+							<div class="tile-wrap">
+								<svg width="32" height="32" aria-label="Option C · 32px"><use href="#logoC" /></svg>
+								<span class="px">32 px</span>
+							</div>
+						</div>
+					</div>
+				</article>
+			</section>
+
+			<footer>
+				Emoji silhouettes are extracted from your system's color-emoji glyph (Apple, Segoe, or Noto)
+				via an SVG mask — the visible character is rendered as monochrome white / deep clay before
+				being composited over the gradient. Open <code>/logo-preview.html</code> on the dev server to
+				review.
+			</footer>
+		</div>
+	</body>
+</html>

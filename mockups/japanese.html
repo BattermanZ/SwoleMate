@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#f7f5f0" />
+<title>SwoleMate · Japanese Grid</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --paper: #f7f5ef;
+    --paper-2: #efece2;
+    --hair: #c9c4b6;
+    --hair-2: #d8d3c4;
+    --ink: #161412;
+    --ink-2: #4a4640;
+    --ink-soft: #837e72;
+    --shu: #c8331e;            /* vermillion / hanko red */
+    --shu-2: #a92614;
+    --sumi: #1a1714;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    min-height: 100dvh; background:
+      radial-gradient(900px 600px at 0% 0%, #f3ecdb 0%, transparent 60%),
+      radial-gradient(900px 600px at 100% 100%, #e9e2d0 0%, transparent 55%),
+      #eee7d6;
+    display: grid; place-items: center; padding: 24px;
+    font-family: 'Noto Sans JP', system-ui, sans-serif; color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  .device {
+    width: 100%; max-width: 420px; aspect-ratio: 390/844;
+    background: var(--paper);
+    border-radius: 44px; padding: 14px;
+    box-shadow:
+      0 0 0 1.5px #c5bda5,
+      0 0 0 12px #1a1714,
+      0 40px 80px rgba(40,30,15,0.35);
+    position: relative; overflow: hidden;
+  }
+  .screen {
+    height: 100%; width: 100%; border-radius: 32px; background: var(--paper);
+    overflow: hidden; display: flex; flex-direction: column; position: relative;
+  }
+  .screen::before {
+    /* paper grain */
+    content: ""; position: absolute; inset: 0;
+    background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.2 0 0 0 0 0.16 0 0 0 0 0.1 0 0 0 0.08 0'/></filter><rect width='240' height='240' filter='url(%23n)'/></svg>");
+    mix-blend-mode: multiply; opacity: 0.45; pointer-events: none; z-index: 1;
+  }
+  .notch { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); width: 120px; height: 28px; background: #1a1714; border-radius: 14px; z-index: 3; }
+
+  .statusbar { padding: 14px 22px 6px; display: flex; justify-content: space-between; font: 500 11px/1 'JetBrains Mono'; color: var(--ink-soft); letter-spacing: 0.06em; position: relative; z-index: 2; }
+  .statusbar .right { display: flex; align-items: center; gap: 8px; }
+  .statusbar .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--shu); }
+
+  main { flex: 1; padding: 4px 0 100px; overflow-y: auto; position: relative; z-index: 2; }
+
+  /* The page is a strict 12-col grid with a generous gutter spine */
+  .grid {
+    display: grid;
+    grid-template-columns: 32px 1fr 1fr 32px;
+    column-gap: 14px;
+  }
+  .rule-v {
+    grid-column: 1 / 2; border-right: 1px solid var(--hair-2);
+    position: relative;
+  }
+  .rule-v .ja {
+    writing-mode: vertical-rl; text-orientation: mixed;
+    font: 500 13px/1 'Noto Serif JP'; color: var(--ink-soft);
+    padding-top: 24px; margin-left: 6px; letter-spacing: 0.25em;
+  }
+
+  /* Title block — high negative space */
+  .title {
+    grid-column: 2 / 4;
+    padding: 32px 0 18px;
+  }
+  .title .kanji {
+    font: 600 24px/1 'Noto Serif JP'; color: var(--ink); letter-spacing: 0.15em;
+  }
+  .title .kanji .red { color: var(--shu); }
+  .title h1 {
+    margin: 14px 0 0; font: 400 38px/1.05 'Noto Serif JP'; letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  .title h1 .em { color: var(--shu); }
+  .title .meta {
+    margin-top: 16px; display: flex; gap: 16px;
+    font: 500 11px/1 'JetBrains Mono'; color: var(--ink-soft);
+    letter-spacing: 0.08em; text-transform: uppercase;
+  }
+
+  /* Stat strip with hairline columns */
+  .stats {
+    grid-column: 2 / 4;
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    border-top: 1px solid var(--hair);
+    border-bottom: 1px solid var(--hair);
+    margin-top: 8px;
+  }
+  .stats .col { padding: 14px 14px 14px 0; border-right: 1px solid var(--hair-2); }
+  .stats .col:last-child { border-right: 0; padding-right: 0; }
+  .stats .k { font: 500 9px/1 'JetBrains Mono'; letter-spacing: 0.22em; color: var(--ink-soft); text-transform: uppercase; }
+  .stats .v {
+    margin-top: 8px; font: 400 28px/1 'Noto Serif JP'; letter-spacing: -0.02em;
+    color: var(--ink); font-feature-settings: "tnum";
+  }
+  .stats .v small { font: 500 10px/1 'JetBrains Mono'; color: var(--ink-soft); margin-left: 4px; }
+
+  /* Exercise block */
+  .exer { grid-column: 2 / 4; padding: 32px 0 0; }
+  .exer .head {
+    display: grid; grid-template-columns: 1fr auto; align-items: end;
+    border-bottom: 1px solid var(--hair); padding-bottom: 8px;
+  }
+  .exer .head .ja-kana {
+    font: 500 11px/1 'Noto Serif JP'; color: var(--ink-soft); letter-spacing: 0.32em;
+  }
+  .exer .head h2 {
+    margin: 6px 0 0; font: 500 22px/1 'Noto Serif JP'; letter-spacing: 0;
+  }
+  .exer .head .index {
+    text-align: right; font: 500 11px/1 'JetBrains Mono'; letter-spacing: 0.12em; color: var(--ink-soft);
+  }
+  .exer .head .index strong { display: block; font: 400 26px/1 'Noto Serif JP'; color: var(--ink); margin-bottom: 4px; }
+
+  /* Set rows: hairline rhythm, mono numbers */
+  .sets { margin-top: 6px; }
+  .set {
+    display: grid; grid-template-columns: 18px 70px 70px 1fr 22px;
+    gap: 10px; align-items: baseline;
+    padding: 12px 0; border-bottom: 1px solid var(--hair-2);
+  }
+  .set .n { font: 500 11px/1 'JetBrains Mono'; color: var(--ink-soft); letter-spacing: 0.06em; }
+  .set .w { font: 500 18px/1 'JetBrains Mono'; color: var(--ink); font-feature-settings: "tnum"; }
+  .set .w small { font-size: 10px; color: var(--ink-soft); margin-left: 2px; }
+  .set .r { font: 400 15px/1 'Noto Serif JP'; color: var(--ink-2); }
+  .set .r .x { color: var(--ink-soft); margin: 0 4px; }
+  .set .meter {
+    height: 1px; background: var(--hair); position: relative;
+  }
+  .set .meter::after { content: ""; position: absolute; inset: -1px auto -1px 0; background: var(--ink); width: var(--w, 0%); }
+  .set .seal { display: grid; place-items: center; }
+  .set .seal.live { color: var(--shu); }
+  .set.pr .meter::after { background: var(--shu); }
+  .set.pr .w { color: var(--shu); }
+
+  /* Hanko stamp for PRs */
+  .hanko {
+    width: 32px; height: 32px; border-radius: 50%;
+    border: 1.5px solid var(--shu); color: var(--shu);
+    display: grid; place-items: center;
+    font: 700 14px/1 'Noto Serif JP'; letter-spacing: 0;
+    background: rgba(200,51,30,0.04);
+    transform: rotate(-6deg);
+  }
+
+  /* Composer — disciplined, single column with hairline dividers */
+  .compose { grid-column: 2 / 4; margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  .compose .label { font: 500 10px/1 'JetBrains Mono'; letter-spacing: 0.22em; color: var(--ink-soft); text-transform: uppercase; }
+  .compose .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field .k { font: 500 9px/1 'JetBrains Mono'; letter-spacing: 0.2em; color: var(--ink-soft); text-transform: uppercase; }
+  .field .v {
+    display: flex; align-items: baseline; justify-content: space-between;
+    border-bottom: 1px solid var(--ink); padding-bottom: 8px;
+  }
+  .field .v .num {
+    font: 400 38px/1 'Noto Serif JP'; letter-spacing: -0.02em; color: var(--ink);
+    font-feature-settings: "tnum";
+  }
+  .field .v .u { font: 500 12px/1 'JetBrains Mono'; color: var(--ink-soft); letter-spacing: 0.1em; }
+  .field .step {
+    display: flex; justify-content: space-between; padding-top: 6px;
+  }
+  .field .step button {
+    background: transparent; border: 1px solid var(--hair); padding: 4px 12px;
+    font: 500 12px/1 'JetBrains Mono'; color: var(--ink-2); letter-spacing: 0.08em;
+  }
+
+  .commit {
+    margin-top: 22px; width: 100%; padding: 18px;
+    background: var(--ink); color: var(--paper);
+    border: 0; font: 500 14px/1 'Noto Serif JP'; letter-spacing: 0.24em;
+    display: flex; align-items: center; justify-content: center; gap: 16px;
+    text-transform: uppercase;
+  }
+  .commit .ja { font: 400 14px/1 'Noto Serif JP'; color: var(--shu); letter-spacing: 0.2em; }
+  .commit .arrow { font: 500 16px/1 'JetBrains Mono'; }
+
+  /* Rest section */
+  .rest {
+    grid-column: 2 / 4; margin-top: 28px; padding: 18px 0;
+    border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair);
+    display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: end;
+  }
+  .rest .k { font: 500 10px/1 'JetBrains Mono'; letter-spacing: 0.22em; color: var(--ink-soft); text-transform: uppercase; }
+  .rest .ja { font: 500 11px/1 'Noto Serif JP'; color: var(--shu); margin-top: 6px; letter-spacing: 0.2em; }
+  .rest .num {
+    margin-top: 4px; font: 400 48px/0.9 'Noto Serif JP'; letter-spacing: -0.04em; color: var(--ink);
+    font-feature-settings: "tnum";
+  }
+  .rest .ctrls { display: flex; gap: 6px; }
+  .rest button {
+    background: transparent; border: 1px solid var(--ink); color: var(--ink);
+    padding: 8px 10px; font: 500 10px/1 'JetBrains Mono'; letter-spacing: 0.16em; text-transform: uppercase;
+  }
+  .rest button.primary { background: var(--ink); color: var(--paper); }
+
+  /* Footer note (haiku-ish) */
+  .colophon { grid-column: 2 / 4; padding: 22px 0 12px; font: 400 12px/1.7 'Noto Serif JP'; color: var(--ink-soft); }
+  .colophon em { color: var(--shu); font-style: normal; }
+
+  /* Right vertical rule on right edge with vertical text */
+  .rule-r { grid-column: 4 / 5; border-left: 1px solid var(--hair-2); position: relative; }
+  .rule-r .ja {
+    writing-mode: vertical-rl;
+    font: 500 11px/1 'Noto Serif JP'; color: var(--ink-soft);
+    padding-top: 24px; margin-right: 6px; letter-spacing: 0.3em;
+  }
+
+  /* Bottom nav */
+  nav.tabs {
+    position: absolute; left: 14px; right: 14px; bottom: 14px; height: 70px;
+    background: rgba(247,245,239,0.92); backdrop-filter: blur(14px);
+    border: 1px solid var(--hair);
+    display: grid; grid-template-columns: repeat(5, 1fr); align-items: center;
+    z-index: 4;
+  }
+  nav.tabs a { display: grid; place-items: center; gap: 4px; color: var(--ink-soft); text-decoration: none; padding: 8px 0; }
+  nav.tabs a .ja { font: 500 14px/1 'Noto Serif JP'; }
+  nav.tabs a .en { font: 500 9px/1 'JetBrains Mono'; letter-spacing: 0.18em; text-transform: uppercase; }
+  nav.tabs a.active { color: var(--shu); }
+  nav.tabs a.active .en { color: var(--shu); }
+
+  .home {
+    position: fixed; top: 20px; left: 20px;
+    color: var(--ink-2); font: 500 11px/1 'JetBrains Mono'; letter-spacing: 0.12em; text-decoration: none;
+    background: var(--paper); padding: 10px 12px; border: 1px solid var(--hair); text-transform: uppercase;
+  }
+
+  @media (max-width: 480px) {
+    body { padding: 0; background: var(--paper); }
+    .device { max-width: 100%; aspect-ratio: auto; min-height: 100dvh; border-radius: 0; padding: 0; box-shadow: none; }
+    .screen { border-radius: 0; }
+    .notch { display: none; }
+    .home { top: 12px; left: 12px; }
+  }
+</style>
+</head>
+<body>
+  <a class="home" href="index.html">← gallery</a>
+  <div class="device">
+    <div class="notch"></div>
+    <div class="screen">
+      <div class="statusbar">
+        <span>19:42 · 火</span>
+        <span class="right"><span class="dot"></span>SESSION 042</span>
+      </div>
+
+      <main>
+        <div class="grid">
+          <aside class="rule-v"><div class="ja">本日の稽古</div></aside>
+
+          <header class="title">
+            <div class="kanji">押す日<span style="color:var(--ink-soft);margin:0 8px;">·</span><span class="red">押 04 / 05</span></div>
+            <h1>Forty-two<br/>minutes <span class="em">in.</span></h1>
+            <div class="meta">
+              <span>14 · MAY · 2026</span>
+              <span>SES. NO. 0428</span>
+            </div>
+          </header>
+
+          <section class="stats">
+            <div class="col">
+              <div class="k">経過 · Elapsed</div>
+              <div class="v">42<small>min</small></div>
+            </div>
+            <div class="col">
+              <div class="k">総量 · Volume</div>
+              <div class="v">4,820<small>kg</small></div>
+            </div>
+            <div class="col">
+              <div class="k">回数 · Sets</div>
+              <div class="v">18</div>
+            </div>
+          </section>
+
+          <section class="exer">
+            <div class="head">
+              <div>
+                <div class="ja-kana">ベ ン チ プ レ ス</div>
+                <h2>Bench Press</h2>
+              </div>
+              <div class="index"><strong>04</strong> / 05 sets</div>
+            </div>
+
+            <div class="sets">
+              <div class="set">
+                <span class="n">壱</span>
+                <span class="w">100.0<small>kg</small></span>
+                <span class="r">×<span class="x"></span>10 reps</span>
+                <span class="meter" style="--w:78%"></span>
+                <span class="seal"></span>
+              </div>
+              <div class="set">
+                <span class="n">弐</span>
+                <span class="w">102.5<small>kg</small></span>
+                <span class="r">×<span class="x"></span>9 reps</span>
+                <span class="meter" style="--w:84%"></span>
+                <span class="seal"></span>
+              </div>
+              <div class="set pr">
+                <span class="n">参</span>
+                <span class="w">105.0<small>kg</small></span>
+                <span class="r">×<span class="x"></span>8 reps</span>
+                <span class="meter" style="--w:92%"></span>
+                <span class="seal"><div class="hanko">朱</div></span>
+              </div>
+              <div class="set">
+                <span class="n">肆</span>
+                <span class="w" style="color:var(--ink-soft)">— · —</span>
+                <span class="r" style="color:var(--shu)">記録中</span>
+                <span class="meter"></span>
+                <span class="seal live">●</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="compose">
+            <div class="label">記入 — Inscribe</div>
+            <div class="row">
+              <div class="field">
+                <span class="k">Weight · 重量</span>
+                <div class="v"><span class="num">105.0</span><span class="u">KG</span></div>
+                <div class="step"><button>−2.5</button><button>+2.5</button></div>
+              </div>
+              <div class="field">
+                <span class="k">Reps · 回数</span>
+                <div class="v"><span class="num">8</span><span class="u">×</span></div>
+                <div class="step"><button>−1</button><button>+1</button></div>
+              </div>
+            </div>
+            <button class="commit"><span class="ja">記</span>Log set 04<span class="arrow">→</span></button>
+          </section>
+
+          <section class="rest">
+            <div>
+              <div class="k">Rest interval</div>
+              <div class="ja">休息 一分三秒</div>
+              <div class="num">1:03</div>
+            </div>
+            <div class="ctrls">
+              <button>+15s</button>
+              <button class="primary">SKIP</button>
+            </div>
+          </section>
+
+          <p class="colophon">
+            静かに息を整える<br/>
+            <em>—</em> A breath, then the next set.
+          </p>
+
+          <aside class="rule-r"><div class="ja">記録 No. 0428</div></aside>
+        </div>
+      </main>
+
+      <nav class="tabs">
+        <a class="active" href="#"><span class="ja">本</span><span class="en">Today</span></a>
+        <a href="#"><span class="ja">型</span><span class="en">Tmpl</span></a>
+        <a href="#"><span class="ja">過</span><span class="en">Past</span></a>
+        <a href="#"><span class="ja">伸</span><span class="en">Grow</span></a>
+        <a href="#"><span class="ja">己</span><span class="en">Self</span></a>
+      </nav>
+    </div>
+  </div>
+</body>
+</html>

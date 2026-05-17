@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { auth } from '$lib/auth';
 	import {
 		adminCreateUser,
@@ -9,24 +8,27 @@
 		adminResetUserPassword,
 		type AdminUserListItem
 	} from '$lib/api';
+	import { Btn, Card, Badge, PageHero } from '$lib/components/ui';
 
 	const authState = auth.state;
-	$: isAdmin = $authState.user?.role === 'admin';
-	$: blocked = $authState.offline || $authState.status !== 'authenticated' || !isAdmin;
 
-	let users: AdminUserListItem[] = [];
-	let loading = false;
-	let error: string | null = null;
-	let notice: string | null = null;
+	let users = $state<AdminUserListItem[]>([]);
+	let loading = $state(false);
+	let error = $state<string | null>(null);
+	let notice = $state<string | null>(null);
 
-	let createUsername = '';
-	let createPassword = '';
-	let createRole: 'user' | 'admin' = 'user';
+	let createUsername = $state('');
+	let createPassword = $state('');
+	let createRole = $state<'user' | 'admin'>('user');
 
-	let resetTarget: AdminUserListItem | null = null;
-	let resetPassword = '';
-	let resetConfirm = '';
-	let resetError: string | null = null;
+	let resetTarget = $state<AdminUserListItem | null>(null);
+	let resetPassword = $state('');
+	let resetConfirm = $state('');
+	let resetError = $state<string | null>(null);
+
+	let isAdmin = $derived($authState.user?.role === 'admin');
+	let blocked = $derived($authState.offline || $authState.status !== 'authenticated' || !isAdmin);
+	let usersLoaded = $state(false);
 
 	async function loadUsers() {
 		if (blocked) return;
@@ -34,6 +36,7 @@
 		error = null;
 		try {
 			users = await adminListUsers();
+			usersLoaded = true;
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load users';
 		} finally {
@@ -43,8 +46,7 @@
 
 	async function handleCreateUser() {
 		if (blocked) return;
-		error = null;
-		notice = null;
+		error = notice = null;
 		if (!createUsername.trim() || !createPassword) {
 			error = 'Username and password are required.';
 			return;
@@ -56,8 +58,7 @@
 				password: createPassword,
 				role: createRole
 			});
-			createUsername = '';
-			createPassword = '';
+			createUsername = createPassword = '';
 			createRole = 'user';
 			notice = 'User created.';
 			await loadUsers();
@@ -68,15 +69,14 @@
 		}
 	}
 
-	async function handleDisableUser(user: AdminUserListItem) {
+	async function handleDisable(u: AdminUserListItem) {
 		if (blocked) return;
-		if (!confirm(`Disable ${user.username}? This will revoke all sessions for that user.`)) return;
-		error = null;
-		notice = null;
+		if (!confirm(`Disable ${u.username}? They will not be able to sign in.`)) return;
 		loading = true;
+		error = notice = null;
 		try {
-			await adminDisableUser(user.id);
-			notice = `${user.username} disabled.`;
+			await adminDisableUser(u.id);
+			notice = `${u.username} disabled.`;
 			await loadUsers();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to disable user';
@@ -85,15 +85,26 @@
 		}
 	}
 
-	function openReset(user: AdminUserListItem) {
-		resetTarget = user;
-		resetPassword = '';
-		resetConfirm = '';
-		resetError = null;
+	async function handleDelete(u: AdminUserListItem) {
+		if (blocked) return;
+		if (!confirm(`Delete ${u.username}? This removes ALL their data and cannot be undone.`)) {
+			return;
+		}
+		loading = true;
+		error = notice = null;
+		try {
+			await adminDeleteUser(u.id);
+			notice = `${u.username} deleted.`;
+			await loadUsers();
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to delete user';
+		} finally {
+			loading = false;
+		}
 	}
 
-	async function submitReset() {
-		if (blocked || !resetTarget) return;
+	async function handleReset() {
+		if (!resetTarget) return;
 		resetError = null;
 		if (!resetPassword) {
 			resetError = 'New password is required.';
@@ -103,12 +114,13 @@
 			resetError = 'Passwords do not match.';
 			return;
 		}
-
 		loading = true;
 		try {
 			await adminResetUserPassword(resetTarget.id, resetPassword);
 			notice = `Password reset for ${resetTarget.username}.`;
 			resetTarget = null;
+			resetPassword = resetConfirm = '';
+			await loadUsers();
 		} catch (e) {
 			resetError = e instanceof Error ? e.message : 'Failed to reset password';
 		} finally {
@@ -116,243 +128,265 @@
 		}
 	}
 
-	async function handleDeleteUser(user: AdminUserListItem) {
-		if (blocked) return;
-		const confirmation = prompt(
-			`This permanently deletes ${user.username} and all their workouts.\n\nType the username to confirm:`
-		);
-		if (confirmation !== user.username) return;
-
-		error = null;
-		notice = null;
-		loading = true;
-		try {
-			await adminDeleteUser(user.id);
-			notice = `${user.username} deleted.`;
-			await loadUsers();
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to delete user';
-		} finally {
-			loading = false;
+	$effect(() => {
+		if (!blocked && !usersLoaded && !loading) {
+			void loadUsers();
 		}
-	}
-
-	onMount(() => {
-		void loadUsers();
 	});
 </script>
 
-<div class="space-y-6">
-	<header
-		class="relative overflow-hidden rounded-2xl border border-surface-200/50 dark:border-surface-700/50 bg-gradient-to-br from-primary-500/10 via-transparent to-tertiary-500/10 p-5 sm:p-6"
-	>
-		<div
-			class="pointer-events-none absolute -top-24 -right-24 size-72 rounded-full blur-3xl bg-primary-500/15"
-		></div>
-		<div
-			class="pointer-events-none absolute -bottom-24 -left-24 size-72 rounded-full blur-3xl bg-secondary-500/15"
-		></div>
+<div class="page">
+	<PageHero kicker="► Admin">
+		{#snippet title()}Manage <em>users.</em>{/snippet}
+		{#snippet sub()}Create, reset, disable, or delete accounts. Admins only.{/snippet}
+	</PageHero>
 
-		<div class="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-			<div class="space-y-1">
-				<h1 class="text-3xl sm:text-4xl font-black tracking-tight">Admin</h1>
-				<p class="text-sm sm:text-base opacity-80 max-w-prose">
-					Manage users and access control. Backups stay on the Backups page.
-				</p>
-			</div>
-			<div class="flex flex-col gap-2 sm:items-end">
-				<button
-					type="button"
-					class="btn variant-soft"
-					disabled={blocked || loading}
-					on:click={loadUsers}
-				>
-					Refresh
-				</button>
-				{#if $authState.offline}
-					<div class="text-sm text-warning-500">Offline: admin features are unavailable.</div>
-				{/if}
-			</div>
-		</div>
-	</header>
-
-	{#if blocked}
-		<div class="card variant-ghost p-4 text-center opacity-80">Admin access required.</div>
+	{#if !isAdmin}
+		<Card>
+			<div class="muted">You need admin privileges to view this page.</div>
+		</Card>
+	{:else if $authState.offline}
+		<Card>
+			<div class="muted">Offline mode — admin actions are disabled.</div>
+		</Card>
 	{:else}
-		{#if error}
-			<div class="card variant-ghost p-4 text-error-500">{error}</div>
-		{/if}
-		{#if notice}
-			<div class="card variant-ghost p-4 text-success-500">{notice}</div>
-		{/if}
-
-		<div class="grid gap-6 md:grid-cols-12">
-			<section class="md:col-span-7 space-y-4 min-w-0">
-				<div class="card variant-glass-surface p-4 space-y-3">
-					<div>
-						<h2 class="text-lg font-semibold tracking-tight">Create user</h2>
-						<p class="text-sm opacity-70">One user per device is the intended model.</p>
-					</div>
-
-					<form
-						class="space-y-3"
-						on:submit|preventDefault={() => {
-							void handleCreateUser();
-						}}
-					>
-						<div class="grid gap-3 sm:grid-cols-2">
-							<label class="space-y-1 block">
-								<span class="text-sm font-semibold">Username</span>
-								<input class="input w-full" bind:value={createUsername} disabled={loading} />
-							</label>
-							<label class="space-y-1 block">
-								<span class="text-sm font-semibold">Password</span>
-								<input
-									type="password"
-									class="input w-full"
-									bind:value={createPassword}
-									disabled={loading}
-								/>
-							</label>
-						</div>
-
-						<label class="space-y-1 block">
-							<span class="text-sm font-semibold">Role</span>
-							<select class="select w-full" bind:value={createRole} disabled={loading}>
-								<option value="user">User</option>
-								<option value="admin">Admin</option>
-							</select>
-						</label>
-
-						<button type="submit" class="btn variant-filled-primary w-full" disabled={loading}>
-							{loading ? 'Working…' : 'Create user'}
-						</button>
-					</form>
+		<Card>
+			{#snippet title()}Create user{/snippet}
+			<form
+				class="form"
+				onsubmit={(e) => {
+					e.preventDefault();
+					void handleCreateUser();
+				}}
+			>
+				<div class="grid-2">
+					<label>
+						<span class="lbl">Username</span>
+						<input bind:value={createUsername} disabled={loading} autocomplete="off" />
+					</label>
+					<label>
+						<span class="lbl">Password</span>
+						<input
+							type="password"
+							bind:value={createPassword}
+							disabled={loading}
+							autocomplete="new-password"
+						/>
+					</label>
 				</div>
-			</section>
+				<label>
+					<span class="lbl">Role</span>
+					<select bind:value={createRole} disabled={loading}>
+						<option value="user">User</option>
+						<option value="admin">Admin</option>
+					</select>
+				</label>
+				{#if error}<div class="err">{error}</div>{/if}
+				{#if notice}<div class="ok">{notice}</div>{/if}
+				<Btn variant="primary" type="submit" disabled={loading}>
+					{loading ? 'Creating…' : 'Create user'}
+				</Btn>
+			</form>
+		</Card>
 
-			<aside class="md:col-span-5 space-y-4 min-w-0">
-				<div class="card variant-glass-surface p-4 space-y-3">
-					<div>
-						<h2 class="text-lg font-semibold tracking-tight">Users</h2>
-						<p class="text-sm opacity-70">Reset passwords, disable accounts, or delete users.</p>
-					</div>
+		<Card>
+			{#snippet title()}Users{/snippet}
+			{#snippet actions()}
+				<Btn variant="soft" size="sm" onclick={loadUsers} disabled={loading}>
+					{loading ? 'Loading…' : 'Refresh'}
+				</Btn>
+			{/snippet}
 
-					{#if loading && users.length === 0}
-						<div class="text-sm opacity-70">Loading users…</div>
-					{:else if users.length === 0}
-						<div class="text-sm opacity-70">No users found.</div>
-					{:else}
-						<div class="space-y-2">
-							{#each users as u}
-								<div
-									class="rounded-xl border border-surface-200/50 bg-surface-50/60 p-3 dark:border-surface-700/50 dark:bg-surface-950/30"
-								>
-									<div class="flex items-start justify-between gap-2">
-										<div class="min-w-0">
-											<div class="font-semibold truncate">{u.username}</div>
-											<div class="text-xs opacity-70">
-												{u.role}{u.disabled_at ? ' • disabled' : ''}
-											</div>
-										</div>
-										<div class="flex gap-2">
-											<button
-												type="button"
-												class="btn btn-sm variant-soft"
-												disabled={loading}
-												on:click={() => openReset(u)}
-											>
-												Reset password
-											</button>
-										</div>
-									</div>
-
-									<div class="mt-3 flex gap-2">
-										<button
-											type="button"
-											class="btn btn-sm variant-soft-warning flex-1"
-											disabled={loading || !!u.disabled_at}
-											on:click={() => handleDisableUser(u)}
-										>
-											Disable
-										</button>
-										<button
-											type="button"
-											class="btn btn-sm variant-soft-error flex-1"
-											disabled={loading}
-											on:click={() => handleDeleteUser(u)}
-										>
-											Delete
-										</button>
+			{#if users.length === 0}
+				<div class="muted">No users yet.</div>
+			{:else}
+				<div class="users">
+					{#each users as u (u.id)}
+						<div class="user">
+							<div class="head">
+								<div>
+									<div class="t">{u.username}</div>
+									<div class="meta">
+										<Badge tone={u.role === 'admin' ? 'pr' : 'soft'}>{u.role}</Badge>
+										{#if u.disabled_at}<Badge tone="warn">Disabled</Badge>{/if}
 									</div>
 								</div>
-							{/each}
+								<div class="actions">
+									<Btn
+										variant="soft"
+										size="sm"
+										disabled={loading}
+										onclick={() => (resetTarget = u)}
+									>
+										Reset pw
+									</Btn>
+									<Btn
+										variant="soft"
+										size="sm"
+										disabled={loading || !!u.disabled_at}
+										onclick={() => handleDisable(u)}
+									>
+										Disable
+									</Btn>
+									<Btn variant="soft" size="sm" disabled={loading} onclick={() => handleDelete(u)}>
+										Delete
+									</Btn>
+								</div>
+							</div>
 						</div>
-					{/if}
+					{/each}
 				</div>
-			</aside>
-		</div>
-	{/if}
+			{/if}
+		</Card>
 
-	{#if resetTarget}
-		<div
-			class="fixed inset-0 z-50 flex items-center justify-center p-4"
-			role="dialog"
-			aria-modal="true"
-		>
-			<button
-				class="absolute inset-0 bg-black/50"
-				aria-label="Close"
-				on:click={() => (resetTarget = null)}
-			></button>
-			<div class="relative w-full max-w-md card variant-glass-surface p-4 space-y-3">
-				<div class="space-y-1">
-					<h3 class="text-lg font-semibold">Reset password</h3>
-					<div class="text-sm opacity-70">{resetTarget.username}</div>
-				</div>
-
-				<label class="space-y-1 block">
-					<span class="text-sm font-semibold">New password</span>
-					<input
-						type="password"
-						class="input w-full"
-						bind:value={resetPassword}
-						disabled={loading}
-					/>
-				</label>
-				<label class="space-y-1 block">
-					<span class="text-sm font-semibold">Confirm password</span>
-					<input
-						type="password"
-						class="input w-full"
-						bind:value={resetConfirm}
-						disabled={loading}
-					/>
-				</label>
-				{#if resetError}
-					<div class="text-sm text-error-500">{resetError}</div>
-				{/if}
-
-				<div class="flex gap-2">
-					<button
-						type="button"
-						class="btn variant-soft flex-1"
-						on:click={() => (resetTarget = null)}
-					>
-						Cancel
-					</button>
-					<button
-						type="button"
-						class="btn variant-filled-primary flex-1"
-						disabled={loading}
-						on:click={() => {
-							void submitReset();
-						}}
-					>
-						{loading ? 'Working…' : 'Reset'}
-					</button>
-				</div>
-			</div>
-		</div>
+		{#if resetTarget}
+			{@const target = resetTarget}
+			<Card>
+				{#snippet title()}Reset password <em>— {target.username}</em>{/snippet}
+				<form
+					class="form"
+					onsubmit={(e) => {
+						e.preventDefault();
+						void handleReset();
+					}}
+				>
+					<label>
+						<span class="lbl">New password</span>
+						<input type="password" bind:value={resetPassword} autocomplete="new-password" />
+					</label>
+					<label>
+						<span class="lbl">Confirm</span>
+						<input type="password" bind:value={resetConfirm} autocomplete="new-password" />
+					</label>
+					{#if resetError}<div class="err">{resetError}</div>{/if}
+					<div class="actions">
+						<Btn variant="primary" type="submit" disabled={loading}>
+							{loading ? 'Resetting…' : 'Reset password'}
+						</Btn>
+						<Btn
+							variant="soft"
+							onclick={() => {
+								resetTarget = null;
+								resetPassword = resetConfirm = '';
+								resetError = null;
+							}}>Cancel</Btn
+						>
+					</div>
+				</form>
+			</Card>
+		{/if}
 	{/if}
 </div>
+
+<style>
+	.page {
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+	}
+	.form {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+	.grid-2 {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 12px;
+	}
+	@media (max-width: 480px) {
+		.grid-2 {
+			grid-template-columns: 1fr;
+		}
+	}
+	label {
+		display: block;
+	}
+	.lbl {
+		display: block;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
+		letter-spacing: 0.18em;
+		text-transform: uppercase;
+		color: var(--ink-soft);
+		margin-bottom: 6px;
+	}
+	input,
+	select {
+		width: 100%;
+		background: var(--card-3);
+		border: 1px solid var(--line);
+		border-radius: 10px;
+		padding: 11px 12px;
+		font:
+			500 14px/1.2 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--ink);
+		outline: 0;
+	}
+	input:focus,
+	select:focus {
+		border-color: var(--clay);
+		box-shadow: 0 0 0 3px rgba(255, 94, 31, 0.16);
+	}
+	.actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+	.err {
+		font:
+			600 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--clay-text);
+	}
+	.ok {
+		font:
+			600 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--sage);
+	}
+	.muted {
+		font:
+			500 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--ink-soft);
+	}
+
+	.users {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+	.user {
+		background: var(--card-3);
+		border: 1px solid var(--line);
+		border-radius: 12px;
+		padding: 12px;
+	}
+	.user .head {
+		display: flex;
+		justify-content: space-between;
+		align-items: start;
+		gap: 10px;
+		flex-wrap: wrap;
+	}
+	.user .t {
+		font:
+			800 14px/1 'Onest',
+			system-ui,
+			sans-serif;
+	}
+	.user .meta {
+		margin-top: 6px;
+		display: flex;
+		gap: 6px;
+		flex-wrap: wrap;
+	}
+</style>

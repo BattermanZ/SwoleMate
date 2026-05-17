@@ -1,395 +1,349 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { getWorkoutTemplates } from '$lib/api';
-	import ExerciseComposer from '$lib/components/today/ExerciseComposer.svelte';
 	import { readDemoModePreference } from '$lib/preferences/demoMode';
-	import EndSessionModal from '$lib/components/today/EndSessionModal.svelte';
-	import RecentSessions from '$lib/components/today/RecentSessions.svelte';
-	import SessionExercise from '$lib/components/today/SessionExercise.svelte';
 	import { createTodayController } from '$lib/today/controller';
 	import type { WorkoutTemplate } from '$lib/types';
-	import { formatDateRelative, formatTime } from '$lib/utils/date';
+	import { formatTime, formatDateRelative } from '$lib/utils/date';
+	import { Btn, Card } from '$lib/components/ui';
+	import SessionHero from '$lib/components/today/SessionHero.svelte';
+	import NoSessionState from '$lib/components/today/NoSessionState.svelte';
+	import Notice from '$lib/components/today/Notice.svelte';
+	import SessionExercise from '$lib/components/today/SessionExercise.svelte';
+	import ExerciseComposer from '$lib/components/today/ExerciseComposer.svelte';
+	import RecentSessions from '$lib/components/today/RecentSessions.svelte';
+	import EndSessionModal from '$lib/components/today/EndSessionModal.svelte';
 
-	const controller = createTodayController();
+	const c = createTodayController();
 
-	const {
-		addExercise,
-		addExerciseSetting,
-		addSet,
-		cancelSession,
-		currentSession,
-		elapsedLabel,
-		endModalOpen,
-		endMood,
-		endNotes,
-		error,
-		exerciseQuery,
-		getLastTimeForExercise,
-		loading,
-		notice,
-		offlineMode,
-		markExerciseDone,
-		openEndModal,
-		openExerciseIds,
-		plannedTemplateExercises,
-		pendingSyncCount,
-		quickPicks,
-		recentSessions,
-		removeExercise,
-		removeExerciseSetting,
-		sessionNotes,
-		start,
-		startSession,
-		startSessionFromTemplate,
-		startPlannedTemplateExercise,
-		submitEndSession,
-		syncPendingSessions,
-		suggestions,
-		toggleExercise,
-		toggleExercisePerSideWeight,
-		toggleExerciseSplitWeight,
-		totalSets,
-		totalDurationSeconds,
-		totalVolumeKg,
-		updateExerciseNotes,
-		updateExerciseSetting,
-		updateExerciseTracking
-	} = controller;
+	// Pull stores out of the controller so the auto-subscribe $-prefix works cleanly in the template.
+	const error = c.error;
+	const notice = c.notice;
+	const loading = c.loading;
+	const offlineMode = c.offlineMode;
+	const pendingSyncCount = c.pendingSyncCount;
+	const currentSession = c.currentSession;
+	const elapsedLabel = c.elapsedLabel;
+	const totalSets = c.totalSets;
+	const totalVolumeKg = c.totalVolumeKg;
+	const totalDurationSeconds = c.totalDurationSeconds;
+	const exerciseQuery = c.exerciseQuery;
+	const sessionNotes = c.sessionNotes;
+	const endModalOpen = c.endModalOpen;
+	const endMood = c.endMood;
+	const endNotes = c.endNotes;
+	const suggestions = c.suggestions;
+	const quickPicks = c.quickPicks;
+	const plannedTemplateExercises = c.plannedTemplateExercises;
+	const recentSessions = c.recentSessions;
+	const openExerciseIds = c.openExerciseIds;
 
-	let showDemoAction = false;
-	let templatePickerOpen = false;
-	let templateLoading = false;
-	let templateError: string | null = null;
-	let templates: WorkoutTemplate[] = [];
-	let exerciseComposerTarget: HTMLDivElement;
+	let showDemoAction = $state(false);
+	let templatePickerOpen = $state(false);
+	let templateLoading = $state(false);
+	let templateError = $state<string | null>(null);
+	let templates = $state<WorkoutTemplate[]>([]);
 
 	onMount(() => {
 		showDemoAction = readDemoModePreference();
-		return start();
+		return c.start();
 	});
 
 	async function openTemplatePicker() {
 		templatePickerOpen = true;
 		templateError = null;
 		templateLoading = true;
-
 		try {
 			templates = await getWorkoutTemplates();
-		} catch (error) {
-			templateError = error instanceof Error ? error.message : 'Failed to load templates';
+		} catch (e) {
+			templateError = e instanceof Error ? e.message : 'Failed to load templates';
 		} finally {
 			templateLoading = false;
 		}
 	}
 
 	async function handleStartFromTemplate(templateId: number) {
-		await startSessionFromTemplate(templateId);
-		if (!$error) templatePickerOpen = false;
-	}
-
-	function formatSetDuration(seconds: number): string {
-		const value = Math.max(0, Math.round(seconds));
-		const minutes = Math.floor(value / 60);
-		const remaining = value % 60;
-		if (minutes < 60) return `${minutes}:${String(remaining).padStart(2, '0')}`;
-		const hours = Math.floor(minutes / 60);
-		const remMinutes = minutes % 60;
-		return remMinutes ? `${hours}h ${remMinutes}m` : `${hours}h`;
-	}
-
-	async function handleMarkExerciseDone(exerciseId: number) {
-		await markExerciseDone(exerciseId);
-		if ($error || typeof window === 'undefined') return;
-
-		window.requestAnimationFrame(() => {
-			exerciseComposerTarget?.scrollIntoView?.({
-				behavior: 'smooth',
-				block: 'center'
-			});
-		});
+		await c.startSessionFromTemplate(templateId);
+		// `c.error` is the raw store, so peek via $- in the template; here we just close optimistically.
+		templatePickerOpen = false;
 	}
 </script>
 
-<div class="space-y-6">
+<div class="page">
 	{#if $notice || $pendingSyncCount}
-		<div
-			class="card variant-glass-surface p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+		<Notice
+			tone="info"
+			action={$pendingSyncCount
+				? {
+						label: 'Sync now',
+						onclick: c.syncPendingSessions,
+						disabled: $loading || $offlineMode
+					}
+				: undefined}
 		>
-			<div class="text-sm">
-				{#if $notice}{$notice}{/if}
-				{#if $pendingSyncCount}
-					<span class="opacity-80">
-						&nbsp;•&nbsp;{$pendingSyncCount} change{$pendingSyncCount === 1 ? '' : 's'} pending sync
-					</span>
-				{/if}
-			</div>
+			{#if $notice}{$notice}{/if}
 			{#if $pendingSyncCount}
-				<button
-					type="button"
-					class="btn btn-sm variant-filled-secondary w-full sm:w-auto"
-					on:click={syncPendingSessions}
-					disabled={$loading || $offlineMode}
-				>
-					Sync now
-				</button>
+				<span style="opacity: 0.8;">
+					{#if $notice}&nbsp;·&nbsp;{/if}
+					{$pendingSyncCount} change{$pendingSyncCount === 1 ? '' : 's'} pending sync
+				</span>
 			{/if}
-		</div>
+		</Notice>
 	{/if}
 
 	{#if $error}
-		<div class="alert variant-filled-error">{$error}</div>
+		<Notice tone="error">{$error}</Notice>
 	{/if}
 
-	<header
-		class="relative overflow-hidden rounded-2xl border border-surface-200/50 dark:border-surface-700/50 bg-gradient-to-br from-primary-500/10 via-transparent to-tertiary-500/10 p-5 sm:p-6"
-	>
-		<div
-			class="pointer-events-none absolute -top-24 -right-24 size-72 rounded-full blur-3xl bg-primary-500/15"
-		></div>
-		<div
-			class="pointer-events-none absolute -bottom-24 -left-24 size-72 rounded-full blur-3xl bg-secondary-500/15"
-		></div>
-
-		<div class="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-			<div class="space-y-1">
-				<h1 class="text-3xl sm:text-4xl font-black tracking-tight">Today</h1>
-				<p class="text-sm sm:text-base opacity-80 max-w-prose">
-					Log your current session with quick notes per exercise — and keep the last two sessions
-					visible for instant recall.
-				</p>
-			</div>
-
-			<div class="flex flex-col sm:items-end gap-2">
-				{#if $currentSession}
-					<div class="text-sm opacity-80">
-						Started {formatTime($currentSession.startedAt)} • {formatDateRelative(
-							$currentSession.startedAt
-						)}
-					</div>
-					<div class="flex gap-2 w-full sm:w-auto">
-						<button
-							type="button"
-							class="btn variant-soft-error flex-1 sm:flex-initial"
-							on:click={cancelSession}
-							disabled={$loading}
-						>
-							Cancel
-						</button>
-						<button
-							type="button"
-							class="btn variant-filled-primary flex-1 sm:flex-initial"
-							on:click={openEndModal}
-							disabled={$loading}
-						>
-							End session
-						</button>
-					</div>
-				{:else}
-					<div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-						<button
-							type="button"
-							class="btn variant-filled-primary w-full sm:w-auto"
-							on:click={() => startSession('empty')}
-							disabled={$loading}
-						>
-							Start session
-						</button>
-						<button
-							type="button"
-							class="btn variant-soft w-full sm:w-auto"
-							on:click={openTemplatePicker}
-							disabled={$loading || $offlineMode}
-						>
-							Use template
-						</button>
-						{#if showDemoAction}
-							<button
-								type="button"
-								class="btn variant-soft w-full sm:w-auto"
-								on:click={() => startSession('demo')}
-								disabled={$loading}
-							>
-								Load demo
-							</button>
-						{/if}
-					</div>
-				{/if}
-			</div>
-		</div>
-
-		{#if $currentSession}
-			<div class="relative mt-5 grid gap-3 grid-cols-2 sm:grid-cols-4">
-				<div class="card variant-glass-surface p-3">
-					<div class="text-xs font-semibold opacity-70">Elapsed</div>
-					<div class="text-lg font-bold">{$elapsedLabel}</div>
-				</div>
-				<div class="card variant-glass-surface p-3">
-					<div class="text-xs font-semibold opacity-70">Exercises</div>
-					<div class="text-lg font-bold">{$currentSession.exercises.length}</div>
-				</div>
-				<div class="card variant-glass-surface p-3">
-					<div class="text-xs font-semibold opacity-70">Sets</div>
-					<div class="text-lg font-bold">{$totalSets}</div>
-				</div>
-				<div class="card variant-glass-surface p-3">
-					<div class="text-xs font-semibold opacity-70">
-						{$totalVolumeKg > 0 ? 'Volume' : $totalDurationSeconds > 0 ? 'Time' : 'Volume'}
-					</div>
-					<div class="text-lg font-bold">
-						{$totalVolumeKg > 0
-							? `${Math.round($totalVolumeKg)} kg`
-							: $totalDurationSeconds > 0
-								? formatSetDuration($totalDurationSeconds)
-								: '0 kg'}
-					</div>
-					{#if $totalVolumeKg > 0 && $totalDurationSeconds > 0}
-						<div class="text-xs opacity-65">{formatSetDuration($totalDurationSeconds)} timed</div>
-					{/if}
-				</div>
-			</div>
-		{/if}
-	</header>
+	{#if $currentSession}
+		<SessionHero
+			elapsedLabel={$elapsedLabel}
+			exerciseCount={$currentSession.exercises.length}
+			exercisesPlanned={$plannedTemplateExercises.length + $currentSession.exercises.length}
+			setCount={$totalSets}
+			volumeKg={$totalVolumeKg}
+			durationSeconds={$totalDurationSeconds}
+			startedAtLabel={`${formatTime($currentSession.startedAt)} · ${formatDateRelative($currentSession.startedAt)}`}
+			onCancel={c.cancelSession}
+			onEnd={c.openEndModal}
+			disabled={$loading}
+		/>
+	{:else}
+		<NoSessionState
+			{showDemoAction}
+			offlineMode={$offlineMode}
+			loading={$loading}
+			onStart={() => c.startSession('empty')}
+			onUseTemplate={openTemplatePicker}
+			onDemo={() => c.startSession('demo')}
+		/>
+	{/if}
 
 	{#if templatePickerOpen && !$currentSession}
-		<section class="card variant-glass-surface p-4 space-y-3">
-			<div class="flex items-start justify-between gap-3">
-				<div>
-					<h2 class="text-lg font-semibold">Start from template</h2>
-					<p class="text-sm opacity-75">
-						Templates preload your exercise plan without carrying over reps or weight.
-					</p>
-				</div>
-				<button
-					type="button"
-					class="btn btn-sm variant-soft"
-					on:click={() => (templatePickerOpen = false)}
-					disabled={$loading}
-				>
-					Close
-				</button>
-			</div>
+		<Card>
+			{#snippet title()}Start from template <em>— preloads exercise plan</em>{/snippet}
+			{#snippet actions()}
+				<Btn variant="soft" size="sm" onclick={() => (templatePickerOpen = false)}>Close</Btn>
+			{/snippet}
 
 			{#if templateError}
-				<div class="alert variant-filled-error">{templateError}</div>
+				<Notice tone="error">{templateError}</Notice>
 			{:else if templateLoading}
-				<div class="text-sm opacity-70">Loading templates…</div>
+				<div class="muted">Loading templates…</div>
 			{:else if templates.length === 0}
-				<div class="card variant-ghost p-4 text-sm opacity-80">
-					No templates yet. Create one from the Templates page or save a past workout as a template.
-				</div>
+				<div class="muted">No templates yet. Create one from the Plans page first.</div>
 			{:else}
-				<div class="grid gap-3 sm:grid-cols-2">
-					{#each templates as template (template.id)}
+				<div class="t-grid">
+					{#each templates as t (t.id)}
 						<button
+							class="t-card"
 							type="button"
-							class="text-left rounded-2xl border border-surface-200/50 bg-surface-50/70 p-4 transition hover:border-primary-500/50 hover:bg-surface-100/70 dark:border-surface-700/50 dark:bg-surface-950/30"
-							on:click={() => handleStartFromTemplate(template.id)}
+							onclick={() => handleStartFromTemplate(t.id)}
 							disabled={$loading}
 						>
-							<div class="font-semibold">{template.name}</div>
-							<div class="text-sm opacity-70">
-								{template.exercise_count} exercise{template.exercise_count === 1 ? '' : 's'}
+							<div class="t-name">{t.name}</div>
+							<div class="t-count">
+								{t.exercise_count} exercise{t.exercise_count === 1 ? '' : 's'}
 							</div>
 						</button>
 					{/each}
 				</div>
 			{/if}
-		</section>
+		</Card>
 	{/if}
 
-	<div class="grid gap-6 md:grid-cols-12">
-		<section class="md:col-span-7 lg:col-span-8 space-y-4 min-w-0">
-			{#if $currentSession}
-				<div class="card variant-glass-surface p-4 space-y-2">
-					<label class="block">
-						<span class="text-sm font-semibold opacity-80">Session notes</span>
-						<textarea
-							class="textarea mt-1"
-							rows="2"
-							placeholder="How did it feel? Any cues to remember…"
-							bind:value={$sessionNotes}
-						></textarea>
-					</label>
+	{#if $currentSession}
+		<Card>
+			<label class="notes-label">
+				<span class="lbl">Session notes</span>
+				<textarea
+					bind:value={$sessionNotes}
+					rows="2"
+					placeholder="How did it feel? Any cues to remember…"
+				></textarea>
+			</label>
+		</Card>
+
+		{#if $currentSession.exercises.length === 0}
+			<Card>
+				<div class="empty">
+					{#if $plannedTemplateExercises.length > 0}
+						<div class="t">Start your template plan</div>
+						<p>Tap an exercise from your template plan below.</p>
+					{:else}
+						<div class="t">Add your first exercise</div>
+						<p>Use the search below or tap a quick pick from your recent sessions.</p>
+					{/if}
 				</div>
-
-				{#if $currentSession.exercises.length === 0}
-					<div class="card variant-ghost p-6 text-center space-y-2">
-						<div class="text-lg font-semibold">
-							{$plannedTemplateExercises.length > 0
-								? 'Start your template plan'
-								: 'Add your first exercise'}
-						</div>
-						<p class="opacity-70 text-sm max-w-prose mx-auto">
-							{$plannedTemplateExercises.length > 0
-								? 'Start an exercise from your template plan below.'
-								: 'Use the search below or tap a quick pick from your recent sessions.'}
-						</p>
-					</div>
-				{:else}
-					<div class="space-y-3">
-						{#each $currentSession.exercises as ex (ex.id)}
-							<SessionExercise
-								exercise={ex}
-								isOpen={$openExerciseIds.includes(ex.id)}
-								disabled={$loading}
-								lastTime={getLastTimeForExercise(ex.name)}
-								on:toggle={() => toggleExercise(ex.id)}
-								on:delete={() => removeExercise(ex.id)}
-								on:markDone={() => handleMarkExerciseDone(ex.id)}
-								on:addSet={(e) =>
-									addSet(
-										ex.id,
-										e.detail.reps,
-										e.detail.weight,
-										e.detail.weightLeft,
-										e.detail.weightRight,
-										e.detail.durationSeconds
-									)}
-								on:updateNotes={(e) => updateExerciseNotes(ex.id, e.detail.notes)}
-								on:addSetting={(e) => addExerciseSetting(ex.id, e.detail.key, e.detail.value)}
-								on:removeSetting={(e) => removeExerciseSetting(ex.id, e.detail.id)}
-								on:updateSetting={(e) =>
-									updateExerciseSetting(ex.id, e.detail.id, e.detail.key, e.detail.value)}
-								on:togglePerSideWeight={(e) => toggleExercisePerSideWeight(ex.id, e.detail.enabled)}
-								on:toggleSplitWeight={(e) => toggleExerciseSplitWeight(ex.id, e.detail.enabled)}
-								on:updateTracking={(e) => updateExerciseTracking(ex.id, e.detail)}
-							/>
-						{/each}
-					</div>
-				{/if}
-
-				<div bind:this={exerciseComposerTarget}>
-					<ExerciseComposer
-						bind:query={$exerciseQuery}
-						disabled={$loading || !$currentSession}
-						suggestions={$suggestions}
-						templatePicks={$plannedTemplateExercises}
-						quickPicks={$quickPicks}
-						on:add={(e) => addExercise(e.detail.name)}
-						on:addTemplateExercise={(e) => startPlannedTemplateExercise(e.detail.id)}
+			</Card>
+		{:else}
+			<div class="ex-list">
+				{#each $currentSession.exercises as ex (ex.id)}
+					<SessionExercise
+						exercise={ex}
+						isOpen={$openExerciseIds.includes(ex.id)}
+						disabled={$loading}
+						lastTime={c.getLastTimeForExercise(ex.name)}
+						onToggle={() => c.toggleExercise(ex.id)}
+						onDelete={() => c.removeExercise(ex.id)}
+						onMarkDone={() => c.markExerciseDone(ex.id)}
+						onAddSet={(p) =>
+							c.addSet(ex.id, p.reps, p.weight, p.weightLeft, p.weightRight, p.durationSeconds)}
+						onUpdateSet={(setId, p) =>
+							c.updateSet(ex.id, setId, {
+								reps: p.reps,
+								weight: p.weight,
+								weightLeft: p.weightLeft,
+								weightRight: p.weightRight,
+								durationSeconds: p.durationSeconds
+							})}
+						onRemoveSet={(setId) => c.removeSet(ex.id, setId)}
+						onUpdateNotes={(n) => c.updateExerciseNotes(ex.id, n)}
+						onAddSetting={(k, v) => c.addExerciseSetting(ex.id, k, v)}
+						onRemoveSetting={(id) => c.removeExerciseSetting(ex.id, id)}
+						onUpdateSetting={(id, k, v) => c.updateExerciseSetting(ex.id, id, k, v)}
+						onTogglePerSideWeight={(e) => c.toggleExercisePerSideWeight(ex.id, e)}
+						onToggleSplitWeight={(e) => c.toggleExerciseSplitWeight(ex.id, e)}
+						onUpdateTracking={(t) => c.updateExerciseTracking(ex.id, t)}
 					/>
-				</div>
-			{:else}
-				<!-- no extra landing card -->
-			{/if}
-		</section>
+				{/each}
+			</div>
+		{/if}
 
-		<aside class="md:col-span-5 lg:col-span-4 min-w-0">
-			<RecentSessions
-				sessions={$recentSessions}
-				canAdd={Boolean($currentSession) && !$loading}
-				disabled={$loading || !$currentSession}
-				on:addExercise={(e) => addExercise(e.detail.name, e.detail)}
-			/>
-		</aside>
-	</div>
+		<ExerciseComposer
+			bind:query={$exerciseQuery}
+			suggestions={$suggestions}
+			templatePicks={$plannedTemplateExercises}
+			quickPicks={$quickPicks}
+			disabled={$loading}
+			onAdd={(name) => c.addExercise(name)}
+			onAddTemplateExercise={(id) => c.startPlannedTemplateExercise(id)}
+		/>
+	{/if}
+
+	<RecentSessions
+		sessions={$recentSessions}
+		canAdd={Boolean($currentSession) && !$loading}
+		disabled={$loading || !$currentSession}
+		onAddExercise={(p) =>
+			c.addExercise(p.name, {
+				perSideWeight: p.perSideWeight,
+				splitWeight: p.splitWeight,
+				tracksReps: p.tracksReps,
+				tracksTime: p.tracksTime,
+				tracksWeight: p.tracksWeight,
+				settings: p.settings
+			})}
+	/>
 
 	<EndSessionModal
 		open={$endModalOpen}
 		bind:notes={$endNotes}
 		bind:mood={$endMood}
 		disabled={$loading}
-		on:cancel={() => ($endModalOpen = false)}
-		on:submit={submitEndSession}
+		onCancel={() => endModalOpen.set(false)}
+		onSubmit={c.submitEndSession}
 	/>
 </div>
+
+<style>
+	.page {
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+	}
+
+	.notes-label {
+		display: block;
+	}
+	.lbl {
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
+		letter-spacing: 0.18em;
+		text-transform: uppercase;
+		color: var(--ink-soft);
+	}
+	textarea {
+		margin-top: 8px;
+		width: 100%;
+		min-height: 56px;
+		resize: vertical;
+		background: transparent;
+		border: 0;
+		outline: 0;
+		color: var(--ink);
+		font:
+			500 14px/1.45 'Onest',
+			system-ui,
+			sans-serif;
+	}
+
+	.muted {
+		opacity: 0.7;
+		font:
+			500 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
+	}
+
+	.empty {
+		text-align: center;
+		padding: 14px 0;
+	}
+	.empty .t {
+		font:
+			800 18px/1 'Onest',
+			system-ui,
+			sans-serif;
+		letter-spacing: -0.015em;
+	}
+	.empty p {
+		margin: 6px 0 0;
+		font:
+			500 13px/1.5 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--ink-soft);
+	}
+
+	.ex-list {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+	}
+
+	.t-grid {
+		margin-top: 4px;
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 8px;
+	}
+	.t-card {
+		text-align: left;
+		background: var(--card-3);
+		border: 1px solid var(--line);
+		border-radius: 14px;
+		padding: 12px;
+		cursor: pointer;
+		color: inherit;
+	}
+	.t-card:hover {
+		border-color: var(--clay);
+	}
+	.t-name {
+		font:
+			800 14px/1.1 'Onest',
+			system-ui,
+			sans-serif;
+	}
+	.t-count {
+		margin-top: 4px;
+		font:
+			500 12px/1 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--ink-soft);
+	}
+</style>

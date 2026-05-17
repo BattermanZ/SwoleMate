@@ -3,11 +3,12 @@
 	import { auth } from '$lib/auth';
 	import { logger } from '$lib/logger';
 	import { get } from 'svelte/store';
+	import { Btn, Card, Logo } from '$lib/components/ui';
 
-	let username = '';
-	let password = '';
-	let loading = false;
-	let error: string | null = null;
+	let username = $state('');
+	let password = $state('');
+	let loading = $state(false);
+	let error = $state<string | null>(null);
 
 	async function submit() {
 		error = null;
@@ -25,52 +26,145 @@
 	}
 </script>
 
-<div class="mx-auto w-full max-w-md space-y-4">
-	<header class="space-y-1 text-center">
-		<h1 class="text-3xl font-black tracking-tight">Sign in</h1>
-		<p class="text-sm opacity-75">Use your SwoleMate username and password.</p>
+<main class="login">
+	<header>
+		<div class="logo-wrap"><Logo size={40} /></div>
+		<h1>Welcome <em>back.</em></h1>
+		<p>Sign in with your SwoleMate username and password.</p>
 	</header>
 
-	<div class="card variant-glass-surface p-4 space-y-4">
+	<Card>
 		<form
-			class="space-y-4"
-			on:submit|preventDefault={() => {
+			onsubmit={(e) => {
+				e.preventDefault();
 				void submit();
 			}}
 		>
-			<label class="space-y-1 block">
-				<span class="text-sm font-semibold">Username</span>
+			<label>
+				<span class="lbl">Username</span>
 				<input
-					class="input w-full"
+					bind:value={username}
 					autocomplete="username"
 					inputmode="text"
-					bind:value={username}
 					disabled={loading}
+					required
 				/>
 			</label>
-
-			<label class="space-y-1 block">
-				<span class="text-sm font-semibold">Password</span>
+			<label>
+				<span class="lbl">Password</span>
 				<input
 					type="password"
-					class="input w-full"
-					autocomplete="current-password"
 					bind:value={password}
+					autocomplete="current-password"
 					disabled={loading}
+					required
 				/>
 			</label>
-
-			{#if error}
-				<div class="text-sm text-error-500">{error}</div>
-			{/if}
-
-			<button type="submit" class="btn variant-filled-primary w-full" disabled={loading}>
+			{#if error}<div class="err">{error}</div>{/if}
+			<Btn variant="primary" type="submit" disabled={loading}>
 				{loading ? 'Signing in…' : 'Sign in'}
-			</button>
+			</Btn>
 		</form>
+		<p class="hint">
+			When offline, you can still log locally; sign in again when you're back online to sync.
+		</p>
+	</Card>
+</main>
 
-		<div class="text-xs opacity-70">
-			When offline, you can still log locally; sign in again when you’re back online to sync.
-		</div>
-	</div>
-</div>
+<style>
+	.login {
+		min-height: 100dvh;
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		align-items: center;
+		padding: 32px 18px;
+	}
+	header {
+		text-align: center;
+		margin-bottom: 18px;
+		max-width: 420px;
+	}
+	.logo-wrap {
+		display: flex;
+		justify-content: center;
+		margin: 0 auto 14px;
+	}
+	h1 {
+		margin: 0;
+		font:
+			800 32px/1 'Onest',
+			system-ui,
+			sans-serif;
+		letter-spacing: -0.025em;
+	}
+	h1 em {
+		font: italic 400 32px/1 'Instrument Serif';
+		color: var(--clay-text);
+	}
+	p {
+		margin: 8px 0 0;
+		font:
+			500 14px/1.4 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--ink-soft);
+	}
+	form {
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+	}
+	form :global(button) {
+		width: 100%;
+	}
+	label {
+		display: block;
+	}
+	.lbl {
+		display: block;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
+		letter-spacing: 0.18em;
+		text-transform: uppercase;
+		color: var(--ink-soft);
+		margin-bottom: 6px;
+	}
+	input {
+		width: 100%;
+		background: var(--card-3);
+		border: 1px solid var(--line);
+		border-radius: 10px;
+		padding: 12px 14px;
+		font:
+			500 14px/1.2 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--ink);
+		outline: 0;
+	}
+	input:focus {
+		border-color: var(--clay);
+		box-shadow: 0 0 0 3px rgba(255, 94, 31, 0.16);
+	}
+	.err {
+		font:
+			600 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--clay-text);
+	}
+	.hint {
+		margin: 12px 0 0;
+		font: italic 400 12px/1.4 'Instrument Serif';
+		color: var(--ink-soft);
+		text-align: center;
+	}
+
+	.login :global(.card) {
+		max-width: 420px;
+		width: 100%;
+	}
+</style>

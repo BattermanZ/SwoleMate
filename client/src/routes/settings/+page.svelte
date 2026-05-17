@@ -9,50 +9,51 @@
 	} from '$lib/api';
 	import { auth } from '$lib/auth';
 	import { readDemoModePreference, writeDemoModePreference } from '$lib/preferences/demoMode';
+	import { Btn, Card, Chk, Badge, PageHero } from '$lib/components/ui';
 
 	const authState = auth.state;
-	let currentPassword = '';
-	let newPassword = '';
-	let confirmPassword = '';
-	let accountLoading = false;
-	let accountError: string | null = null;
-	let accountNotice: string | null = null;
-	let mcpTokens: McpTokenSummary[] = [];
-	let activeMcpTokens: McpTokenSummary[] = [];
-	let mcpLoading = false;
-	let mcpError: string | null = null;
-	let mcpNotice: string | null = null;
-	let creatingMcpToken = false;
-	let revokingTokenId: number | null = null;
-	let rotatingTokenId: number | null = null;
-	let newTokenName = '';
-	let newTokenAccess: 'read' | 'write' = 'read';
-	let newTokenExpiryDays = 30;
-	let createdToken: {
+
+	// Account
+	let currentPassword = $state('');
+	let newPassword = $state('');
+	let confirmPassword = $state('');
+	let accountLoading = $state(false);
+	let accountError = $state<string | null>(null);
+	let accountNotice = $state<string | null>(null);
+
+	// MCP tokens
+	let mcpTokens = $state<McpTokenSummary[]>([]);
+	let mcpLoading = $state(false);
+	let mcpError = $state<string | null>(null);
+	let mcpNotice = $state<string | null>(null);
+	let creatingMcpToken = $state(false);
+	let revokingTokenId = $state<number | null>(null);
+	let rotatingTokenId = $state<number | null>(null);
+	let newTokenName = $state('');
+	let newTokenAccess = $state<'read' | 'write'>('read');
+	let newTokenExpiryDays = $state(30);
+	let createdToken = $state<{
 		name: string;
 		token: string;
 		scopes: string[];
 		expires_at: string | null;
-	} | null = null;
-	let demoModeEnabled = false;
+	} | null>(null);
 
-	function handleDemoModeToggle(enabled: boolean) {
-		demoModeEnabled = enabled;
-		writeDemoModePreference(enabled);
-	}
+	let demoModeEnabled = $state(false);
+	let mcpTokensLoaded = $state(false);
+
+	let activeMcpTokens = $derived(mcpTokens.filter((t) => !t.revoked_at));
 
 	function mcpScopesForAccess(access: 'read' | 'write'): string[] {
-		if (access === 'write') {
-			return ['workouts.read', 'progress.read', 'workouts.write'];
-		}
+		if (access === 'write') return ['workouts.read', 'progress.read', 'workouts.write'];
 		return ['workouts.read', 'progress.read'];
 	}
 
 	function formatDateTime(value: string | null): string {
 		if (!value) return 'Never';
-		const date = new Date(value);
-		if (!Number.isFinite(date.getTime())) return value;
-		return date.toLocaleString([], {
+		const d = new Date(value);
+		if (!Number.isFinite(d.getTime())) return value;
+		return d.toLocaleString([], {
 			year: 'numeric',
 			month: 'short',
 			day: 'numeric',
@@ -70,130 +71,15 @@
 			mcpTokens = [];
 			return;
 		}
-
 		mcpLoading = true;
 		mcpError = null;
 		try {
 			mcpTokens = await getMcpTokens();
+			mcpTokensLoaded = true;
 		} catch (e) {
 			mcpError = e instanceof Error ? e.message : 'Failed to load MCP tokens';
 		} finally {
 			mcpLoading = false;
-		}
-	}
-
-	async function handleCreateMcpToken() {
-		mcpError = null;
-		mcpNotice = null;
-		createdToken = null;
-		if ($authState.status !== 'authenticated' || !$authState.user) {
-			mcpError = 'Sign in to create MCP access tokens.';
-			return;
-		}
-		if ($authState.offline) {
-			mcpError = 'Offline mode: create MCP access tokens when online.';
-			return;
-		}
-		if (!newTokenName.trim()) {
-			mcpError = 'Token name is required.';
-			return;
-		}
-		if (
-			!Number.isFinite(newTokenExpiryDays) ||
-			newTokenExpiryDays < 1 ||
-			newTokenExpiryDays > 365
-		) {
-			mcpError = 'Expiry must be between 1 and 365 days.';
-			return;
-		}
-
-		creatingMcpToken = true;
-		try {
-			const created = await createMcpToken({
-				name: newTokenName.trim(),
-				scopes: mcpScopesForAccess(newTokenAccess),
-				expires_in_days: newTokenExpiryDays
-			});
-			createdToken = {
-				name: created.name,
-				token: created.token,
-				scopes: created.scopes,
-				expires_at: created.expires_at
-			};
-			newTokenName = '';
-			newTokenAccess = 'read';
-			newTokenExpiryDays = 30;
-			mcpNotice = 'MCP token created. Copy it now; it will not be shown again.';
-			await loadMcpTokens();
-		} catch (e) {
-			mcpError = e instanceof Error ? e.message : 'Failed to create MCP token';
-		} finally {
-			creatingMcpToken = false;
-		}
-	}
-
-	async function copyCreatedToken() {
-		if (typeof navigator === 'undefined' || !createdToken) return;
-		try {
-			await navigator.clipboard.writeText(createdToken.token);
-			mcpNotice = 'MCP token copied to clipboard.';
-		} catch {
-			mcpError = 'Failed to copy token. Copy it manually.';
-		}
-	}
-
-	async function handleRevokeMcpToken(token: McpTokenSummary) {
-		if ($authState.status !== 'authenticated' || !$authState.user) return;
-		if ($authState.offline) {
-			mcpError = 'Offline mode: revoke MCP access tokens when online.';
-			return;
-		}
-		if (!confirm(`Revoke MCP token "${token.name}"?`)) return;
-
-		mcpError = null;
-		mcpNotice = null;
-		revokingTokenId = token.id;
-		try {
-			await revokeMcpToken(token.id);
-			mcpNotice = `${token.name} revoked.`;
-			await loadMcpTokens();
-		} catch (e) {
-			mcpError = e instanceof Error ? e.message : 'Failed to revoke MCP token';
-		} finally {
-			revokingTokenId = null;
-		}
-	}
-
-	async function handleRotateMcpToken(token: McpTokenSummary) {
-		if ($authState.status !== 'authenticated' || !$authState.user) return;
-		if ($authState.offline) {
-			mcpError = 'Offline mode: rotate MCP access tokens when online.';
-			return;
-		}
-		if (
-			!confirm(`Rotate MCP token "${token.name}"? The old token will stop working immediately.`)
-		) {
-			return;
-		}
-
-		mcpError = null;
-		mcpNotice = null;
-		createdToken = null;
-		rotatingTokenId = token.id;
-		try {
-			const rotated = await rotateMcpToken(token.id);
-			createdToken = {
-				name: rotated.name,
-				token: rotated.token,
-				scopes: rotated.scopes,
-				expires_at: rotated.expires_at
-			};
-			mcpNotice = `${token.name} rotated. Copy the new token now; the previous token no longer works.`;
-			await loadMcpTokens();
-		} catch (e) {
-			mcpError = e instanceof Error ? e.message : 'Failed to rotate MCP token';
-		} finally {
-			rotatingTokenId = null;
 		}
 	}
 
@@ -205,377 +91,564 @@
 			return;
 		}
 		if (newPassword !== confirmPassword) {
-			accountError = 'New passwords do not match.';
+			accountError = 'New password and confirmation do not match.';
 			return;
 		}
-
 		accountLoading = true;
 		try {
 			await auth.changePassword(currentPassword, newPassword);
-			currentPassword = '';
-			newPassword = '';
-			confirmPassword = '';
 			accountNotice = 'Password updated.';
+			currentPassword = newPassword = confirmPassword = '';
 		} catch (e) {
-			accountError = e instanceof Error ? e.message : 'Failed to change password';
+			accountError = e instanceof Error ? e.message : 'Failed to update password';
 		} finally {
 			accountLoading = false;
 		}
 	}
 
-	onMount(() => {
+	async function handleCreateMcpToken() {
+		mcpError = mcpNotice = null;
+		if (!newTokenName.trim()) {
+			mcpError = 'Token name is required.';
+			return;
+		}
+		creatingMcpToken = true;
+		try {
+			const expires_in_days =
+				newTokenExpiryDays && newTokenExpiryDays > 0 ? newTokenExpiryDays : undefined;
+			const result = await createMcpToken({
+				name: newTokenName.trim(),
+				scopes: mcpScopesForAccess(newTokenAccess),
+				expires_in_days
+			});
+			createdToken = {
+				name: result.name,
+				token: result.token,
+				scopes: result.scopes,
+				expires_at: result.expires_at
+			};
+			newTokenName = '';
+			mcpNotice = 'Token created. Copy it now — it will not be shown again.';
+			await loadMcpTokens();
+		} catch (e) {
+			mcpError = e instanceof Error ? e.message : 'Failed to create token';
+		} finally {
+			creatingMcpToken = false;
+		}
+	}
+
+	async function handleRotateMcpToken(token: McpTokenSummary) {
+		rotatingTokenId = token.id;
+		mcpError = mcpNotice = null;
+		try {
+			const next = await rotateMcpToken(token.id);
+			createdToken = {
+				name: next.name,
+				token: next.token,
+				scopes: next.scopes,
+				expires_at: next.expires_at
+			};
+			mcpNotice = 'Token rotated. Copy the new value now.';
+			await loadMcpTokens();
+		} catch (e) {
+			mcpError = e instanceof Error ? e.message : 'Failed to rotate token';
+		} finally {
+			rotatingTokenId = null;
+		}
+	}
+
+	async function handleRevokeMcpToken(token: McpTokenSummary) {
+		if (!confirm(`Revoke ${token.name}? Clients using it will lose access immediately.`)) return;
+		revokingTokenId = token.id;
+		mcpError = mcpNotice = null;
+		try {
+			await revokeMcpToken(token.id);
+			mcpNotice = 'Token revoked.';
+			await loadMcpTokens();
+		} catch (e) {
+			mcpError = e instanceof Error ? e.message : 'Failed to revoke token';
+		} finally {
+			revokingTokenId = null;
+		}
+	}
+
+	async function copyCreatedToken() {
+		if (!createdToken) return;
+		try {
+			await navigator.clipboard?.writeText(createdToken.token);
+			mcpNotice = 'Token copied to clipboard.';
+		} catch {
+			mcpNotice = 'Could not copy — select the value manually.';
+		}
+	}
+
+	function handleDemoModeToggle(enabled: boolean) {
+		demoModeEnabled = enabled;
+		writeDemoModePreference(enabled);
+	}
+
+	onMount(async () => {
 		demoModeEnabled = readDemoModePreference();
-		void loadMcpTokens();
 	});
 
-	$: activeMcpTokens = mcpTokens.filter((token) => !token.revoked_at);
+	$effect(() => {
+		if (
+			$authState.status === 'authenticated' &&
+			!$authState.offline &&
+			!mcpTokensLoaded &&
+			!mcpLoading
+		) {
+			void loadMcpTokens();
+		}
+	});
 </script>
 
-<div class="space-y-6">
-	<header
-		class="relative overflow-hidden rounded-2xl border border-surface-200/50 dark:border-surface-700/50 bg-gradient-to-br from-primary-500/10 via-transparent to-tertiary-500/10 p-5 sm:p-6"
-	>
-		<div
-			class="pointer-events-none absolute -top-24 -right-24 size-72 rounded-full blur-3xl bg-primary-500/15"
-		></div>
-		<div
-			class="pointer-events-none absolute -bottom-24 -left-24 size-72 rounded-full blur-3xl bg-secondary-500/15"
-		></div>
+<div class="page">
+	<PageHero kicker="► Settings">
+		{#snippet title()}Your account, <em>tuned.</em>{/snippet}
+		{#snippet sub()}Password, demo mode, and the MCP tokens AI tools use to reach SwoleMate.{/snippet}
+	</PageHero>
 
-		<div class="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-			<div class="space-y-1">
-				<h1 class="text-3xl sm:text-4xl font-black tracking-tight">Settings</h1>
-				<p class="text-sm sm:text-base opacity-80 max-w-prose">
-					Manage your account and the MCP tokens your AI tools use to connect to SwoleMate.
-				</p>
+	<Card>
+		{#snippet title()}Account{/snippet}
+		{#snippet lede()}Sessions stay signed in for a long time so offline mode keeps working.{/snippet}
+
+		{#if $authState.status === 'authenticated' && $authState.user?.must_change_password}
+			<div class="warn">Password change required. Update your password before using the app.</div>
+		{/if}
+
+		{#if $authState.user}
+			<div class="badges">
+				<Badge tone="pr">{$authState.user.username}</Badge>
+				<Badge tone="soft">{$authState.user.role}</Badge>
+				{#if $authState.offline}<Badge tone="warn">Offline</Badge>{/if}
 			</div>
-			<div class="flex sm:justify-end">
-				<a href="/help" class="btn variant-soft">Help & troubleshooting →</a>
-			</div>
-		</div>
-	</header>
+		{:else}
+			<div class="muted">Not signed in.</div>
+		{/if}
 
-	<div class="grid gap-6 md:grid-cols-12">
-		<section class="md:col-span-7 space-y-4 min-w-0">
-			<div class="card variant-glass-surface p-4 space-y-3">
-				<div>
-					<h2 class="text-lg font-semibold tracking-tight">AI access</h2>
-					<p class="text-sm opacity-70">
-						Create scoped MCP tokens for AI tools. Tokens are shown once, scoped, and can be rotated
-						or revoked from here.
-					</p>
-				</div>
-
-				<form
-					class="space-y-3"
-					on:submit|preventDefault={() => {
-						void handleCreateMcpToken();
-					}}
-				>
-					<label class="space-y-1 block">
-						<span class="text-sm font-semibold">Token name</span>
-						<input
-							class="input w-full"
-							placeholder="Claude Desktop"
-							bind:value={newTokenName}
-							disabled={creatingMcpToken}
-						/>
-					</label>
-
-					<div class="grid gap-3 sm:grid-cols-2">
-						<label class="space-y-1 block">
-							<span class="text-sm font-semibold">Access level</span>
-							<select class="select w-full" bind:value={newTokenAccess} disabled={creatingMcpToken}>
-								<option value="read">Read only</option>
-								<option value="write">Read and write</option>
-							</select>
-						</label>
-						<label class="space-y-1 block">
-							<span class="text-sm font-semibold">Expiry (days)</span>
-							<input
-								type="number"
-								min="1"
-								max="365"
-								class="input w-full"
-								bind:value={newTokenExpiryDays}
-								disabled={creatingMcpToken}
-							/>
-						</label>
-					</div>
-
-					<div class="text-xs opacity-70">
-						Use <code>Authorization: Bearer smcp_...</code> with your MCP client. Default to read-only
-						unless the tool needs write access.
-					</div>
-					{#if newTokenAccess === 'write'}
-						<div
-							class="rounded-xl border border-warning-200/60 bg-warning-50/70 p-3 text-xs dark:border-warning-900/60 dark:bg-warning-950/20"
-						>
-							Write tokens can change workout data. A shorter expiry such as 7 days is recommended,
-							but the default remains 30 days unless you change it.
-						</div>
-					{/if}
-
-					{#if mcpError}
-						<div class="text-sm text-error-500">{mcpError}</div>
-					{/if}
-					{#if mcpNotice}
-						<div class="text-sm text-success-500">{mcpNotice}</div>
-					{/if}
-
-					<div class="flex flex-col sm:flex-row gap-2">
-						<button
-							type="submit"
-							class="btn variant-filled-primary flex-1"
-							disabled={creatingMcpToken || $authState.status !== 'authenticated'}
-						>
-							{creatingMcpToken ? 'Creating…' : 'Create MCP token'}
-						</button>
-						<button
-							type="button"
-							class="btn variant-soft flex-1"
-							on:click={() => {
-								void loadMcpTokens();
-							}}
-							disabled={mcpLoading || $authState.status !== 'authenticated'}
-						>
-							{mcpLoading ? 'Refreshing…' : 'Refresh tokens'}
-						</button>
-					</div>
-				</form>
-
-				{#if createdToken}
-					<div
-						class="rounded-xl border border-success-200/60 bg-success-50/70 p-3 dark:border-success-900/60 dark:bg-success-950/20 space-y-2"
-					>
-						<div class="flex items-start justify-between gap-3">
-							<div>
-								<div class="font-semibold">Copy this token now</div>
-								<div class="text-sm opacity-80">
-									It will not be shown again after you leave this page.
-								</div>
-							</div>
-							<button type="button" class="btn variant-soft-primary" on:click={copyCreatedToken}>
-								Copy token
-							</button>
-						</div>
-						<code
-							class="block overflow-x-auto rounded-lg bg-surface-950/90 p-3 text-xs text-surface-50"
-						>
-							{createdToken.token}
-						</code>
-						<div class="flex flex-wrap gap-2">
-							{#each createdToken.scopes as scope}
-								<span class="badge variant-soft-primary">{scope}</span>
-							{/each}
-						</div>
-						<div class="text-xs opacity-75">
-							{createdToken.name} · expires {formatDateTime(createdToken.expires_at)}
-						</div>
-					</div>
-				{/if}
-			</div>
-
-			<div class="card variant-glass-surface p-4 space-y-3">
-				<div>
-					<h2 class="text-lg font-semibold tracking-tight">Account</h2>
-					<p class="text-sm opacity-70">
-						Sessions stay signed in for a long time so offline mode keeps working. You can still log
-						out manually.
-					</p>
-				</div>
-
-				{#if $authState.status === 'authenticated' && $authState.user?.must_change_password}
-					<div class="alert variant-filled-warning">
-						Password change required. Update your password before using the app.
-					</div>
-				{/if}
-
-				{#if $authState.user}
-					<div class="flex flex-wrap items-center gap-2">
-						<span class="badge variant-filled-primary">{$authState.user.username}</span>
-						<span class="badge variant-soft">{$authState.user.role}</span>
-						{#if $authState.offline}
-							<span class="badge variant-soft-warning">Offline</span>
-						{/if}
-					</div>
-				{:else}
-					<div class="text-sm opacity-75">Not signed in.</div>
-				{/if}
-
-				<form
-					class="space-y-3"
-					on:submit|preventDefault={() => {
-						void handleChangePassword();
-					}}
-				>
-					<div class="grid gap-3 sm:grid-cols-2">
-						<label class="space-y-1 block">
-							<span class="text-sm font-semibold">Current password</span>
-							<input
-								type="password"
-								class="input w-full"
-								autocomplete="current-password"
-								bind:value={currentPassword}
-								disabled={accountLoading || !$authState.user}
-							/>
-						</label>
-						<label class="space-y-1 block">
-							<span class="text-sm font-semibold">New password</span>
-							<input
-								type="password"
-								class="input w-full"
-								autocomplete="new-password"
-								bind:value={newPassword}
-								disabled={accountLoading || !$authState.user}
-							/>
-						</label>
-					</div>
-
-					<label class="space-y-1 block">
-						<span class="text-sm font-semibold">Confirm new password</span>
-						<input
-							type="password"
-							class="input w-full"
-							autocomplete="new-password"
-							bind:value={confirmPassword}
-							disabled={accountLoading || !$authState.user}
-						/>
-					</label>
-
-					{#if accountError}
-						<div class="text-sm text-error-500">{accountError}</div>
-					{/if}
-					{#if accountNotice}
-						<div class="text-sm text-success-500">{accountNotice}</div>
-					{/if}
-
-					<div class="flex flex-col sm:flex-row gap-2">
-						<button
-							type="submit"
-							class="btn variant-filled-primary flex-1"
-							disabled={accountLoading || !$authState.user}
-						>
-							{accountLoading ? 'Updating…' : 'Change password'}
-						</button>
-						<button
-							type="button"
-							class="btn variant-soft-error flex-1"
-							disabled={accountLoading || !$authState.user}
-							on:click={() => auth.logout()}
-						>
-							Log out
-						</button>
-					</div>
-				</form>
-			</div>
-
-			<div class="card variant-glass-surface p-4 space-y-3">
-				<div>
-					<h2 class="text-lg font-semibold tracking-tight">Workout tools</h2>
-					<p class="text-sm opacity-70">
-						Keep demo session tools hidden unless you want quick access for testing or walkthroughs.
-					</p>
-				</div>
-
-				<label
-					class="flex items-start justify-between gap-3 rounded-xl border border-surface-200/50 bg-surface-50/60 p-3 dark:border-surface-700/50 dark:bg-surface-950/30"
-				>
-					<div class="space-y-1">
-						<div class="font-semibold">Show demo session tools</div>
-						<p class="text-sm opacity-70">
-							Add the demo session action back to the Today page header.
-						</p>
-					</div>
+		<form
+			class="form"
+			onsubmit={(e) => {
+				e.preventDefault();
+				void handleChangePassword();
+			}}
+		>
+			<div class="grid-2">
+				<label>
+					<span class="lbl">Current password</span>
 					<input
-						type="checkbox"
-						class="toggle"
-						aria-label="Show demo session tools"
-						checked={demoModeEnabled}
-						on:change={(e) => handleDemoModeToggle(e.currentTarget.checked)}
+						type="password"
+						bind:value={currentPassword}
+						autocomplete="current-password"
+						disabled={accountLoading || !$authState.user}
+					/>
+				</label>
+				<label>
+					<span class="lbl">New password</span>
+					<input
+						type="password"
+						bind:value={newPassword}
+						autocomplete="new-password"
+						disabled={accountLoading || !$authState.user}
 					/>
 				</label>
 			</div>
-		</section>
+			<label>
+				<span class="lbl">Confirm new password</span>
+				<input
+					type="password"
+					bind:value={confirmPassword}
+					autocomplete="new-password"
+					disabled={accountLoading || !$authState.user}
+				/>
+			</label>
 
-		<aside class="md:col-span-5 space-y-4 min-w-0">
-			<div class="card variant-glass-surface p-4 space-y-3">
-				<div class="flex items-start justify-between gap-3">
-					<div>
-						<h2 class="text-lg font-semibold tracking-tight">Active MCP tokens</h2>
-						<p class="text-sm opacity-70">
-							These are the tokens your AI tools can currently use to access the MCP endpoint.
-						</p>
-					</div>
-					<span class="badge variant-soft">{activeMcpTokens.length}</span>
-				</div>
+			{#if accountError}<div class="err">{accountError}</div>{/if}
+			{#if accountNotice}<div class="ok">{accountNotice}</div>{/if}
 
-				{#if $authState.status !== 'authenticated'}
-					<div class="text-sm opacity-75">Sign in to manage AI access.</div>
-				{:else if $authState.offline}
-					<div class="text-sm text-warning-500">Offline: token management is unavailable.</div>
-				{:else if mcpLoading && activeMcpTokens.length === 0}
-					<div class="text-sm opacity-75">Loading tokens…</div>
-				{:else if activeMcpTokens.length === 0}
-					<div class="text-sm opacity-75">No MCP tokens yet.</div>
-				{:else}
-					<div class="space-y-3">
-						{#each activeMcpTokens as token (token.id)}
-							<div
-								class="rounded-xl border border-surface-200/50 bg-surface-50/60 p-3 dark:border-surface-700/50 dark:bg-surface-950/30 space-y-2"
-							>
-								<div class="flex items-start justify-between gap-3">
-									<div>
-										<div class="font-semibold">{token.name}</div>
-										<div class="text-xs opacity-70">{describeTokenAccess(token.scopes)}</div>
-									</div>
-									<div class="flex flex-wrap gap-2 justify-end">
-										<button
-											type="button"
-											class="btn variant-soft"
-											disabled={rotatingTokenId === token.id || revokingTokenId === token.id}
-											on:click={() => {
-												void handleRotateMcpToken(token);
-											}}
-										>
-											{rotatingTokenId === token.id ? 'Rotating…' : 'Rotate'}
-										</button>
-										<button
-											type="button"
-											class="btn variant-soft-error"
-											disabled={revokingTokenId === token.id || rotatingTokenId === token.id}
-											on:click={() => {
-												void handleRevokeMcpToken(token);
-											}}
-										>
-											{revokingTokenId === token.id ? 'Revoking…' : 'Revoke'}
-										</button>
-									</div>
-								</div>
-								<div class="flex flex-wrap gap-2">
-									{#each token.scopes as scope}
-										<span class="badge variant-soft-primary">{scope}</span>
-									{/each}
-								</div>
-								<div class="grid gap-2 text-xs opacity-80 sm:grid-cols-2">
-									<div class="rounded-lg bg-surface-50/70 p-2 dark:bg-surface-950/30">
-										<div class="font-semibold opacity-90">Last used</div>
-										<div>{formatDateTime(token.last_used_at)}</div>
-									</div>
-									<div class="rounded-lg bg-surface-50/70 p-2 dark:bg-surface-950/30">
-										<div class="font-semibold opacity-90">Expires</div>
-										<div>{formatDateTime(token.expires_at)}</div>
-									</div>
-									<div class="rounded-lg bg-surface-50/70 p-2 dark:bg-surface-950/30 sm:col-span-2">
-										<div class="font-semibold opacity-90">Created</div>
-										<div>{formatDateTime(token.created_at)}</div>
-									</div>
-								</div>
-							</div>
-						{/each}
-					</div>
-				{/if}
+			<div class="actions">
+				<Btn variant="primary" type="submit" disabled={accountLoading || !$authState.user}>
+					{accountLoading ? 'Updating…' : 'Change password'}
+				</Btn>
+				<Btn variant="soft" onclick={() => auth.logout()} disabled={!$authState.user}>Log out</Btn>
 			</div>
-		</aside>
-	</div>
+		</form>
+	</Card>
+
+	<Card>
+		{#snippet title()}Workout tools{/snippet}
+		{#snippet lede()}Hide demo session tools unless you want quick access for testing.{/snippet}
+
+		<div class="toggle-row">
+			<div>
+				<div class="t">Show demo session tools</div>
+				<p>Add the demo session action back to the Today page header.</p>
+			</div>
+			<Chk
+				label={demoModeEnabled ? 'On' : 'Off'}
+				checked={demoModeEnabled}
+				onchange={handleDemoModeToggle}
+			/>
+		</div>
+	</Card>
+
+	<Card>
+		{#snippet title()}AI access · MCP tokens{/snippet}
+		{#snippet lede()}Tokens AI tools use to reach the MCP endpoint. Each token is shown once.{/snippet}
+
+		<form
+			class="form"
+			onsubmit={(e) => {
+				e.preventDefault();
+				void handleCreateMcpToken();
+			}}
+		>
+			<label>
+				<span class="lbl">Name</span>
+				<input
+					bind:value={newTokenName}
+					placeholder="Claude Desktop"
+					disabled={creatingMcpToken || $authState.status !== 'authenticated'}
+				/>
+			</label>
+
+			<div class="grid-2">
+				<label>
+					<span class="lbl">Access</span>
+					<select bind:value={newTokenAccess} disabled={creatingMcpToken}>
+						<option value="read">Read only</option>
+						<option value="write">Read + write</option>
+					</select>
+				</label>
+				<label>
+					<span class="lbl">Expires (days)</span>
+					<input
+						type="number"
+						min="1"
+						bind:value={newTokenExpiryDays}
+						disabled={creatingMcpToken}
+					/>
+				</label>
+			</div>
+
+			{#if newTokenAccess === 'write'}
+				<div class="warn">
+					Write tokens can change workout data. A shorter expiry such as 7 days is recommended.
+				</div>
+			{/if}
+			{#if mcpError}<div class="err">{mcpError}</div>{/if}
+			{#if mcpNotice}<div class="ok">{mcpNotice}</div>{/if}
+
+			<div class="actions">
+				<Btn
+					variant="primary"
+					type="submit"
+					disabled={creatingMcpToken || $authState.status !== 'authenticated'}
+				>
+					{creatingMcpToken ? 'Creating…' : 'Create token'}
+				</Btn>
+				<Btn variant="soft" onclick={loadMcpTokens} disabled={mcpLoading}>
+					{mcpLoading ? 'Refreshing…' : 'Refresh'}
+				</Btn>
+			</div>
+		</form>
+
+		{#if createdToken}
+			<div class="created">
+				<div class="row">
+					<div>
+						<div class="t">Copy this token now</div>
+						<p>It will not be shown again after you leave this page.</p>
+					</div>
+					<Btn variant="ink" size="sm" onclick={copyCreatedToken}>Copy</Btn>
+				</div>
+				<code class="value">{createdToken.token}</code>
+				<div class="meta">
+					{createdToken.name} · expires {formatDateTime(createdToken.expires_at)}
+				</div>
+			</div>
+		{/if}
+
+		<div class="tokens-list">
+			{#if $authState.status !== 'authenticated'}
+				<div class="muted">Sign in to manage AI access.</div>
+			{:else if $authState.offline}
+				<div class="warn-text">Offline: token management is unavailable.</div>
+			{:else if mcpLoading && activeMcpTokens.length === 0}
+				<div class="muted">Loading tokens…</div>
+			{:else if activeMcpTokens.length === 0}
+				<div class="muted">No MCP tokens yet.</div>
+			{:else}
+				<h4>Active</h4>
+				{#each activeMcpTokens as token (token.id)}
+					<div class="token">
+						<div class="head">
+							<div>
+								<div class="t">{token.name}</div>
+								<div class="sub">{describeTokenAccess(token.scopes)}</div>
+							</div>
+							<div class="actions">
+								<Btn
+									variant="soft"
+									size="sm"
+									disabled={rotatingTokenId === token.id || revokingTokenId === token.id}
+									onclick={() => handleRotateMcpToken(token)}
+								>
+									{rotatingTokenId === token.id ? 'Rotating…' : 'Rotate'}
+								</Btn>
+								<Btn
+									variant="soft"
+									size="sm"
+									disabled={revokingTokenId === token.id || rotatingTokenId === token.id}
+									onclick={() => handleRevokeMcpToken(token)}
+								>
+									{revokingTokenId === token.id ? 'Revoking…' : 'Revoke'}
+								</Btn>
+							</div>
+						</div>
+						<div class="meta2">
+							<span>Last used <b>{formatDateTime(token.last_used_at)}</b></span>
+							<span>Expires <b>{formatDateTime(token.expires_at)}</b></span>
+						</div>
+					</div>
+				{/each}
+			{/if}
+		</div>
+	</Card>
 </div>
+
+<style>
+	.page {
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+	}
+	.form {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		margin-top: 8px;
+	}
+	.grid-2 {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 12px;
+	}
+	@media (max-width: 480px) {
+		.grid-2 {
+			grid-template-columns: 1fr;
+		}
+	}
+	label {
+		display: block;
+	}
+	.lbl {
+		display: block;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
+		letter-spacing: 0.18em;
+		text-transform: uppercase;
+		color: var(--ink-soft);
+		margin-bottom: 6px;
+	}
+	input,
+	select {
+		width: 100%;
+		background: var(--card-3);
+		border: 1px solid var(--line);
+		border-radius: 10px;
+		padding: 11px 12px;
+		font:
+			500 14px/1.2 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--ink);
+		outline: 0;
+	}
+	input:focus,
+	select:focus {
+		border-color: var(--clay);
+		box-shadow: 0 0 0 3px rgba(255, 94, 31, 0.16);
+	}
+	.actions {
+		display: flex;
+		gap: 8px;
+		flex-wrap: wrap;
+	}
+	.badges {
+		display: flex;
+		gap: 6px;
+		flex-wrap: wrap;
+		margin: 6px 0;
+	}
+	.err {
+		font:
+			600 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--clay-text);
+	}
+	.ok {
+		font:
+			600 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--sage);
+	}
+	.warn {
+		padding: 10px 12px;
+		border-radius: 10px;
+		background: color-mix(in oklab, var(--warn) 14%, var(--card));
+		border: 1px solid color-mix(in oklab, var(--warn) 30%, var(--line));
+		color: var(--warn);
+		font:
+			600 12px/1.4 'Onest',
+			system-ui,
+			sans-serif;
+	}
+	.warn-text {
+		font:
+			600 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--warn);
+	}
+	.muted {
+		font:
+			500 13px/1.4 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--ink-soft);
+	}
+
+	.toggle-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px;
+		background: var(--card-3);
+		border: 1px solid var(--line);
+		border-radius: 12px;
+		padding: 12px 14px;
+	}
+	.toggle-row .t {
+		font:
+			800 14px/1 'Onest',
+			system-ui,
+			sans-serif;
+	}
+	.toggle-row p {
+		margin: 4px 0 0;
+		font:
+			500 12px/1.4 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--ink-soft);
+	}
+
+	.created {
+		margin-top: 12px;
+		padding: 12px;
+		border-radius: 12px;
+		background: color-mix(in oklab, var(--sage) 10%, var(--card));
+		border: 1px solid color-mix(in oklab, var(--sage) 30%, var(--line));
+	}
+	.created .row {
+		display: flex;
+		align-items: start;
+		justify-content: space-between;
+		gap: 10px;
+	}
+	.created .t {
+		font:
+			800 13px/1 'Onest',
+			system-ui,
+			sans-serif;
+	}
+	.created p {
+		margin: 4px 0 0;
+		font:
+			500 12px/1.4 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--ink-soft);
+	}
+	.created .value {
+		display: block;
+		margin-top: 10px;
+		padding: 10px 12px;
+		background: var(--surface-deep);
+		color: var(--on-deep);
+		border-radius: 10px;
+		font:
+			500 12px/1.5 'JetBrains Mono',
+			monospace;
+		overflow-x: auto;
+	}
+	.created .meta {
+		margin-top: 8px;
+		font: italic 400 12px/1.3 'Instrument Serif';
+		color: var(--ink-soft);
+	}
+
+	.tokens-list {
+		margin-top: 14px;
+	}
+	.tokens-list h4 {
+		margin: 0 0 8px;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
+		letter-spacing: 0.18em;
+		text-transform: uppercase;
+		color: var(--ink-soft);
+	}
+	.token {
+		background: var(--card-3);
+		border: 1px solid var(--line);
+		border-radius: 12px;
+		padding: 12px;
+	}
+	.token + .token {
+		margin-top: 8px;
+	}
+	.token .head {
+		display: flex;
+		justify-content: space-between;
+		gap: 10px;
+		align-items: start;
+	}
+	.token .t {
+		font:
+			800 14px/1 'Onest',
+			system-ui,
+			sans-serif;
+	}
+	.token .sub {
+		margin-top: 4px;
+		font:
+			600 11px/1 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--ink-soft);
+	}
+	.meta2 {
+		margin-top: 8px;
+		display: flex;
+		gap: 12px;
+		font:
+			500 11px/1.3 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--ink-soft);
+		flex-wrap: wrap;
+	}
+	.meta2 b {
+		color: var(--ink);
+		font-weight: 700;
+	}
+</style>

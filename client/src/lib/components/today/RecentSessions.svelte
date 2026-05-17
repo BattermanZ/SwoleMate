@@ -1,24 +1,25 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
+	import { Btn, SetPillList, Chip } from '$lib/components/ui';
 	import { formatDateRelative, formatTime } from '$lib/utils/date';
 	import type { UiSession } from '$lib/today/types';
-	import SetPillsHybrid from '$lib/components/ui/SetPillsHybrid.svelte';
 
-	export let sessions: UiSession[] = [];
-	export let canAdd = false;
-	export let disabled = false;
+	type AddPayload = {
+		name: string;
+		perSideWeight?: boolean;
+		splitWeight?: boolean;
+		tracksReps?: boolean;
+		tracksTime?: boolean;
+		tracksWeight?: boolean;
+		settings?: Array<{ key: string; value: string }>;
+	};
 
-	const dispatch = createEventDispatcher<{
-		addExercise: {
-			name: string;
-			perSideWeight?: boolean;
-			splitWeight?: boolean;
-			tracksReps?: boolean;
-			tracksTime?: boolean;
-			tracksWeight?: boolean;
-			settings?: Array<{ key: string; value: string }>;
-		};
-	}>();
+	interface Props {
+		sessions: UiSession[];
+		canAdd?: boolean;
+		disabled?: boolean;
+		onAddExercise?: (payload: AddPayload) => void;
+	}
+	let { sessions, canAdd = false, disabled = false, onAddExercise }: Props = $props();
 
 	function durationMinutes(session: UiSession): number | null {
 		if (!session.endedAt) return null;
@@ -29,101 +30,198 @@
 	}
 </script>
 
-<section class="space-y-3 min-w-0">
-	<header class="flex items-end justify-between gap-2">
-		<div>
-			<h2 class="text-lg font-semibold tracking-tight">Past 2 Sessions</h2>
-			<p class="text-sm opacity-70">Quick recall for exercise order + notes.</p>
-		</div>
+<section class="rs">
+	<header>
+		<h2>Past 2 sessions <em>— quick recall</em></h2>
+		<p>Tap "Add" on any exercise to drop it into today's session.</p>
 	</header>
 
 	{#if sessions.length === 0}
-		<div class="card variant-ghost p-4 text-center opacity-80">No sessions yet.</div>
+		<div class="empty">No sessions yet.</div>
 	{:else}
-		<div class="space-y-3 min-w-0">
-			{#each sessions as session (session.id)}
-				<article class="card variant-glass-surface p-4 space-y-3 min-w-0">
-					<header class="flex items-start justify-between gap-3">
-						<div>
-							<div class="flex items-center gap-2">
-								<h3 class="text-base font-semibold">{formatDateRelative(session.startedAt)}</h3>
-								{#if session.mood}
-									<span class="text-xl" aria-label="Session mood">{session.mood}</span>
-								{/if}
-							</div>
-							<div class="text-sm opacity-75">
-								{formatTime(session.startedAt)}
-								{#if session.endedAt}
-									- {formatTime(session.endedAt)}
-								{/if}
-								{#if durationMinutes(session) !== null}
-									<span class="opacity-60"> • </span>
-									{durationMinutes(session)}m
-								{/if}
-							</div>
-						</div>
-					</header>
+		{#each sessions as session (session.id)}
+			<article class="session-card">
+				<div class="meta">
+					<span class="day">{formatDateRelative(session.startedAt)}</span>
+					{#if session.mood}<span class="mood" aria-label="Session mood">{session.mood}</span>{/if}
+					<span class="time">
+						{formatTime(session.startedAt)}
+						{#if session.endedAt}– {formatTime(session.endedAt)}{/if}
+						{#if durationMinutes(session) !== null}
+							· {durationMinutes(session)}m
+						{/if}
+					</span>
+				</div>
+				{#if session.notes}<p class="notes">{session.notes}</p>{/if}
 
-					{#if session.notes}
-						<p class="text-sm opacity-80">{session.notes}</p>
-					{/if}
-
-					<div class="space-y-2">
-						{#each session.exercises as ex (ex.id)}
-							<div
-								class="rounded-xl border border-surface-200/50 bg-surface-50/60 p-3 dark:border-surface-700/50 dark:bg-surface-950/30"
-							>
-								<div class="flex items-start justify-between gap-3">
-									<div class="min-w-0">
-										<div class="font-semibold truncate">{ex.name}</div>
-										{#if ex.settings.length > 0}
-											<div class="mt-1 flex flex-wrap gap-1 text-xs opacity-70">
-												{#each ex.settings.slice(0, 2) as s}
-													<span class="badge variant-soft text-xs">{s.key}: {s.value}</span>
-												{/each}
-												{#if ex.settings.length > 2}
-													<span class="badge variant-soft text-xs">+{ex.settings.length - 2}</span>
-												{/if}
-											</div>
-										{/if}
-										<div class="mt-2">
-											<SetPillsHybrid
-												sets={ex.sets}
-												perSideWeight={ex.perSideWeight}
-												splitWeight={ex.splitWeight}
-												size="xs"
-											/>
-										</div>
-										{#if ex.notes}
-											<div class="mt-2 text-sm opacity-75">Notes: {ex.notes}</div>
+				<div class="ex-list">
+					{#each session.exercises as ex (ex.id)}
+						<div class="ex-mini">
+							<div class="left">
+								<div class="name">{ex.name}</div>
+								{#if ex.settings.length > 0}
+									<div class="setbadges">
+										{#each ex.settings.slice(0, 2) as s (s.id)}
+											<Chip size="xs">{s.key}: {s.value}</Chip>
+										{/each}
+										{#if ex.settings.length > 2}
+											<Chip size="xs">+{ex.settings.length - 2}</Chip>
 										{/if}
 									</div>
-
-									{#if canAdd}
-										<button
-											type="button"
-											class="btn btn-sm variant-filled-primary whitespace-nowrap"
-											on:click={() =>
-												dispatch('addExercise', {
-													name: ex.name,
-													perSideWeight: ex.perSideWeight,
-													splitWeight: ex.splitWeight,
-													tracksReps: ex.tracksReps,
-													tracksTime: ex.tracksTime,
-													tracksWeight: ex.tracksWeight,
-													settings: ex.settings.map((s) => ({ key: s.key, value: s.value }))
-												})}
-											{disabled}
-										>
-											Add →
-										</button>
-									{/if}
+								{/if}
+								<div class="pills">
+									<SetPillList
+										sets={ex.sets}
+										perSideWeight={ex.perSideWeight}
+										splitWeight={ex.splitWeight}
+										size="xs"
+									/>
 								</div>
+								{#if ex.notes}<div class="ex-notes">Notes: {ex.notes}</div>{/if}
 							</div>
-						{/each}
-					</div>
-				</article>
-			{/each}
-		</div>
+							{#if canAdd}
+								<Btn
+									variant="primary"
+									size="sm"
+									{disabled}
+									onclick={() =>
+										onAddExercise?.({
+											name: ex.name,
+											perSideWeight: ex.perSideWeight,
+											splitWeight: ex.splitWeight,
+											tracksReps: ex.tracksReps,
+											tracksTime: ex.tracksTime,
+											tracksWeight: ex.tracksWeight,
+											settings: ex.settings.map((s) => ({ key: s.key, value: s.value }))
+										})}
+								>
+									Add →
+								</Btn>
+							{/if}
+						</div>
+					{/each}
+				</div>
+			</article>
+		{/each}
 	{/if}
 </section>
+
+<style>
+	.rs {
+		min-width: 0;
+	}
+	header {
+		padding: 0 4px 10px;
+	}
+	header h2 {
+		margin: 0;
+		font:
+			800 18px/1 'Onest',
+			system-ui,
+			sans-serif;
+		letter-spacing: -0.015em;
+	}
+	header h2 em {
+		font: italic 400 14px/1 'Instrument Serif';
+		color: var(--ink-soft);
+		margin-left: 6px;
+		font-weight: 400;
+	}
+	header p {
+		margin: 4px 0 0;
+		font:
+			500 12px/1.4 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--ink-soft);
+	}
+
+	.empty {
+		text-align: center;
+		opacity: 0.8;
+		padding: 16px;
+		background: var(--card);
+		border: 1px solid var(--line);
+		border-radius: 18px;
+	}
+
+	.session-card {
+		background: var(--card);
+		border: 1px solid var(--line);
+		border-radius: 18px;
+		padding: 14px;
+		box-shadow: 0 4px 12px -8px var(--shadow-card);
+		margin-top: 10px;
+	}
+	.meta {
+		display: flex;
+		align-items: baseline;
+		gap: 8px;
+		flex-wrap: wrap;
+	}
+	.day {
+		font:
+			800 16px/1 'Onest',
+			system-ui,
+			sans-serif;
+	}
+	.mood {
+		font:
+			400 14px/1 'Onest',
+			system-ui,
+			sans-serif;
+		opacity: 0.85;
+	}
+	.time {
+		font:
+			500 12px/1 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--ink-soft);
+	}
+	.notes {
+		margin: 6px 0 0;
+		font: italic 400 13px/1.4 'Instrument Serif';
+		color: var(--ink-2);
+	}
+
+	.ex-list {
+		margin-top: 10px;
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+	}
+	.ex-mini {
+		padding: 10px 12px;
+		border-radius: 12px;
+		background: var(--card-3);
+		border: 1px solid var(--line);
+		display: grid;
+		grid-template-columns: 1fr auto;
+		gap: 10px;
+		align-items: start;
+	}
+	.left {
+		min-width: 0;
+	}
+	.name {
+		font:
+			800 14px/1 'Onest',
+			system-ui,
+			sans-serif;
+	}
+	.setbadges {
+		margin-top: 6px;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+	}
+	.pills {
+		margin-top: 6px;
+	}
+	.ex-notes {
+		margin-top: 6px;
+		font: italic 400 12px/1.4 'Instrument Serif';
+		color: var(--ink-soft);
+	}
+</style>

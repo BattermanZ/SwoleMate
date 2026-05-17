@@ -1,316 +1,196 @@
 <script lang="ts">
 	import '../app.css';
-	import { AppBar } from '@skeletonlabs/skeleton-svelte';
-	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { auth } from '$lib/auth';
 	import { logger } from '$lib/logger';
+	import { BottomNav, type NavItem } from '$lib/components/ui';
+	import AppBar from '$lib/components/shell/AppBar.svelte';
+	import type { Snippet } from 'svelte';
 
-	let moreMenuOpen = false;
-	let darkMode = false;
-	const THEME_KEY = 'theme';
+	interface Props {
+		children?: Snippet;
+	}
+	let { children }: Props = $props();
+
 	const authState = auth.state;
-	$: currentPath = $page.url.pathname;
+	let currentPath = $derived($page.url.pathname);
+	let isLogin = $derived(currentPath === '/login');
 
-	// Navigation items
-	const navItems = [
-		{ href: '/', label: 'Today', icon: '💪' },
-		{ href: '/templates', label: 'Templates', icon: '🗂️' },
-		{ href: '/workouts', label: 'History', icon: '📅' },
-		{ href: '/progress', label: 'Progress', icon: '📈' },
-		{ href: '/settings', label: 'Settings', icon: '⚙️' },
-		{ href: '/help', label: 'Help', icon: '❓' },
-		{ href: '/admin', label: 'Admin', icon: '🛡️' },
-		{ href: '/backups', label: 'Backups', icon: '💾' }
-	];
-
-	$: isLogin = currentPath === '/login';
-	$: isSettings = currentPath === '/settings';
-	$: mustChangePassword =
-		$authState.status === 'authenticated' && $authState.user?.must_change_password;
-	$: canSeeAdmin =
-		$authState.status === 'authenticated' &&
-		$authState.user?.role === 'admin' &&
-		!$authState.offline;
-	$: canSeeBackups =
-		$authState.status === 'authenticated' &&
-		$authState.user?.role === 'admin' &&
-		!$authState.offline;
-	$: visibleNavItems = navItems.filter((item) => {
-		if (item.href === '/admin') return canSeeAdmin;
-		if (item.href === '/backups') return canSeeBackups;
-		return true;
-	});
-	$: primaryMobileNavItems = visibleNavItems.filter((item) =>
-		['/', '/templates', '/workouts', '/progress'].includes(item.href)
-	);
-	$: secondaryMobileNavItems = visibleNavItems.filter(
-		(item) => !primaryMobileNavItems.some((primary) => primary.href === item.href)
-	);
-	$: isMoreActive = secondaryMobileNavItems.some((item) => isNavItemActive(item.href, currentPath));
-
-	function isNavItemActive(href: string, pathname: string): boolean {
-		if (href === '/') return pathname === '/';
-		return pathname === href || pathname.startsWith(`${href}/`);
-	}
-
-	function closeMoreMenu(): void {
-		moreMenuOpen = false;
-	}
-
-	function applyTheme(next: boolean) {
-		darkMode = next;
-		if (typeof document === 'undefined') return;
-		document.documentElement.classList.toggle('dark', next);
-		document.documentElement.style.colorScheme = next ? 'dark' : 'light';
-
-		try {
-			localStorage.setItem(THEME_KEY, next ? 'dark' : 'light');
-		} catch {
-			// ignore
+	$effect(() => {
+		if ($authState.status === 'unauthenticated' && !isLogin) {
+			void goto('/login');
 		}
+		if ($authState.status === 'authenticated' && isLogin) {
+			void goto('/');
+		}
+	});
 
-		const meta = document.querySelector('meta[name="theme-color"]');
-		if (meta) meta.setAttribute('content', next ? '#020617' : '#1d4ed8');
-	}
-
-	// Add service worker registration
 	onMount(() => {
 		void auth.refresh();
 
-		if (typeof document !== 'undefined') {
-			try {
-				const stored = localStorage.getItem(THEME_KEY);
-				if (stored === 'dark' || stored === 'light') {
-					applyTheme(stored === 'dark');
-				} else {
-					const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
-					applyTheme(prefersDark);
-				}
-			} catch {
-				darkMode = document.documentElement.classList.contains('dark');
-			}
+		if (!import.meta.env.DEV && !document.querySelector('script[data-umami]')) {
+			const s = document.createElement('script');
+			s.src = 'https://analytics.battercloud.cc/script.js';
+			s.defer = true;
+			s.dataset.websiteId = '55c688cf-5605-48ae-b3ae-2a6a9f342c51';
+			s.dataset.umami = 'true';
+			document.head.appendChild(s);
 		}
 
 		if ('serviceWorker' in navigator) {
-			// Service workers can easily serve stale bundles during development.
-			// Keep it enabled only for production builds.
 			if (import.meta.env.DEV) {
-				navigator.serviceWorker.getRegistrations().then((registrations) => {
-					for (const registration of registrations) {
-						registration.unregister();
-					}
+				navigator.serviceWorker.getRegistrations().then((regs) => {
+					for (const reg of regs) reg.unregister();
 				});
-				caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key))));
+				caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))));
 				return;
 			}
-
 			navigator.serviceWorker
 				.register('/service-worker.js', { scope: '/' })
-				.then((registration) => {
-					logger.debug('pwa', 'ServiceWorker registration successful', {
-						scope: registration.scope
-					});
-				})
-				.catch((err) => {
-					logger.error('pwa', 'ServiceWorker registration failed', { err });
-				});
+				.then((reg) => logger.debug('pwa', 'sw registered', { scope: reg.scope }))
+				.catch((err) => logger.error('pwa', 'sw registration failed', { err }));
 		}
 	});
 
-	$: if ($authState.status === 'unauthenticated' && !isLogin) {
-		void goto('/login');
-	}
-
-	$: if ($authState.status === 'authenticated' && isLogin) {
-		void goto(mustChangePassword ? '/settings' : '/');
-	}
-
-	$: if ($authState.status === 'authenticated' && mustChangePassword && !isLogin && !isSettings) {
-		void goto('/settings');
-	}
-
-	$: if (isLogin || currentPath) {
-		moreMenuOpen = false;
-	}
-
-	$: {
+	$effect(() => {
 		const shouldEnableRemoteLogs =
 			!import.meta.env.DEV && $authState.status === 'authenticated' && !$authState.offline;
 		logger.setRemoteEnabled(shouldEnableRemoteLogs);
+	});
+
+	function logout() {
+		void auth.logout();
 	}
 </script>
 
-<div class="app-shell">
-	<header class="mobile-shell-header md:hidden">
-		<div class="mobile-shell-header-row">
-			<a href="/" class="mobile-shell-brand">
-				<span class="mobile-shell-brand-icon">💪</span>
-				<span class="mobile-shell-brand-text">SwoleMate</span>
-			</a>
-			<div class="mobile-shell-actions">
-				<button
-					type="button"
-					class="mobile-shell-action"
-					aria-label="Toggle dark mode"
-					on:click={() => applyTheme(!darkMode)}
-				>
-					<span aria-hidden="true">{darkMode ? '🌙' : '☀️'}</span>
-				</button>
-				{#if !isLogin && $authState.status === 'authenticated'}
-					<button
-						type="button"
-						class="mobile-shell-action"
-						aria-label="Log out"
-						on:click={() => auth.logout()}
-					>
-						<span aria-hidden="true">⎋</span>
-					</button>
-				{/if}
-			</div>
-		</div>
-	</header>
+<svelte:head>
+	<title>SwoleMate</title>
+</svelte:head>
 
-	<AppBar class="app-shell-header hidden bg-surface-100-800-token border-b relative z-50 md:block">
-		<AppBar.Toolbar class="grid grid-cols-[1fr_auto] items-center gap-3 py-3">
-			<AppBar.Lead>
-				<a href="/" class="flex items-center gap-2">
-					<span class="text-2xl">💪</span>
-					<span class="text-xl font-bold">SwoleMate</span>
-				</a>
-			</AppBar.Lead>
-			<AppBar.Trail class="flex items-center gap-2">
-				{#if !isLogin}
-					<nav class="hidden md:block">
-						<ul class="list-nav flex space-x-4">
-							{#each visibleNavItems as item}
-								<li>
-									<a
-										href={item.href}
-										class="btn btn-sm {isNavItemActive(item.href, currentPath)
-											? 'variant-filled-primary'
-											: 'variant-ghost-primary'}"
-									>
-										<span>{item.icon}</span>
-										<span>{item.label}</span>
-									</a>
-								</li>
-							{/each}
-						</ul>
-					</nav>
-				{/if}
+{#snippet iconToday()}
+	<svg
+		width="14"
+		height="14"
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="2.4"
+		aria-hidden="true"
+	>
+		<path d="M12 21s-7-4.5-7-11a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 6.5-7 11-7 11z" />
+	</svg>
+{/snippet}
+{#snippet iconPlans()}
+	<svg
+		width="14"
+		height="14"
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="2"
+		aria-hidden="true"
+	>
+		<rect x="4" y="4" width="16" height="16" rx="3" /><path d="M4 9h16" />
+	</svg>
+{/snippet}
+{#snippet iconHistory()}
+	<svg
+		width="14"
+		height="14"
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="2"
+		aria-hidden="true"
+	>
+		<circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+	</svg>
+{/snippet}
+{#snippet iconProgress()}
+	<svg
+		width="14"
+		height="14"
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="2"
+		aria-hidden="true"
+	>
+		<path d="M4 19h16" /><path d="M6 16l4-5 4 3 5-7" />
+	</svg>
+{/snippet}
+{#snippet iconMore()}
+	<span style="font: 800 14px/1 'Onest';" aria-hidden="true">⋯</span>
+{/snippet}
 
-				<button
-					type="button"
-					class="btn btn-sm variant-ghost-primary"
-					aria-label="Toggle dark mode"
-					on:click={() => applyTheme(!darkMode)}
-				>
-					<span aria-hidden="true">{darkMode ? '🌙' : '☀️'}</span>
-				</button>
+{#if isLogin}
+	{@render children?.()}
+{:else}
+	{@const navItems = [
+		{ href: '/', label: 'Today', icon: iconToday },
+		{ href: '/templates', label: 'Plans', icon: iconPlans },
+		{ href: '/workouts', label: 'History', icon: iconHistory },
+		{ href: '/progress', label: 'Progress', icon: iconProgress },
+		{ href: '/more', label: 'More', icon: iconMore }
+	] satisfies NavItem[]}
+	<div class="shell">
+		<AppBar onLogout={$authState.status === 'authenticated' ? logout : undefined} />
 
-				{#if !isLogin && $authState.offline}
-					<span class="badge variant-soft-warning hidden sm:inline-flex">Offline</span>
-				{/if}
-
-				{#if !isLogin && $authState.status === 'authenticated'}
-					<button
-						type="button"
-						class="btn btn-sm variant-ghost-primary"
-						aria-label="Log out"
-						on:click={() => auth.logout()}
-					>
-						<span aria-hidden="true">⎋</span>
-					</button>
-				{/if}
-			</AppBar.Trail>
-		</AppBar.Toolbar>
-	</AppBar>
-
-	{#if moreMenuOpen && !isLogin}
-		<div class="fixed inset-0 z-40 md:hidden" role="dialog" aria-modal="true">
-			<button class="absolute inset-0 bg-black/50" aria-label="Close menu" on:click={closeMoreMenu}
-			></button>
-			<nav
-				id="mobile-more-menu"
-				class="absolute bottom-0 left-0 right-0 max-h-[75dvh] overflow-y-auto rounded-t-2xl border-t border-surface-200/70 bg-surface-50-900-token p-4 pb-[calc(env(safe-area-inset-bottom)+5.75rem)] shadow-xl dark:border-surface-700/70"
-			>
-				<ul class="list-nav flex flex-col gap-2">
-					{#each secondaryMobileNavItems as item}
-						<li>
-							<a
-								href={item.href}
-								class="btn w-full justify-start {isNavItemActive(item.href, currentPath)
-									? 'variant-filled-primary'
-									: 'variant-ghost-primary'}"
-								on:click={closeMoreMenu}
-							>
-								<span class="text-xl">{item.icon}</span>
-								<span>{item.label}</span>
-							</a>
-						</li>
-					{/each}
-					{#if $authState.status === 'authenticated'}
-						<li class="pt-2 border-t border-surface-200/50 dark:border-surface-700/50">
-							<button
-								type="button"
-								class="btn w-full justify-start variant-soft-error"
-								on:click={() => {
-									closeMoreMenu();
-									void auth.logout();
-								}}
-							>
-								<span class="text-xl">⎋</span>
-								<span>Log out</span>
-							</button>
-						</li>
-					{/if}
-				</ul>
-			</nav>
-		</div>
-	{/if}
-
-	<main class="container mx-auto p-4 flex-1 flex flex-col app-content h-full">
 		{#if $authState.offline}
-			<div class="offline-banner">
-				<span>Offline mode: showing cached data. Some actions are disabled.</span>
+			<div class="offline-wrap">
+				<div class="offline">
+					<span class="dot"></span>
+					Offline mode — showing cached data. Some actions are disabled.
+				</div>
 			</div>
 		{/if}
-		<slot />
-	</main>
 
-	{#if !isLogin}
-		<nav class="mobile-bottom-nav" aria-label="Primary mobile navigation">
-			<ul class="list-nav grid grid-cols-5 gap-1">
-				{#each primaryMobileNavItems as item}
-					<li>
-						<a
-							href={item.href}
-							class="mobile-tab {isNavItemActive(item.href, currentPath)
-								? 'mobile-tab-active'
-								: ''}"
-							aria-current={isNavItemActive(item.href, currentPath) ? 'page' : undefined}
-						>
-							<span class="mobile-tab-icon">{item.icon}</span>
-							<span class="mobile-tab-label">{item.label}</span>
-						</a>
-					</li>
-				{/each}
-				<li>
-					<button
-						type="button"
-						class="mobile-tab {isMoreActive || moreMenuOpen ? 'mobile-tab-active' : ''}"
-						aria-label="Open more navigation"
-						aria-expanded={moreMenuOpen}
-						aria-controls="mobile-more-menu"
-						on:click={() => (moreMenuOpen = !moreMenuOpen)}
-					>
-						<span class="mobile-tab-icon" aria-hidden="true">•••</span>
-						<span class="mobile-tab-label">More</span>
-					</button>
-				</li>
-			</ul>
-		</nav>
-	{/if}
-</div>
+		<main>
+			{@render children?.()}
+		</main>
+
+		<BottomNav items={navItems} current={currentPath} />
+	</div>
+{/if}
+
+<style>
+	.shell {
+		min-height: 100dvh;
+		display: flex;
+		flex-direction: column;
+	}
+	main {
+		flex: 1;
+		padding: 14px 18px calc(96px + env(safe-area-inset-bottom));
+		max-width: 720px;
+		width: 100%;
+		margin: 0 auto;
+	}
+	.offline-wrap {
+		display: flex;
+		justify-content: center;
+		padding: 8px 18px 0;
+	}
+	.offline {
+		padding: 8px 14px;
+		font:
+			600 12px/1.3 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--warn);
+		background: color-mix(in oklab, var(--warn) 14%, var(--card));
+		border: 1px solid color-mix(in oklab, var(--warn) 30%, var(--line));
+		border-radius: 999px;
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+	}
+	.dot {
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: var(--warn);
+	}
+</style>
