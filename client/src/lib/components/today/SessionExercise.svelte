@@ -65,7 +65,15 @@
 	let setWeight = $state(0);
 	let setWeightLeft = $state(0);
 	let setWeightRight = $state(0);
-	let setDurationSeconds = $state(60);
+	let setDurationMinutes = $state(1);
+	let setDurationSecondsRem = $state(0);
+	let setDurationSeconds = $derived(setDurationMinutes * 60 + setDurationSecondsRem);
+
+	function setDurationFromSeconds(total: number) {
+		const t = Math.max(0, Math.round(total));
+		setDurationMinutes = Math.floor(t / 60);
+		setDurationSecondsRem = t % 60;
+	}
 	let notesDraft = $derived(exercise.notes);
 	let newSettingKey = $state('');
 	let newSettingValue = $state('');
@@ -133,7 +141,7 @@
 		setWeight = set.weight;
 		setWeightLeft = set.weightLeft ?? 0;
 		setWeightRight = set.weightRight ?? 0;
-		setDurationSeconds = set.durationSeconds ?? 60;
+		setDurationFromSeconds(set.durationSeconds ?? 60);
 	}
 
 	function resetSetForm() {
@@ -142,7 +150,7 @@
 		setWeight = 0;
 		setWeightLeft = 0;
 		setWeightRight = 0;
-		setDurationSeconds = 60;
+		setDurationFromSeconds(60);
 	}
 
 	function commitSet() {
@@ -213,7 +221,7 @@
 		if (timerRemainingSeconds > 0) return;
 		timerRunning = false;
 		stopTimerInterval();
-		setDurationSeconds = timerTargetSeconds;
+		setDurationFromSeconds(timerTargetSeconds);
 	}
 
 	function startTimer() {
@@ -222,7 +230,7 @@
 		const remaining = timerRemainingSeconds > 0 ? timerRemainingSeconds : target;
 		timerTargetSeconds = target;
 		timerRemainingSeconds = remaining;
-		setDurationSeconds = target;
+		setDurationFromSeconds(target);
 		timerRunning = true;
 		timerEndsAt = Date.now() + remaining * 1000;
 		tickTimer();
@@ -251,13 +259,13 @@
 		timerRemainingSeconds = target;
 		timerEndsAt = 0;
 		stopTimerInterval();
-		setDurationSeconds = target;
+		setDurationFromSeconds(target);
 	}
 
 	function saveTimedSet() {
 		if (timerRunning) pauseTimer();
 		if (!timerCanSave) return;
-		setDurationSeconds = timerComplete ? timerTargetSeconds : timerElapsedSeconds;
+		setDurationFromSeconds(timerComplete ? timerTargetSeconds : timerElapsedSeconds);
 		commitSet();
 		resetTimer();
 	}
@@ -496,24 +504,26 @@
 							</div>
 						{/if}
 						{#if tracksTime}
-							<div class="field">
-								<span class="field-lbl">Duration · s</span>
-								<StepperPill
-									bind:value={setDurationSeconds}
-									label="Duration"
-									step={5}
-									min={1}
-									unit="s"
-								/>
-								<button
-									type="button"
-									class="start-timer"
-									onclick={startTimer}
-									disabled={locked || timerRunning}
-									aria-label="Start countdown timer"
-								>
-									▶ Start timer
-								</button>
+							<div class="field duration-field">
+								<span class="field-lbl">Duration</span>
+								<div class="duration-row">
+									<StepperPill
+										bind:value={setDurationMinutes}
+										label="Minutes"
+										step={1}
+										min={0}
+										max={59}
+										unit="min"
+									/>
+									<StepperPill
+										bind:value={setDurationSecondsRem}
+										label="Seconds"
+										step={5}
+										min={0}
+										max={59}
+										unit="sec"
+									/>
+								</div>
 							</div>
 						{/if}
 						{#if tracksWeight && !exercise.perSideWeight}
@@ -538,6 +548,17 @@
 						{/if}
 						{#if editingSetId !== null}
 							<button class="cancel-edit" type="button" onclick={resetSetForm}>Cancel edit</button>
+						{/if}
+						{#if tracksTime && editingSetId === null}
+							<button
+								type="button"
+								class="start-timer"
+								onclick={startTimer}
+								disabled={locked || timerRunning || setDurationSeconds < 1}
+								aria-label="Start countdown timer"
+							>
+								▶ Start timer
+							</button>
 						{/if}
 						<button class="commit-set" type="button" onclick={commitSet}>
 							{editingSetId === null ? `▶ Log set ${setCount + 1}` : '✓ Save set'}
@@ -1040,25 +1061,34 @@
 		gap: 8px;
 	}
 
-	/* ── Timed-set countdown overlay ─────────────────────────────────── */
+	/* ── Timed-set duration + countdown overlay ──────────────────────── */
+	.duration-field {
+		grid-column: 1 / -1;
+	}
+	.duration-row {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		gap: 8px;
+	}
 	.start-timer {
-		margin-top: 2px;
-		align-self: start;
+		grid-column: 1 / -1;
 		border: 0;
 		border-radius: 999px;
-		padding: 8px 14px;
+		padding: 14px 18px;
 		background: var(--ink);
 		color: var(--card);
 		font:
-			800 11px/1 'Onest',
+			800 13px/1 'Onest',
 			system-ui,
 			sans-serif;
-		letter-spacing: 0.04em;
+		letter-spacing: 0.02em;
 		cursor: pointer;
+		box-shadow: 0 10px 24px -14px rgba(24, 19, 13, 0.55);
 	}
 	.start-timer:disabled {
 		opacity: 0.45;
 		cursor: not-allowed;
+		box-shadow: none;
 	}
 
 	.timer-overlay {
