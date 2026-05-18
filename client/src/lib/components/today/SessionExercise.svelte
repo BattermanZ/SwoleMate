@@ -656,32 +656,32 @@
 			{#if timerComplete}
 				<p class="hold-flourish">well held.</p>
 			{/if}
-		</div>
 
-		<footer class="hold-stage__bottom">
-			{#if timerComplete}
-				<button type="button" class="hold-cta" onclick={saveTimedSet}>
-					<span>Log this set</span>
-					<span class="hold-cta__arrow" aria-hidden="true">→</span>
-				</button>
-			{:else if timerRunning}
-				<button type="button" class="hold-cta hold-cta--quiet" onclick={pauseTimer}>
-					<span>Pause</span>
-				</button>
-			{:else}
-				<button type="button" class="hold-cta" onclick={startTimer}>
-					<span>Resume</span>
-					<span class="hold-cta__arrow" aria-hidden="true">▶</span>
-				</button>
-			{/if}
-
-			<div class="hold-secondary">
-				{#if !timerComplete && timerCanSave}
-					<button type="button" class="hold-link" onclick={saveTimedSet}>Add as-is</button>
+			<div class="hold-actions">
+				{#if timerComplete}
+					<button type="button" class="hold-cta" onclick={saveTimedSet}>
+						<span>Log this set</span>
+						<span class="hold-cta__arrow" aria-hidden="true">→</span>
+					</button>
+				{:else if timerRunning}
+					<button type="button" class="hold-cta hold-cta--quiet" onclick={pauseTimer}>
+						<span>Pause</span>
+					</button>
+				{:else}
+					<button type="button" class="hold-cta" onclick={startTimer}>
+						<span>Resume</span>
+						<span class="hold-cta__arrow" aria-hidden="true">▶</span>
+					</button>
 				{/if}
-				<button type="button" class="hold-link" onclick={resetCountdown}>Restart</button>
+
+				<div class="hold-secondary">
+					{#if !timerComplete && timerCanSave}
+						<button type="button" class="hold-link" onclick={saveTimedSet}>Add as-is</button>
+					{/if}
+					<button type="button" class="hold-link" onclick={resetCountdown}>Restart</button>
+				</div>
 			</div>
-		</footer>
+		</div>
 	</div>
 {/if}
 
@@ -1139,7 +1139,7 @@
 		inset: 0;
 		z-index: 80;
 		display: grid;
-		grid-template-rows: auto 1fr auto;
+		grid-template-rows: auto 1fr;
 		padding:
 			calc(1.25rem + var(--sat)) calc(1.25rem + var(--sar))
 			calc(1.25rem + var(--sab)) calc(1.25rem + var(--sal));
@@ -1468,14 +1468,14 @@
 		}
 	}
 
-	/* — bottom actions — */
-	.hold-stage__bottom {
+	/* — actions (sit right under the timer for thumb reach) — */
+	.hold-actions {
 		display: grid;
 		gap: 14px;
 		justify-items: center;
 		width: 100%;
-		max-width: 24rem;
-		margin: 0 auto;
+		max-width: 22rem;
+		margin: clamp(0.5rem, 2vh, 1rem) auto 0;
 	}
 	.hold-cta {
 		appearance: none;
