@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>SwoleMate · Timer overlay — 3 options</title>
+<title>SwoleMate · Timer overlay — 3 directions</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800;900&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -15,7 +15,6 @@
     --ink: #18130d;
     --ink-2: #443c30;
     --ink-soft: #847562;
-    --ink-dim: #b2a892;
     --line: #e5dccb;
     --clay: #ff5e1f;
     --clay-2: #ff7a2a;
@@ -43,82 +42,45 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  /* ── Page chrome ─────────────────────────────────────── */
-  .page {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 32px 24px 80px;
-  }
-  .pageHead {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 24px;
-    flex-wrap: wrap;
-    margin-bottom: 28px;
-  }
-  .pageHead .kicker {
-    font: 700 11px/1 'Onest';
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: var(--clay-deep);
-  }
-  .pageHead h1 {
-    margin: 10px 0 0;
-    font: 800 40px/1.02 'Onest';
-    letter-spacing: -0.025em;
-  }
-  .pageHead h1 em {
-    font: italic 400 40px/1.02 'Instrument Serif';
-    color: var(--clay);
-  }
-  .pageHead p {
-    margin: 12px 0 0;
-    font: 500 15px/1.55 'Onest';
-    color: var(--ink-soft);
-    max-width: 56ch;
-  }
+  .page { max-width: 1400px; margin: 0 auto; padding: 32px 24px 80px; }
+  .pageHead { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 28px; }
+  .pageHead .kicker { font: 700 11px/1 'Onest'; letter-spacing: 0.22em; text-transform: uppercase; color: var(--clay-deep); }
+  .pageHead h1 { margin: 10px 0 0; font: 800 40px/1.02 'Onest'; letter-spacing: -0.025em; }
+  .pageHead h1 em { font: italic 400 40px/1.02 'Instrument Serif'; color: var(--clay); }
+  .pageHead p { margin: 12px 0 0; font: 500 15px/1.55 'Onest'; color: var(--ink-soft); max-width: 56ch; }
 
-  /* ── Tab selector ────────────────────────────────────── */
-  .tabs {
-    display: inline-flex;
-    padding: 5px;
-    background: var(--card);
+  /* ── Mechanism legend ─────────────────────────────────── */
+  .mechBar {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-top: 20px;
+  }
+  .mechCard {
     border: 1px solid var(--line);
-    border-radius: 999px;
-    box-shadow: 0 6px 18px -8px var(--shadow-strong);
-  }
-  .tabs button {
-    appearance: none;
-    border: 0; background: transparent;
-    padding: 10px 18px;
-    border-radius: 999px;
+    background: var(--card);
+    border-radius: 14px;
+    padding: 12px 14px;
     cursor: pointer;
-    font: 700 12px/1 'Onest';
-    letter-spacing: 0.04em;
-    color: var(--ink-soft);
-    display: inline-flex; align-items: center; gap: 8px;
-    transition: color .2s ease, background .25s ease;
+    transition: all .2s ease;
+    text-align: left;
   }
-  .tabs button .num {
-    font: 800 10px/1 'JetBrains Mono';
-    padding: 4px 6px;
-    border-radius: 6px;
-    background: var(--bg-2);
-    color: var(--ink-2);
-  }
-  .tabs button.active {
-    background: linear-gradient(135deg, var(--clay-2), var(--clay));
-    color: white;
-    box-shadow: 0 6px 16px -6px rgba(255,94,31,0.55);
-  }
-  .tabs button.active .num { background: rgba(255,255,255,0.22); color: white; }
+  .mechCard:hover { border-color: var(--clay); }
+  .mechCard.active { background: var(--surface-deep); color: var(--on-deep); border-color: var(--surface-deep); }
+  .mechCard.active .mNum { color: var(--clay-2); }
+  .mechCard.active .mSub { color: var(--on-deep-soft); }
+  .mNum { font: 800 10px/1 'JetBrains Mono'; letter-spacing: 0.18em; color: var(--clay-deep); }
+  .mTitle { margin-top: 6px; font: 800 16px/1.1 'Onest'; letter-spacing: -0.01em; }
+  .mTitle em { font: italic 400 16px/1.1 'Instrument Serif'; color: var(--clay); }
+  .mechCard.active .mTitle em { color: var(--gold); }
+  .mSub { margin-top: 4px; font: 500 12px/1.4 'Onest'; color: var(--ink-soft); }
+  @media (max-width: 720px) { .mechBar { grid-template-columns: 1fr; } }
 
-  /* ── Stage: device frame ─────────────────────────────── */
+  /* ── Stage ────────────────────────────────────────────── */
   .stage {
     margin-top: 28px;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 320px;
+    grid-template-columns: minmax(0, 1fr) 340px;
     gap: 36px;
     align-items: start;
   }
@@ -142,33 +104,357 @@
     isolation: isolate;
   }
   .device::before {
-    /* notch */
-    content: "";
-    position: absolute;
-    top: 14px; left: 50%; transform: translateX(-50%);
-    width: 110px; height: 28px;
-    border-radius: 999px;
-    background: #000;
-    z-index: 10;
+    content: ""; position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    width: 110px; height: 28px; border-radius: 999px; background: #000; z-index: 100;
   }
-
-  /* The overlays sit inside the device, full-bleed */
   .overlay {
     position: absolute; inset: 0;
     display: none;
     color: var(--on-deep);
-    font-family: 'Onest', system-ui, sans-serif;
     overflow: hidden;
   }
   .overlay.active { display: block; }
 
-  /* ── Side card (description) ─────────────────────────── */
+  /* ── Shared controls (used inside all three) ──────────── */
+  .ctrl {
+    position: absolute;
+    left: 22px; right: 22px;
+    bottom: 28px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 50px;
+    gap: 8px;
+    z-index: 5;
+  }
+  .ctrl button {
+    appearance: none; border: 0;
+    padding: 14px 0;
+    border-radius: 12px;
+    font: 800 12px/1 'Onest';
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .ctrl .pause {
+    background: transparent;
+    color: var(--on-deep);
+    border: 1px solid var(--on-deep-line);
+  }
+  .ctrl .add {
+    background: linear-gradient(135deg, var(--clay-2), var(--clay));
+    color: white;
+    box-shadow: 0 10px 24px -10px rgba(255,94,31,0.55);
+  }
+  .ctrl .close {
+    background: transparent;
+    color: var(--on-deep-soft);
+    border: 1px solid var(--on-deep-line);
+    font-size: 16px;
+  }
+
+  /* ── Shared head crumb ────────────────────────────────── */
+  .crumb {
+    position: absolute;
+    top: 56px; left: 22px; right: 22px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    z-index: 5;
+  }
+  .crumb .kic { font: 700 10px/1 'Onest'; letter-spacing: 0.24em; text-transform: uppercase; color: var(--clay-2); }
+  .crumb .ex { margin-top: 6px; font: 800 18px/1.1 'Onest'; letter-spacing: -0.01em; }
+  .crumb .ex em { font: italic 400 18px/1.1 'Instrument Serif'; color: var(--gold); }
+  .crumb .set {
+    text-align: right;
+    font: 700 10px/1.3 'JetBrains Mono';
+    letter-spacing: 0.12em;
+    color: var(--on-deep-soft);
+    text-transform: uppercase;
+  }
+  .crumb .set b {
+    display: block;
+    margin-top: 4px;
+    font: italic 400 22px/1 'Instrument Serif';
+    color: var(--on-deep);
+  }
+
+  /* ════════════════════════════════════════════════════════
+     OPTION 1 — SUNDIAL (the ring)
+     Restores the old pattern. Conic ring depletes from full
+     to empty. On overflow: ring inverts to clay-deep and
+     fills back the other way. Numeral switches sign.
+     ════════════════════════════════════════════════════════ */
+  .opt1 {
+    background:
+      radial-gradient(70% 50% at 50% 35%, rgba(255,122,42,0.12), transparent 70%),
+      var(--surface-deep);
+  }
+  .opt1__stage {
+    position: absolute;
+    inset: 130px 22px 130px;
+    display: grid;
+    place-items: center;
+  }
+  .opt1__ring {
+    --pct: 75;        /* 0..100, set by JS */
+    --tone: var(--clay);  /* swapped to clay-deep on overflow */
+    width: min(82%, 320px);
+    aspect-ratio: 1;
+    border-radius: 50%;
+    position: relative;
+    background:
+      conic-gradient(from -90deg, var(--tone) calc(var(--pct) * 1%), rgba(243,236,225,0.06) 0);
+    display: grid;
+    place-items: center;
+    transition: background 600ms ease;
+  }
+  .opt1__ring::before {
+    content: "";
+    position: absolute; inset: 0;
+    border-radius: 50%;
+    box-shadow: 0 0 80px -10px var(--tone);
+    opacity: 0.7;
+    transition: box-shadow 600ms ease;
+  }
+  .opt1__core {
+    position: absolute;
+    inset: 14px;
+    border-radius: 50%;
+    background: #0c0805;
+    display: grid; place-items: center;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+    text-align: center;
+  }
+  .opt1__head {
+    font: 700 9px/1 'Onest';
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--on-deep-soft);
+  }
+  .opt1__head .sig {
+    display: inline-block;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--tone, var(--clay));
+    margin-right: 8px;
+    box-shadow: 0 0 10px var(--tone, var(--clay));
+    animation: pulse 1.2s ease-in-out infinite;
+    vertical-align: middle;
+  }
+  @keyframes pulse { 50% { opacity: 0.4; transform: scale(0.7); } }
+  .opt1__time {
+    margin-top: 10px;
+    font: italic 400 84px/0.9 'Instrument Serif';
+    letter-spacing: -0.02em;
+    color: var(--on-deep);
+  }
+  .opt1__cap {
+    margin-top: 8px;
+    font: 600 11px/1 'JetBrains Mono';
+    color: var(--on-deep-soft);
+    letter-spacing: 0.08em;
+  }
+  .opt1.overflow .opt1__ring { --tone: var(--clay-deep); }
+  .opt1.overflow .opt1__time { color: var(--clay-2); }
+  .opt1.overflow .opt1__cap { color: var(--clay-2); }
+
+  /* ════════════════════════════════════════════════════════
+     OPTION 2 — TIDELINE (liquid fill)
+     The entire screen IS the timer. A horizontal liquid
+     surface drains left-to-right as time depletes. On
+     overflow: a clay-deep tide rises BACK from the right.
+     Numeral floats over the waterline.
+     ════════════════════════════════════════════════════════ */
+  .opt2 {
+    background: var(--surface-deep);
+  }
+  .opt2__liquid {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+  }
+  .opt2__fill {
+    --pct: 75;
+    position: absolute;
+    top: 0; bottom: 0; left: 0;
+    width: calc(var(--pct) * 1%);
+    background: linear-gradient(180deg, rgba(255,94,31,0.85), rgba(200,58,5,0.95));
+    transition: width 900ms cubic-bezier(.4,.1,.3,1);
+  }
+  .opt2__fill::after {
+    /* waterline shimmer */
+    content: "";
+    position: absolute;
+    top: 0; bottom: 0; right: -1px;
+    width: 60px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12));
+  }
+  .opt2__fill::before {
+    /* surface wave */
+    content: "";
+    position: absolute;
+    top: 0; right: -20px;
+    width: 40px; height: 100%;
+    background:
+      radial-gradient(20px 100% at 50% 0%, rgba(255,255,255,0.18), transparent 70%);
+    animation: tide 3s ease-in-out infinite;
+  }
+  @keyframes tide {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(4px); }
+  }
+  /* Overflow tide rises from the right */
+  .opt2__over {
+    --pct: 0;
+    position: absolute;
+    top: 0; bottom: 0; right: 0;
+    width: calc(var(--pct) * 1%);
+    background: repeating-linear-gradient(
+      135deg,
+      var(--clay-deep) 0 8px,
+      #a02e02 8px 16px
+    );
+    transition: width 900ms cubic-bezier(.4,.1,.3,1);
+    opacity: 0.95;
+  }
+  .opt2__over::before {
+    content: "";
+    position: absolute;
+    top: 0; left: -20px;
+    width: 40px; height: 100%;
+    background: radial-gradient(20px 100% at 50% 0%, rgba(255,255,255,0.18), transparent 70%);
+    animation: tide 3s ease-in-out infinite;
+  }
+  /* Target hairline */
+  .opt2__line {
+    position: absolute;
+    top: 12%; bottom: 12%; left: 50%;
+    width: 1px;
+    background: repeating-linear-gradient(180deg, var(--on-deep-soft) 0 4px, transparent 4px 8px);
+    transform: translateX(-0.5px);
+  }
+  .opt2__line::after {
+    content: "TARGET";
+    position: absolute;
+    top: -16px; left: 50%; transform: translateX(-50%);
+    font: 700 8px/1 'JetBrains Mono';
+    letter-spacing: 0.2em;
+    color: var(--on-deep-soft);
+    white-space: nowrap;
+  }
+  .opt2__num {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    z-index: 4;
+    text-align: center;
+  }
+  .opt2__num .kic {
+    font: 700 10px/1 'Onest';
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--on-deep-soft);
+    mix-blend-mode: difference;
+  }
+  .opt2__num .num {
+    margin-top: 8px;
+    font: 800 128px/0.88 'Onest';
+    letter-spacing: -0.05em;
+    color: var(--on-deep);
+    font-variant-numeric: tabular-nums;
+    mix-blend-mode: difference;
+  }
+  .opt2__num .unit {
+    margin-top: 4px;
+    font: italic 400 22px/1 'Instrument Serif';
+    color: var(--on-deep);
+    mix-blend-mode: difference;
+  }
+
+  /* ════════════════════════════════════════════════════════
+     OPTION 3 — STRIKE (typography-as-timer)
+     No ring. No bar. The TARGET number is the canvas,
+     huge in Instrument Serif. As time depletes, it ticks
+     down digit by digit, and a clay stroke draws through
+     the previous count. On overflow, +N appears above in
+     clay, growing taller as overflow grows.
+     ════════════════════════════════════════════════════════ */
+  .opt3 {
+    background:
+      radial-gradient(60% 60% at 50% 60%, rgba(213,162,58,0.07), transparent 70%),
+      var(--surface-deep);
+    padding: 130px 26px 130px;
+    display: grid;
+    place-items: center;
+    align-content: center;
+  }
+  .opt3__wrap {
+    position: relative;
+    text-align: center;
+  }
+  .opt3__remain {
+    position: relative;
+    display: inline-block;
+    font: 400 240px/0.82 'Instrument Serif';
+    font-style: italic;
+    letter-spacing: -0.04em;
+    color: var(--on-deep);
+    font-variant-numeric: tabular-nums;
+    transition: color 400ms ease, transform 400ms cubic-bezier(.4,.1,.3,1);
+  }
+  .opt3__strike {
+    position: absolute;
+    top: 50%; left: -8%;
+    width: 116%; height: 5px;
+    background: var(--clay);
+    transform-origin: left;
+    transform: scaleX(0) rotate(-6deg);
+    border-radius: 4px;
+    box-shadow: 0 0 16px var(--clay);
+  }
+  .opt3.tick .opt3__strike {
+    transform: scaleX(1) rotate(-6deg);
+    transition: transform 280ms cubic-bezier(.6,.1,.3,1);
+  }
+  .opt3__target {
+    font: 700 11px/1 'JetBrains Mono';
+    letter-spacing: 0.24em;
+    color: var(--on-deep-soft);
+    text-transform: uppercase;
+    margin-top: 14px;
+  }
+  .opt3__target b { color: var(--on-deep); font-weight: 700; }
+  .opt3__overflow {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-bottom: -10px;
+    font: 800 0px/1 'Onest';
+    color: var(--clay-2);
+    letter-spacing: -0.04em;
+    transition: font-size 500ms cubic-bezier(.3,.2,.2,1.4);
+    text-shadow: 0 0 40px rgba(255,94,31,0.5);
+    font-variant-numeric: tabular-nums;
+  }
+  .opt3__overflow::before {
+    content: "+";
+    font: italic 400 0.8em 'Instrument Serif';
+    color: var(--clay);
+    margin-right: 6px;
+  }
+  .opt3.overflow .opt3__remain { color: var(--clay-deep); transform: scale(0.5); }
+  .opt3.overflow .opt3__overflow { font-size: 200px; }
+
+  /* ── Sidecard ─────────────────────────────────────────── */
   .sidecard {
     background: var(--card);
     border: 1px solid var(--line);
     border-radius: 24px;
     padding: 24px;
     box-shadow: 0 10px 28px -16px var(--shadow-strong);
+    position: sticky;
+    top: 24px;
   }
   .sidecard .badge {
     display: inline-block;
@@ -193,11 +479,18 @@
     font: 500 14px/1.55 'Onest';
     color: var(--ink-2);
   }
+  .sidecard h3 {
+    margin: 16px 0 6px;
+    font: 700 10px/1 'Onest';
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
   .sidecard ul {
-    margin: 14px 0 0;
+    margin: 6px 0 0;
     padding-left: 16px;
     font: 500 13px/1.6 'Onest';
-    color: var(--ink-soft);
+    color: var(--ink-2);
   }
   .sidecard ul li b { color: var(--ink); font-weight: 700; }
   .sidecard .vibe {
@@ -210,576 +503,6 @@
     color: var(--clay-deep);
   }
 
-  /* ════════════════════════════════════════════════════════
-     OPTION 1 — HEARTBEAT DIAL
-     Refined, editorial. One massive conic ring,
-     centered serif numeral, calm-but-alive breathing.
-     ════════════════════════════════════════════════════════ */
-  .opt1 {
-    background:
-      radial-gradient(60% 50% at 50% 30%, rgba(255,122,42,0.18), transparent 70%),
-      radial-gradient(50% 40% at 50% 110%, rgba(213,162,58,0.14), transparent 60%),
-      var(--surface-deep);
-    padding: 64px 28px 32px;
-    display: grid;
-    grid-template-rows: auto 1fr auto;
-  }
-  .opt1__top {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 4px;
-  }
-  .opt1__crumb {
-    font: 700 10px/1 'Onest';
-    letter-spacing: 0.24em;
-    text-transform: uppercase;
-    color: var(--on-deep-soft);
-  }
-  .opt1__crumb b { color: var(--clay-2); }
-  .opt1__close {
-    width: 32px; height: 32px; border-radius: 50%;
-    border: 1px solid var(--on-deep-line);
-    background: transparent;
-    color: var(--on-deep);
-    cursor: pointer;
-    font: 600 14px/1 'Onest';
-  }
-  .opt1__stage {
-    display: grid;
-    place-items: center;
-    position: relative;
-  }
-  .opt1__dial {
-    width: min(82%, 320px);
-    aspect-ratio: 1;
-    border-radius: 50%;
-    position: relative;
-    display: grid;
-    place-items: center;
-    background:
-      conic-gradient(
-        from -90deg,
-        var(--clay) 0deg,
-        var(--gold) 120deg,
-        var(--clay-2) 240deg,
-        var(--clay) 360deg
-      );
-    box-shadow:
-      0 30px 70px -20px rgba(255,94,31,0.45),
-      0 0 0 1px rgba(255,255,255,0.05);
-    animation: opt1-breathe 2.4s ease-in-out infinite;
-  }
-  @keyframes opt1-breathe {
-    0%, 100% { transform: scale(1); filter: brightness(1); }
-    50%      { transform: scale(1.025); filter: brightness(1.08); }
-  }
-  .opt1__dial::before {
-    /* thin rotating tick */
-    content: "";
-    position: absolute; inset: -10px;
-    border-radius: 50%;
-    background: conic-gradient(from 0deg, rgba(255,255,255,0.5) 0deg, transparent 12deg);
-    -webkit-mask: radial-gradient(circle, transparent 50%, black 50.5%, black 51.5%, transparent 52%);
-            mask: radial-gradient(circle, transparent 50%, black 50.5%, black 51.5%, transparent 52%);
-    animation: opt1-sweep 8s linear infinite;
-  }
-  @keyframes opt1-sweep { to { transform: rotate(360deg); } }
-  .opt1__core {
-    position: absolute;
-    inset: 14px;
-    border-radius: 50%;
-    background: #0c0805;
-    display: grid; place-items: center;
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.06),
-      inset 0 -30px 50px rgba(255,94,31,0.08);
-    text-align: center;
-  }
-  .opt1__state {
-    font: 700 10px/1 'Onest';
-    letter-spacing: 0.32em;
-    text-transform: uppercase;
-    color: var(--clay-2);
-  }
-  .opt1__state::before {
-    content: "";
-    display: inline-block;
-    width: 6px; height: 6px; border-radius: 50%;
-    background: var(--clay);
-    margin-right: 8px;
-    vertical-align: middle;
-    box-shadow: 0 0 12px var(--clay);
-    animation: opt1-pulse 1.2s ease-in-out infinite;
-  }
-  @keyframes opt1-pulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50%      { opacity: 0.4; transform: scale(0.7); }
-  }
-  .opt1__time {
-    margin-top: 6px;
-    font: italic 400 72px/0.95 'Instrument Serif';
-    color: var(--on-deep);
-    letter-spacing: -0.02em;
-  }
-  .opt1__target {
-    margin-top: 4px;
-    font: 600 12px/1 'JetBrains Mono';
-    color: var(--on-deep-soft);
-    letter-spacing: 0.06em;
-  }
-  .opt1__bottom {
-    display: grid;
-    gap: 14px;
-  }
-  .opt1__stats {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 10px;
-    padding: 14px 4px;
-    border-top: 1px solid var(--on-deep-line);
-    border-bottom: 1px solid var(--on-deep-line);
-  }
-  .opt1__stat {
-    text-align: center;
-  }
-  .opt1__stat .k {
-    display: block;
-    font: 700 9px/1 'Onest';
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: var(--on-deep-soft);
-    margin-bottom: 6px;
-  }
-  .opt1__stat .v {
-    font: italic 400 22px/1 'Instrument Serif';
-    color: var(--on-deep);
-  }
-  .opt1__stat .v small {
-    font: 600 11px/1 'Onest';
-    color: var(--on-deep-soft);
-    margin-left: 2px;
-  }
-  .opt1__actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-  }
-  .opt1__btn {
-    appearance: none; border: 0;
-    padding: 14px 0;
-    border-radius: 14px;
-    font: 800 13px/1 'Onest';
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    cursor: pointer;
-  }
-  .opt1__btn--ghost {
-    background: transparent;
-    color: var(--on-deep);
-    border: 1px solid var(--on-deep-line);
-  }
-  .opt1__btn--solid {
-    background: linear-gradient(135deg, var(--clay-2), var(--clay));
-    color: white;
-    box-shadow: 0 12px 30px -10px rgba(255,94,31,0.6);
-  }
-
-  /* ════════════════════════════════════════════════════════
-     OPTION 2 — EDITORIAL STACK
-     Magazine/brutalist. Huge numerals, asymmetric layout,
-     diagonal accent, side rail of verbs.
-     ════════════════════════════════════════════════════════ */
-  .opt2 {
-    background: var(--surface-deep);
-    padding: 48px 22px 28px;
-    display: grid;
-    grid-template-rows: auto 1fr auto;
-    position: relative;
-  }
-  .opt2::before {
-    /* paper-grain diagonal slash */
-    content: "";
-    position: absolute;
-    top: 22%; left: -20%;
-    width: 160%; height: 1px;
-    background: linear-gradient(90deg, transparent, var(--clay) 40%, var(--gold) 60%, transparent);
-    transform: rotate(-14deg);
-    opacity: 0.6;
-  }
-  .opt2::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background-image:
-      radial-gradient(1px 1px at 20% 30%, rgba(255,255,255,0.04) 50%, transparent 51%),
-      radial-gradient(1px 1px at 70% 80%, rgba(255,255,255,0.04) 50%, transparent 51%),
-      radial-gradient(1px 1px at 50% 50%, rgba(255,255,255,0.03) 50%, transparent 51%);
-    background-size: 7px 7px, 11px 11px, 5px 5px;
-    pointer-events: none;
-    mix-blend-mode: screen;
-  }
-  .opt2__head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    position: relative;
-    z-index: 1;
-  }
-  .opt2__crumb {
-    display: flex; flex-direction: column; gap: 6px;
-  }
-  .opt2__crumb .vol {
-    font: 700 10px/1 'JetBrains Mono';
-    letter-spacing: 0.3em;
-    color: var(--clay-2);
-  }
-  .opt2__crumb .ex {
-    font: 800 18px/1.1 'Onest';
-    letter-spacing: -0.01em;
-    color: var(--on-deep);
-    max-width: 200px;
-  }
-  .opt2__crumb .ex em {
-    font: italic 400 18px/1.1 'Instrument Serif';
-    color: var(--gold);
-  }
-  .opt2__set {
-    text-align: right;
-  }
-  .opt2__set .k {
-    font: 700 9px/1 'Onest';
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: var(--on-deep-soft);
-  }
-  .opt2__set .v {
-    margin-top: 6px;
-    font: italic 400 30px/0.9 'Instrument Serif';
-    color: var(--clay-2);
-  }
-  .opt2__set .v small {
-    font: 700 12px/1 'JetBrains Mono';
-    color: var(--on-deep-soft);
-    margin-left: 2px;
-  }
-  .opt2__main {
-    position: relative;
-    z-index: 1;
-    display: grid;
-    grid-template-columns: 1fr auto;
-    align-items: center;
-    gap: 12px;
-    padding: 18px 0;
-  }
-  .opt2__time {
-    font: 800 132px/0.88 'Onest';
-    letter-spacing: -0.06em;
-    color: var(--on-deep);
-    font-variant-numeric: tabular-nums;
-    text-shadow: 0 0 60px rgba(255,94,31,0.25);
-  }
-  .opt2__time .colon {
-    color: var(--clay);
-    margin: 0 -6px;
-    display: inline-block;
-    animation: opt2-blink 1s steps(2) infinite;
-  }
-  @keyframes opt2-blink { 50% { opacity: 0.3; } }
-  .opt2__rail {
-    writing-mode: vertical-rl;
-    transform: rotate(180deg);
-    font: 700 10px/1 'Onest';
-    letter-spacing: 0.32em;
-    text-transform: uppercase;
-    color: var(--clay-2);
-    border-left: 1px solid var(--on-deep-line);
-    padding-left: 6px;
-  }
-  .opt2__bars {
-    position: relative; z-index: 1;
-    display: grid;
-    grid-template-columns: repeat(30, 1fr);
-    gap: 2px;
-    height: 28px;
-    margin-bottom: 18px;
-  }
-  .opt2__bars span {
-    background: var(--clay);
-    border-radius: 1px;
-    transform-origin: bottom;
-    animation: opt2-eq 1.4s ease-in-out infinite;
-  }
-  @keyframes opt2-eq {
-    0%, 100% { transform: scaleY(0.3); opacity: 0.5; }
-    50%      { transform: scaleY(1); opacity: 1; }
-  }
-  .opt2__meta {
-    position: relative; z-index: 1;
-    display: flex;
-    justify-content: space-between;
-    border-top: 1px solid var(--on-deep-line);
-    padding: 12px 0;
-    margin-bottom: 14px;
-  }
-  .opt2__meta div {
-    font: 700 10px/1.4 'Onest';
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--on-deep-soft);
-  }
-  .opt2__meta div b {
-    display: block;
-    font: italic 400 22px/1 'Instrument Serif';
-    color: var(--on-deep);
-    letter-spacing: 0;
-    text-transform: none;
-    margin-top: 4px;
-  }
-  .opt2__actions {
-    position: relative; z-index: 1;
-    display: grid;
-    grid-template-columns: 1fr 1fr auto;
-    gap: 8px;
-  }
-  .opt2__btn {
-    appearance: none; border: 0;
-    padding: 14px 0;
-    font: 800 13px/1 'Onest';
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    cursor: pointer;
-    border-radius: 0;
-  }
-  .opt2__btn--ghost {
-    background: transparent;
-    color: var(--on-deep);
-    border: 1px solid var(--on-deep-line);
-  }
-  .opt2__btn--solid {
-    background: var(--clay);
-    color: white;
-  }
-  .opt2__btn--icon {
-    width: 50px;
-    background: transparent;
-    color: var(--on-deep-soft);
-    border: 1px solid var(--on-deep-line);
-    font-size: 18px;
-  }
-
-  /* ════════════════════════════════════════════════════════
-     OPTION 3 — SCOREBOARD GRID
-     Sports broadcast / arcade. Dense readout grid, glowing
-     digital LED numerals, waveform pulse, set chips.
-     ════════════════════════════════════════════════════════ */
-  .opt3 {
-    background:
-      linear-gradient(180deg, rgba(0,0,0,0.4), transparent 18%, transparent 82%, rgba(0,0,0,0.4)),
-      repeating-linear-gradient(
-        180deg,
-        var(--surface-deep) 0px,
-        var(--surface-deep) 3px,
-        #1c1610 3px,
-        #1c1610 4px
-      );
-    padding: 44px 16px 24px;
-    display: grid;
-    grid-template-rows: auto 1fr auto;
-    gap: 14px;
-    position: relative;
-  }
-  .opt3::before {
-    /* CRT glow vignette */
-    content: "";
-    position: absolute; inset: 0;
-    background: radial-gradient(ellipse at 50% 40%, transparent 40%, rgba(0,0,0,0.45) 100%);
-    pointer-events: none;
-  }
-  .opt3__topbar {
-    position: relative; z-index: 1;
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    align-items: center;
-    gap: 10px;
-    padding: 0 4px;
-  }
-  .opt3__pill {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 5px 9px;
-    border: 1px solid rgba(255,94,31,0.6);
-    background: rgba(255,94,31,0.08);
-    border-radius: 4px;
-    font: 800 9px/1 'JetBrains Mono';
-    letter-spacing: 0.16em;
-    color: var(--clay-2);
-    text-transform: uppercase;
-  }
-  .opt3__pill::before {
-    content: "";
-    width: 6px; height: 6px; border-radius: 50%;
-    background: var(--clay);
-    box-shadow: 0 0 10px var(--clay);
-    animation: opt3-blink 1s steps(2) infinite;
-  }
-  @keyframes opt3-blink { 50% { opacity: 0.3; } }
-  .opt3__ex {
-    font: 800 14px/1.1 'Onest';
-    color: var(--on-deep);
-    text-align: center;
-    letter-spacing: -0.005em;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .opt3__ex em {
-    font: italic 400 14px/1.1 'Instrument Serif';
-    color: var(--gold);
-  }
-  .opt3__close {
-    width: 28px; height: 28px;
-    background: transparent;
-    color: var(--on-deep-soft);
-    border: 1px solid var(--on-deep-line);
-    border-radius: 4px;
-    cursor: pointer;
-    font: 600 12px/1 'Onest';
-  }
-  .opt3__readout {
-    position: relative; z-index: 1;
-    background: #0a0704;
-    border: 1px solid rgba(255,94,31,0.25);
-    border-radius: 10px;
-    padding: 18px 14px 14px;
-    box-shadow:
-      inset 0 0 30px rgba(255,94,31,0.08),
-      0 0 0 1px rgba(255,255,255,0.02);
-    display: grid;
-    gap: 14px;
-  }
-  .opt3__digits {
-    text-align: center;
-    font: 700 84px/0.9 'JetBrains Mono';
-    color: var(--clay);
-    letter-spacing: 0.02em;
-    text-shadow:
-      0 0 8px rgba(255,94,31,0.6),
-      0 0 24px rgba(255,94,31,0.35);
-    font-variant-numeric: tabular-nums;
-  }
-  .opt3__digits .ghost {
-    color: rgba(255,94,31,0.1);
-    position: absolute;
-  }
-  .opt3__digits-wrap { position: relative; }
-  .opt3__digits-wrap .layer {
-    position: absolute; inset: 0;
-    text-align: center;
-    font: 700 84px/0.9 'JetBrains Mono';
-    color: rgba(255,94,31,0.08);
-    letter-spacing: 0.02em;
-  }
-  .opt3__wave {
-    display: grid;
-    grid-template-columns: repeat(40, 1fr);
-    gap: 2px;
-    height: 32px;
-    align-items: end;
-  }
-  .opt3__wave span {
-    background: linear-gradient(180deg, var(--gold), var(--clay));
-    border-radius: 1px;
-    height: 30%;
-    animation: opt3-wave 1.4s ease-in-out infinite;
-    box-shadow: 0 0 6px rgba(255,94,31,0.5);
-  }
-  @keyframes opt3-wave {
-    0%, 100% { height: 18%; opacity: 0.7; }
-    50%      { height: 95%; opacity: 1; }
-  }
-  .opt3__grid {
-    position: relative; z-index: 1;
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 6px;
-  }
-  .opt3__cell {
-    background: rgba(243, 236, 225, 0.04);
-    border: 1px solid var(--on-deep-line);
-    border-radius: 6px;
-    padding: 10px 8px;
-    text-align: center;
-  }
-  .opt3__cell .k {
-    font: 700 8px/1 'JetBrains Mono';
-    letter-spacing: 0.18em;
-    color: var(--on-deep-soft);
-    text-transform: uppercase;
-  }
-  .opt3__cell .v {
-    margin-top: 6px;
-    font: 700 22px/1 'JetBrains Mono';
-    color: var(--on-deep);
-    font-variant-numeric: tabular-nums;
-  }
-  .opt3__cell .v small {
-    font: 600 10px/1 'JetBrains Mono';
-    color: var(--on-deep-soft);
-    margin-left: 2px;
-  }
-  .opt3__sets {
-    display: flex;
-    justify-content: center;
-    gap: 4px;
-    padding: 4px 0;
-    position: relative; z-index: 1;
-  }
-  .opt3__sets span {
-    width: 14px; height: 6px;
-    border-radius: 2px;
-    background: var(--on-deep-dim);
-  }
-  .opt3__sets span.done { background: var(--sage); box-shadow: 0 0 6px var(--sage); }
-  .opt3__sets span.live {
-    background: var(--clay);
-    box-shadow: 0 0 8px var(--clay);
-    animation: opt3-blink 1s steps(2) infinite;
-  }
-  .opt3__actions {
-    position: relative; z-index: 1;
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 6px;
-  }
-  .opt3__btn {
-    appearance: none; border: 0;
-    padding: 14px 0;
-    border-radius: 8px;
-    font: 800 11px/1 'JetBrains Mono';
-    letter-spacing: 0.12em;
-    cursor: pointer;
-    text-transform: uppercase;
-  }
-  .opt3__btn--ghost {
-    background: transparent;
-    color: var(--on-deep);
-    border: 1px solid var(--on-deep-line);
-  }
-  .opt3__btn--warn {
-    background: rgba(255,255,255,0.06);
-    color: var(--on-deep-soft);
-    border: 1px solid var(--on-deep-line);
-  }
-  .opt3__btn--solid {
-    background: linear-gradient(180deg, var(--clay-2), var(--clay));
-    color: white;
-    border: 1px solid var(--clay-deep);
-    box-shadow:
-      0 0 20px rgba(255,94,31,0.45),
-      inset 0 1px 0 rgba(255,255,255,0.25);
-  }
-
-  /* ── Footer notes ────────────────────────────────────── */
   .legend {
     margin-top: 36px;
     padding: 18px 20px;
@@ -795,6 +518,20 @@
     padding: 2px 6px;
     border-radius: 4px;
   }
+
+  /* Tiny phase indicator above device */
+  .phaseTag {
+    text-align: center;
+    margin-bottom: 14px;
+    font: 700 11px/1 'JetBrains Mono';
+    letter-spacing: 0.18em;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+  }
+  .phaseTag b {
+    color: var(--clay-deep);
+    margin-left: 8px;
+  }
 </style>
 </head>
 <body>
@@ -802,227 +539,264 @@
 
     <header class="pageHead">
       <div>
-        <div class="kicker">Timed exercises · overlay study</div>
-        <h1>Three ways to <em>count it down.</em></h1>
-        <p>Three full-screen overlays for the per-set timer that disappeared in the v3.0.0 rebuild. All three reuse the existing design tokens — surface-deep, clay/gold accents, Onest + Instrument Serif — but commit to different aesthetic stances.</p>
-      </div>
-      <div class="tabs" role="tablist">
-        <button class="tab active" data-target="opt1"><span class="num">01</span>Heartbeat dial</button>
-        <button class="tab" data-target="opt2"><span class="num">02</span>Editorial stack</button>
-        <button class="tab" data-target="opt3"><span class="num">03</span>Scoreboard grid</button>
+        <div class="kicker">Timed exercises · countdown overlay</div>
+        <h1>Three ways to <em>watch it run out.</em></h1>
+        <p>Three genuinely different visual mechanisms for a countdown timer with overflow. All three count <b>down</b> from a target (e.g. 60s), pass zero, then continue into <b>overflow</b> (+seconds beyond target) styled in clay-deep. One number on screen per option — no dashboards.</p>
       </div>
     </header>
 
+    <div class="mechBar" role="tablist">
+      <button class="mechCard active" data-target="opt1">
+        <div class="mNum">01 / RADIAL</div>
+        <div class="mTitle">The <em>sundial</em></div>
+        <div class="mSub">A conic ring depletes around the edge. Restores the old v2 pattern. Inverts color when overflow begins.</div>
+      </button>
+      <button class="mechCard" data-target="opt2">
+        <div class="mNum">02 / LINEAR</div>
+        <div class="mTitle">The <em>tideline</em></div>
+        <div class="mSub">No ring. A liquid surface drains across the whole screen. A second tide rises back from the right when overflow hits.</div>
+      </button>
+      <button class="mechCard" data-target="opt3">
+        <div class="mNum">03 / LEXICAL</div>
+        <div class="mTitle">The <em>strike</em></div>
+        <div class="mSub">No graphic at all. The number itself is the timer — Instrument Serif at 240px, struck through every tick. Overflow grows above it.</div>
+      </button>
+    </div>
+
+    <div class="phaseTag">
+      Demo loop · 6s countdown from <b id="phase-target">6</b>s, then 3s overflow, repeat
+    </div>
+
     <div class="stage">
 
-      <div class="device" aria-label="Phone preview">
+      <div class="device">
 
-        <!-- ─────────── OPTION 1 ─────────── -->
+        <!-- ─────────── OPTION 1 — SUNDIAL ─────────── -->
         <div class="overlay opt1 active" id="opt1">
-          <div class="opt1__top">
-            <div class="opt1__crumb">Timed set · <b>Plank hold</b></div>
-            <button class="opt1__close" aria-label="Close">×</button>
+          <div class="crumb">
+            <div>
+              <div class="kic">Timed · live</div>
+              <div class="ex">Plank <em>hold</em></div>
+            </div>
+            <div class="set">Set<b>3<small style="font-size:14px;color:var(--on-deep-soft);">/4</small></b></div>
           </div>
           <div class="opt1__stage">
-            <div class="opt1__dial">
+            <div class="opt1__ring" id="opt1-ring" style="--pct: 75;">
               <div class="opt1__core">
                 <div>
-                  <div class="opt1__state">Running</div>
+                  <div class="opt1__head"><span class="sig"></span><span id="opt1-state">Counting down</span></div>
                   <div class="opt1__time" id="opt1-time">0:42</div>
-                  <div class="opt1__target">target · 1:00</div>
+                  <div class="opt1__cap" id="opt1-cap">target · 1:00</div>
                 </div>
               </div>
             </div>
           </div>
-          <div class="opt1__bottom">
-            <div class="opt1__stats">
-              <div class="opt1__stat"><span class="k">Set</span><span class="v">3<small>/4</small></span></div>
-              <div class="opt1__stat"><span class="k">Load</span><span class="v">— <small>bw</small></span></div>
-              <div class="opt1__stat"><span class="k">Last</span><span class="v">58<small>s</small></span></div>
-            </div>
-            <div class="opt1__actions">
-              <button class="opt1__btn opt1__btn--ghost">Pause</button>
-              <button class="opt1__btn opt1__btn--solid">Add set</button>
-            </div>
+          <div class="ctrl">
+            <button class="pause">Pause</button>
+            <button class="add">Add set</button>
+            <button class="close">×</button>
           </div>
         </div>
 
-        <!-- ─────────── OPTION 2 ─────────── -->
+        <!-- ─────────── OPTION 2 — TIDELINE ─────────── -->
         <div class="overlay opt2" id="opt2">
-          <div class="opt2__head">
-            <div class="opt2__crumb">
-              <div class="vol">VOL. 03 · TIMED</div>
+          <div class="opt2__liquid">
+            <div class="opt2__fill" id="opt2-fill" style="--pct: 75;"></div>
+            <div class="opt2__over" id="opt2-over" style="--pct: 0;"></div>
+            <div class="opt2__line"></div>
+          </div>
+          <div class="crumb">
+            <div>
+              <div class="kic">Timed · live</div>
               <div class="ex">Wall <em>sit</em></div>
             </div>
-            <div class="opt2__set">
-              <div class="k">Set</div>
-              <div class="v">02<small>/04</small></div>
+            <div class="set">Set<b>2<small style="font-size:14px;color:var(--on-deep-soft);">/4</small></b></div>
+          </div>
+          <div class="opt2__num">
+            <div>
+              <div class="kic" id="opt2-state">Remaining</div>
+              <div class="num" id="opt2-num">42</div>
+              <div class="unit">seconds</div>
             </div>
           </div>
-          <div class="opt2__main">
-            <div class="opt2__time" id="opt2-time">00<span class="colon">:</span>42</div>
-            <div class="opt2__rail">LIVE · ELAPSED</div>
-          </div>
-          <div class="opt2__bars" id="opt2-bars"></div>
-          <div class="opt2__meta">
-            <div>Target<b>1:00</b></div>
-            <div>Last<b>58s</b></div>
-            <div>Rest<b>0:45</b></div>
-          </div>
-          <div class="opt2__actions">
-            <button class="opt2__btn opt2__btn--ghost">Pause</button>
-            <button class="opt2__btn opt2__btn--solid">Add set</button>
-            <button class="opt2__btn opt2__btn--icon">×</button>
+          <div class="ctrl">
+            <button class="pause">Pause</button>
+            <button class="add">Add set</button>
+            <button class="close">×</button>
           </div>
         </div>
 
-        <!-- ─────────── OPTION 3 ─────────── -->
+        <!-- ─────────── OPTION 3 — STRIKE ─────────── -->
         <div class="overlay opt3" id="opt3">
-          <div class="opt3__topbar">
-            <div class="opt3__pill">REC · Live</div>
-            <div class="opt3__ex">Hollow body <em>hold</em></div>
-            <button class="opt3__close" aria-label="Close">×</button>
-          </div>
-          <div class="opt3__readout">
-            <div class="opt3__digits-wrap">
-              <div class="opt3__digits" id="opt3-time">00:42</div>
+          <div class="crumb">
+            <div>
+              <div class="kic">Timed · live</div>
+              <div class="ex">Hollow <em>hold</em></div>
             </div>
-            <div class="opt3__wave" id="opt3-wave"></div>
+            <div class="set">Set<b>3<small style="font-size:14px;color:var(--on-deep-soft);">/4</small></b></div>
           </div>
-          <div class="opt3__sets">
-            <span class="done"></span>
-            <span class="done"></span>
-            <span class="live"></span>
-            <span></span>
+          <div class="opt3__wrap">
+            <div class="opt3__overflow" id="opt3-over">0</div>
+            <div class="opt3__remain" id="opt3-remain">42<div class="opt3__strike"></div></div>
+            <div class="opt3__target" id="opt3-target">seconds remaining · target <b>60s</b></div>
           </div>
-          <div class="opt3__grid">
-            <div class="opt3__cell"><div class="k">Set</div><div class="v">03<small>/04</small></div></div>
-            <div class="opt3__cell"><div class="k">Target</div><div class="v">60<small>s</small></div></div>
-            <div class="opt3__cell"><div class="k">Last</div><div class="v">58<small>s</small></div></div>
-          </div>
-          <div class="opt3__actions">
-            <button class="opt3__btn opt3__btn--warn">Pause</button>
-            <button class="opt3__btn opt3__btn--ghost">Reset</button>
-            <button class="opt3__btn opt3__btn--solid">Add</button>
+          <div class="ctrl">
+            <button class="pause">Pause</button>
+            <button class="add">Add set</button>
+            <button class="close">×</button>
           </div>
         </div>
 
       </div>
 
-      <aside class="sidecard" id="card-opt1">
-        <span class="badge">01 · DIAL</span>
-        <h2>The <em>heartbeat</em> dial.</h2>
-        <p>A single luminous ring you can read across the room. Editorial restraint: italic serif numeral at the center, breathing animation tied to the session, everything else recedes.</p>
-        <ul>
-          <li><b>Hero</b> — conic clay→gold→clay ring on <code>--surface-deep</code>, 2.4s breathe.</li>
-          <li><b>Center</b> — Instrument Serif italic numeral, status dot above, target below.</li>
-          <li><b>Below</b> — three understated stat cells, two-button CTA.</li>
-          <li><b>Tone</b> — calm, refined, athleisure. Reads as a moment of focus.</li>
-        </ul>
-        <div class="vibe">"The dial is alive, but it doesn't shout."</div>
+      <aside class="sidecard" id="card">
+        <!-- populated by JS -->
       </aside>
+
     </div>
 
     <div class="legend">
-      <b>Notes.</b> All three use the existing tokens from <code>docs/design-system.html</code> (no new colors, no new fonts). The <code>--surface-deep</code> + clay/gold accents and the breathing ring pattern are already spec'd in the design system — these options compose them differently. Pick a direction and I'll port it back into <code>SessionExercise.svelte</code> and add a documented component entry to the design system.
+      <b>Mechanism, not paint.</b> Each option uses a different way to show progress — radial (ring), linear (liquid), lexical (typography). All three handle overflow by switching to <code>--clay-deep</code> and growing a secondary surface (inverted ring, rising tide from the right, growing +N above). Tokens from <code>docs/design-system.html</code> only — no new fonts or colors.
     </div>
 
   </div>
 
   <script>
-    // Tab switching + sidecard updates
+    // ── Sidecard content ──
     const cards = {
       opt1: {
-        badge: '01 · DIAL',
-        title: 'The <em>heartbeat</em> dial.',
-        body: 'A single luminous ring you can read across the room. Editorial restraint: italic serif numeral at the center, breathing animation tied to the session, everything else recedes.',
-        bullets: [
-          '<b>Hero</b> — conic clay→gold→clay ring on <code>--surface-deep</code>, 2.4s breathe.',
-          '<b>Center</b> — Instrument Serif italic numeral, status dot above, target below.',
-          '<b>Below</b> — three understated stat cells, two-button CTA.',
-          '<b>Tone</b> — calm, refined, athleisure. Reads as a moment of focus.'
+        badge: '01 · RADIAL',
+        title: 'The <em>sundial</em>',
+        body: 'Closest to the v2 pattern you lost. A conic ring depletes around the edge as the countdown runs — at zero, the ring inverts to <code>--clay-deep</code> and starts <i>filling back</i> the opposite direction to visualise overflow. The numeral switches sign and color.',
+        sections: [
+          ['Mechanism', [
+            '<b>Ring</b> — conic gradient with <code>--pct</code> CSS var driven by JS.',
+            '<b>Overflow</b> — same ring, recolored to clay-deep, refills from 0%.',
+            '<b>Centre</b> — Instrument Serif italic numeral, status dot above.'
+          ]],
+          ['Why', [
+            'Familiar to anyone who used v2.',
+            'Reads at a distance — single shape, peripheral vision.',
+            'Calm. Doesn\'t fight the rest of the app.'
+          ]]
         ],
-        vibe: '"The dial is alive, but it doesn\'t shout."'
+        vibe: '"The ring you remember, told to count down properly."'
       },
       opt2: {
-        badge: '02 · STACK',
-        title: 'The <em>editorial</em> stack.',
-        body: 'Magazine layout, brutalist scale. The numerals do all the work — 132px Onest tabular set against a diagonal accent slash, vertical "LIVE" rail on the right, equalizer bars under the time.',
-        bullets: [
-          '<b>Hero</b> — colossal sans numeral with blinking clay colon, paper-grain texture overlay.',
-          '<b>Layout</b> — asymmetric grid, vertical rail, diagonal hairline accent.',
-          '<b>Meta row</b> — Target / Last / Rest in Instrument Serif italic.',
-          '<b>Tone</b> — confident, print-inspired, slightly anti-app.'
+        badge: '02 · LINEAR',
+        title: 'The <em>tideline</em>',
+        body: 'The whole screen <i>is</i> the timer. A clay liquid surface fills the screen and drains left-to-right as time runs out. When it hits the target (0), a clay-deep diagonal-striped tide starts rising back from the right — the screen tells you, viscerally, that you\'ve gone past.',
+        sections: [
+          ['Mechanism', [
+            '<b>Primary fill</b> — full-bleed clay surface, width = remaining %.',
+            '<b>Overflow</b> — diagonal-striped clay-deep tide rises from the right.',
+            '<b>Target line</b> — dotted hairline at 50% (the meeting point).',
+            '<b>Numeral</b> — 128px Onest with <code>mix-blend-mode: difference</code> so it stays readable over any fill state.'
+          ]],
+          ['Why', [
+            'Visceral, ambient, glance-free — you don\'t need to read a number.',
+            'Overflow is unmistakable: two fluids colliding.',
+            'No ring competing with the consistency hero on Progress.'
+          ]]
         ],
-        vibe: '"Time as a headline, not a widget."'
+        vibe: '"Like watching sand run out of the hourglass — except it\'s lava."'
       },
       opt3: {
-        badge: '03 · GRID',
-        title: 'The <em>scoreboard</em> grid.',
-        body: 'Sports broadcast / arcade energy. Glowing monospace LED readout in a recessed CRT panel, animated waveform, set chips like a boxing card, dense stat grid below.',
-        bullets: [
-          '<b>Hero</b> — JetBrains Mono LED digits with clay halo, scanline background.',
-          '<b>Waveform</b> — 40-bar live equalizer, gold→clay gradient.',
-          '<b>Sets</b> — chip strip (done · live · upcoming), live chip pulses.',
-          '<b>Tone</b> — high-energy, gamified, "you\'re on the clock".'
+        badge: '03 · LEXICAL',
+        title: 'The <em>strike</em>',
+        body: 'No ring. No bar. The number itself is the canvas — Instrument Serif italic at 240px, taking the whole screen. Every tick, a clay slash draws through it. On overflow, the count shrinks and a giant <code>+N</code> erupts above it in clay, growing as overflow extends.',
+        sections: [
+          ['Mechanism', [
+            '<b>Remainder</b> — 240px serif numeral, struck through each tick with a 6° clay slash.',
+            '<b>Overflow</b> — remainder shrinks to 50%, a <code>+N</code> in 200px Onest grows above.',
+            '<b>No graphics</b> — every pixel is type. Pure editorial restraint.'
+          ]],
+          ['Why', [
+            'Singular, characterful — nothing else in the app looks like this.',
+            'The strike-through is the progress indicator. No second visual language.',
+            'Overflow as a literal accumulation: "+3", "+7" growing physically larger.'
+          ]]
         ],
-        vibe: '"Treat the set like a round in a fight."'
+        vibe: '"The number is alive, and it\'s being crossed off."'
       }
     };
 
-    const cardEl = document.getElementById('card-opt1');
-    document.querySelectorAll('.tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        const target = tab.dataset.target;
-        document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === tab));
+    const cardEl = document.getElementById('card');
+    function renderCard(id) {
+      const c = cards[id];
+      cardEl.innerHTML = `
+        <span class="badge">${c.badge}</span>
+        <h2>${c.title}</h2>
+        <p>${c.body}</p>
+        ${c.sections.map(([h, items]) => `
+          <h3>${h}</h3>
+          <ul>${items.map(i => `<li>${i}</li>`).join('')}</ul>
+        `).join('')}
+        <div class="vibe">${c.vibe}</div>
+      `;
+    }
+    renderCard('opt1');
+
+    document.querySelectorAll('.mechCard').forEach(card => {
+      card.addEventListener('click', () => {
+        const target = card.dataset.target;
+        document.querySelectorAll('.mechCard').forEach(c => c.classList.toggle('active', c === card));
         document.querySelectorAll('.overlay').forEach(o => o.classList.toggle('active', o.id === target));
-        const c = cards[target];
-        cardEl.innerHTML = `
-          <span class="badge">${c.badge}</span>
-          <h2>${c.title}</h2>
-          <p>${c.body}</p>
-          <ul>${c.bullets.map(b => `<li>${b}</li>`).join('')}</ul>
-          <div class="vibe">${c.vibe}</div>
-        `;
+        renderCard(target);
       });
     });
 
-    // ── Build equalizer bars (opt2)
-    const bars = document.getElementById('opt2-bars');
-    for (let i = 0; i < 30; i++) {
-      const s = document.createElement('span');
-      s.style.animationDelay = (Math.random() * -1.4) + 's';
-      s.style.animationDuration = (1 + Math.random() * 0.8) + 's';
-      bars.appendChild(s);
+    // ── Single countdown driver. Loops:
+    //    6  → 0  (counting down, 6s)
+    //    0  → -3 (overflow, 3s)
+    //    reset
+    const TARGET = 6;
+    const OVERFLOW_LIMIT = 3;
+    let t = TARGET; // current remaining seconds (can go negative)
+
+    function tick() {
+      t -= 1;
+      if (t < -OVERFLOW_LIMIT) t = TARGET;
+
+      const remaining = Math.max(0, t);
+      const overflow = Math.max(0, -t);
+      const isOver = t < 0;
+      const pct = Math.max(0, (remaining / TARGET) * 100);
+      const overPct = Math.min(100, (overflow / OVERFLOW_LIMIT) * 100);
+
+      // ── Option 1: sundial ──
+      const opt1 = document.getElementById('opt1');
+      const ring = document.getElementById('opt1-ring');
+      ring.style.setProperty('--pct', isOver ? overPct : pct);
+      opt1.classList.toggle('overflow', isOver);
+      document.getElementById('opt1-time').textContent =
+        isOver ? `+0:${String(overflow).padStart(2,'0')}` : `0:${String(remaining).padStart(2,'0')}`;
+      document.getElementById('opt1-state').textContent = isOver ? 'Over target' : 'Counting down';
+      document.getElementById('opt1-cap').textContent = isOver ? `target hit · ${overflow}s over` : `target · 0:${String(TARGET).padStart(2,'0')}`;
+
+      // ── Option 2: tideline ──
+      const fill = document.getElementById('opt2-fill');
+      const over = document.getElementById('opt2-over');
+      fill.style.setProperty('--pct', isOver ? 0 : pct / 2 + 50);   // primary drains from 100→50 mark
+      over.style.setProperty('--pct', isOver ? overPct / 2 + 0 : 0); // overflow rises from right, capped at 50
+      document.getElementById('opt2-num').textContent = isOver ? `+${overflow}` : remaining;
+      document.getElementById('opt2-state').textContent = isOver ? 'Over target' : 'Remaining';
+
+      // ── Option 3: strike ──
+      const opt3 = document.getElementById('opt3');
+      const remainEl = document.getElementById('opt3-remain');
+      const overEl = document.getElementById('opt3-over');
+      opt3.classList.toggle('overflow', isOver);
+      remainEl.innerHTML = `${isOver ? 0 : remaining}<div class="opt3__strike"></div>`;
+      overEl.textContent = overflow;
+      // re-trigger strike animation
+      opt3.classList.remove('tick');
+      void opt3.offsetWidth;
+      opt3.classList.add('tick');
     }
 
-    // ── Build waveform bars (opt3)
-    const wave = document.getElementById('opt3-wave');
-    for (let i = 0; i < 40; i++) {
-      const s = document.createElement('span');
-      s.style.animationDelay = (Math.random() * -1.4) + 's';
-      s.style.animationDuration = (0.9 + Math.random() * 0.9) + 's';
-      wave.appendChild(s);
-    }
-
-    // ── Ticking timers (faux, just for the preview)
-    let seconds = 42;
-    function format(s) {
-      const m = Math.floor(s / 60);
-      const r = s % 60;
-      return `${m}:${String(r).padStart(2, '0')}`;
-    }
-    function formatMono(s) {
-      const m = Math.floor(s / 60);
-      const r = s % 60;
-      return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
-    }
-    setInterval(() => {
-      seconds++;
-      document.getElementById('opt1-time').textContent = format(seconds);
-      document.getElementById('opt2-time').innerHTML = formatMono(seconds).replace(':', '<span class="colon">:</span>');
-      document.getElementById('opt3-time').textContent = formatMono(seconds);
-    }, 1000);
+    tick();
+    setInterval(tick, 1000);
   </script>
 </body>
 </html>
