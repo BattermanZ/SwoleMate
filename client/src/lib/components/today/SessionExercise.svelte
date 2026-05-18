@@ -596,50 +596,92 @@
 </article>
 
 {#if timerOverlayOpen}
-	<div class="timer-overlay" role="dialog" aria-modal="true" aria-label={`${exercise.name} timer`}>
-		<div class="timer-panel">
-			<div class="timer-heading">
-				<div class="timer-kicker">{timerComplete ? 'Timer complete' : 'Timed set'}</div>
-				<div class="timer-title">{exercise.name}</div>
+	{@const mm = Math.floor(Math.max(0, timerDisplaySeconds) / 60)}
+	{@const ss = String(Math.max(0, timerDisplaySeconds) % 60).padStart(2, '0')}
+	{@const stateLabel = timerComplete ? 'Done' : timerRunning ? 'Hold' : 'Paused'}
+	<div
+		class="hold-stage"
+		role="dialog"
+		aria-modal="true"
+		aria-label={`${exercise.name} timer`}
+		data-state={timerComplete ? 'complete' : timerRunning ? 'running' : 'paused'}
+	>
+		<div class="hold-stage__atmo" aria-hidden="true"></div>
+
+		<header class="hold-stage__top">
+			<span class="hold-eyebrow" data-tone={timerTone}>
+				<span class="hold-eyebrow__dot" aria-hidden="true"></span>
+				{stateLabel}
+			</span>
+			<button
+				type="button"
+				class="hold-dismiss"
+				onclick={resetTimer}
+				aria-label="Close timer"
+			>
+				Close
+			</button>
+		</header>
+
+		<div class="hold-stage__center">
+			<div
+				class="hold-readout"
+				class:hold-readout--running={timerRunning}
+				class:hold-readout--complete={timerComplete}
+			>
+				<span class="hold-readout__seg">{String(mm).padStart(2, '0')}</span>
+				<span class="hold-readout__colon" aria-hidden="true">:</span>
+				<span class="hold-readout__seg">{ss}</span>
 			</div>
 
 			<div
-				class="timer-dial"
-				class:paused={!timerRunning && !timerComplete}
+				class="hold-wick"
 				data-tone={timerTone}
-				style={`--timer-progress:${timerProgressPct}`}
+				class:hold-wick--complete={timerComplete}
+				style={`--p:${timerProgressPct}`}
 			>
-				<div class="timer-dial__inner">
-					<div class="timer-state">
-						{timerComplete ? 'Complete' : timerRunning ? 'Running' : 'Paused'}
-					</div>
-					<div class="timer-value">{formatDuration(timerDisplaySeconds)}</div>
-					<div class="timer-caption">
-						Target {formatDuration(timerTargetSeconds)} • Set {exercise.sets.length + 1}
-					</div>
-				</div>
+				<span class="hold-wick__rail" aria-hidden="true"></span>
+				<span class="hold-wick__burn" aria-hidden="true"></span>
+				<span class="hold-wick__ember" aria-hidden="true"></span>
 			</div>
 
-			<div class="timer-actions">
-				{#if timerRunning}
-					<button type="button" class="t-btn t-btn--soft" onclick={pauseTimer}>Pause</button>
-				{:else if timerComplete}
-					<button type="button" class="t-btn t-btn--soft" onclick={resetCountdown}>Repeat</button>
-				{:else}
-					<button type="button" class="t-btn t-btn--soft" onclick={startTimer}>Resume</button>
-				{/if}
-				<button
-					type="button"
-					class="t-btn t-btn--primary"
-					onclick={saveTimedSet}
-					disabled={!timerCanSave}
-				>
-					Add set
-				</button>
-				<button type="button" class="t-btn t-btn--ghost" onclick={resetCountdown}>Reset</button>
-				<button type="button" class="t-btn t-btn--ghost" onclick={resetTimer}>Close</button>
-			</div>
+			<p class="hold-meta">
+				<em>{exercise.name}</em>
+				<span class="hold-meta__sep" aria-hidden="true">·</span>
+				set {exercise.sets.length + 1}
+				<span class="hold-meta__sep" aria-hidden="true">·</span>
+				target {formatDuration(timerTargetSeconds)}
+			</p>
+
+			{#if timerComplete}
+				<p class="hold-flourish">well held.</p>
+			{/if}
 		</div>
+
+		<footer class="hold-stage__bottom">
+			{#if timerComplete}
+				<button type="button" class="hold-cta" onclick={saveTimedSet}>
+					<span>Log this set</span>
+					<span class="hold-cta__arrow" aria-hidden="true">→</span>
+				</button>
+			{:else if timerRunning}
+				<button type="button" class="hold-cta hold-cta--quiet" onclick={pauseTimer}>
+					<span>Pause</span>
+				</button>
+			{:else}
+				<button type="button" class="hold-cta" onclick={startTimer}>
+					<span>Resume</span>
+					<span class="hold-cta__arrow" aria-hidden="true">▶</span>
+				</button>
+			{/if}
+
+			<div class="hold-secondary">
+				{#if !timerComplete && timerCanSave}
+					<button type="button" class="hold-link" onclick={saveTimedSet}>Add as-is</button>
+				{/if}
+				<button type="button" class="hold-link" onclick={resetCountdown}>Restart</button>
+			</div>
+		</footer>
 	</div>
 {/if}
 
@@ -1091,160 +1133,440 @@
 		box-shadow: none;
 	}
 
-	.timer-overlay {
+	/* ── Editorial Hold (timer overlay) ──────────────────────────────── */
+	.hold-stage {
 		position: fixed;
 		inset: 0;
 		z-index: 80;
 		display: grid;
-		place-items: center;
-		padding: 1.25rem;
-		padding-bottom: calc(1.25rem + var(--sab));
-		background:
-			radial-gradient(900px 600px at 0% 0%, rgba(255, 122, 42, 0.18), transparent 60%),
-			radial-gradient(900px 600px at 100% 100%, rgba(213, 162, 58, 0.12), transparent 55%),
-			rgba(24, 19, 13, 0.78);
-		backdrop-filter: blur(14px);
-		-webkit-backdrop-filter: blur(14px);
-	}
-
-	.timer-panel {
-		width: min(100%, 22rem);
-		display: grid;
-		justify-items: center;
-		gap: 1.1rem;
+		grid-template-rows: auto 1fr auto;
+		padding:
+			calc(1.25rem + var(--sat)) calc(1.25rem + var(--sar))
+			calc(1.25rem + var(--sab)) calc(1.25rem + var(--sal));
 		color: var(--on-deep);
-		text-align: center;
+		background: #120d09;
+		isolation: isolate;
+		overflow: hidden;
+		animation: hold-fade-in 280ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 	}
-
-	.timer-heading {
-		display: grid;
-		gap: 0.3rem;
+	.hold-stage::before,
+	.hold-stage::after {
+		content: '';
+		position: absolute;
+		pointer-events: none;
+		z-index: -1;
 	}
-	.timer-kicker {
-		font:
-			800 10px/1 'Onest',
-			system-ui,
-			sans-serif;
-		letter-spacing: 0.22em;
-		text-transform: uppercase;
-		color: var(--on-deep-soft);
-	}
-	.timer-title {
-		font:
-			800 18px/1.15 'Onest',
-			system-ui,
-			sans-serif;
-		letter-spacing: -0.01em;
-	}
-
-	.timer-dial {
-		width: min(74vw, 17rem);
-		aspect-ratio: 1;
-		border-radius: 9999px;
-		display: grid;
-		place-items: center;
-		padding: 0.85rem;
-		--timer-ring-color: var(--clay);
-		--timer-track-color: rgba(243, 236, 225, 0.12);
+	.hold-stage::before {
+		inset: -20%;
 		background:
-			conic-gradient(
-				from -90deg,
-				var(--timer-ring-color) 0 var(--timer-progress),
-				var(--timer-track-color) var(--timer-progress) 100%
-			),
-			rgba(24, 19, 13, 0.85);
-		box-shadow:
-			0 24px 60px -18px rgba(0, 0, 0, 0.55),
-			inset 0 0 0 1px rgba(243, 236, 225, 0.06);
-		transition: filter 220ms ease;
+			radial-gradient(40% 45% at 12% 14%, rgba(255, 122, 42, 0.42), transparent 65%),
+			radial-gradient(35% 38% at 88% 92%, rgba(213, 162, 58, 0.28), transparent 70%),
+			radial-gradient(50% 55% at 90% 8%, rgba(79, 125, 84, 0.12), transparent 72%);
+		filter: blur(12px);
+		opacity: 1;
+		transition: opacity 320ms ease;
 	}
-	.timer-dial[data-tone='danger'] {
-		--timer-ring-color: var(--clay);
-	}
-	.timer-dial[data-tone='warning'] {
-		--timer-ring-color: var(--gold);
-	}
-	.timer-dial[data-tone='steady'] {
-		--timer-ring-color: var(--success);
-	}
-	.timer-dial.paused {
-		filter: saturate(0.55) brightness(0.92);
-	}
-
-	.timer-dial__inner {
-		width: 100%;
-		height: 100%;
-		border-radius: inherit;
-		background:
-			radial-gradient(circle at 50% 35%, rgba(243, 236, 225, 0.06), transparent 60%),
-			#1a140f;
-		display: grid;
-		place-items: center;
-		gap: 0.35rem;
-		padding: 1rem;
-	}
-	.timer-state {
-		font:
-			800 10px/1 'Onest',
-			system-ui,
-			sans-serif;
-		letter-spacing: 0.22em;
-		text-transform: uppercase;
-		color: var(--on-deep-soft);
-	}
-	.timer-value {
-		font:
-			800 clamp(2.6rem, 11vw, 3.4rem) / 1 'Onest',
-			system-ui,
-			sans-serif;
-		letter-spacing: -0.02em;
-		font-variant-numeric: tabular-nums;
-		color: var(--on-deep);
-	}
-	.timer-caption {
-		font:
-			500 11px/1.3 'Onest',
-			system-ui,
-			sans-serif;
-		color: var(--on-deep-soft);
-		max-width: 14rem;
-	}
-
-	.timer-actions {
-		display: flex;
-		flex-wrap: wrap;
-		justify-content: center;
-		gap: 8px;
-		width: 100%;
-	}
-	.t-btn {
-		border: 0;
-		border-radius: 999px;
-		padding: 12px 18px;
-		font:
-			800 13px/1 'Onest',
-			system-ui,
-			sans-serif;
-		cursor: pointer;
-		min-width: 92px;
-	}
-	.t-btn:disabled {
+	.hold-stage[data-state='paused']::before {
 		opacity: 0.45;
-		cursor: not-allowed;
 	}
-	.t-btn--primary {
-		background: linear-gradient(180deg, var(--clay-2), var(--clay));
-		color: white;
-		box-shadow:
-			0 14px 28px -10px rgba(255, 94, 31, 0.55),
-			inset 0 -3px 0 var(--clay-deep);
+	.hold-stage[data-state='complete']::before {
+		background:
+			radial-gradient(60% 60% at 50% 30%, rgba(111, 160, 116, 0.32), transparent 70%),
+			radial-gradient(35% 38% at 88% 92%, rgba(213, 162, 58, 0.2), transparent 70%);
 	}
-	.t-btn--soft {
-		background: rgba(243, 236, 225, 0.14);
+	.hold-stage__atmo {
+		position: absolute;
+		inset: 0;
+		z-index: -1;
+		background-image:
+			radial-gradient(rgba(243, 236, 225, 0.05) 1px, transparent 1px),
+			radial-gradient(rgba(243, 236, 225, 0.03) 1px, transparent 1px);
+		background-size:
+			3px 3px,
+			7px 7px;
+		background-position:
+			0 0,
+			1px 2px;
+		mix-blend-mode: screen;
+		opacity: 0.6;
+	}
+
+	@keyframes hold-fade-in {
+		from {
+			opacity: 0;
+		}
+		to {
+			opacity: 1;
+		}
+	}
+
+	/* — top eyebrow + dismiss — */
+	.hold-stage__top {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+	}
+	.hold-eyebrow {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		padding: 6px 12px 6px 10px;
+		border-radius: 999px;
+		background: rgba(243, 236, 225, 0.06);
+		border: 1px solid rgba(243, 236, 225, 0.1);
+		font:
+			800 10px/1 'Onest',
+			system-ui,
+			sans-serif;
+		letter-spacing: 0.28em;
+		text-transform: uppercase;
 		color: var(--on-deep);
 	}
-	.t-btn--ghost {
+	.hold-eyebrow__dot {
+		width: 7px;
+		height: 7px;
+		border-radius: 999px;
+		background: var(--clay);
+		box-shadow: 0 0 0 4px rgba(255, 94, 31, 0.18);
+	}
+	.hold-eyebrow[data-tone='warning'] .hold-eyebrow__dot {
+		background: var(--gold);
+		box-shadow: 0 0 0 4px rgba(213, 162, 58, 0.18);
+	}
+	.hold-eyebrow[data-tone='steady'] .hold-eyebrow__dot {
+		background: var(--success);
+		box-shadow: 0 0 0 4px rgba(79, 125, 84, 0.22);
+	}
+	.hold-stage[data-state='running'] .hold-eyebrow__dot {
+		animation: hold-dot-pulse 1.6s ease-in-out infinite;
+	}
+	.hold-stage[data-state='paused'] .hold-eyebrow__dot {
+		opacity: 0.5;
+	}
+	@keyframes hold-dot-pulse {
+		0%,
+		100% {
+			transform: scale(1);
+			filter: brightness(1);
+		}
+		50% {
+			transform: scale(1.25);
+			filter: brightness(1.25);
+		}
+	}
+
+	.hold-dismiss {
+		appearance: none;
+		border: 0;
 		background: transparent;
 		color: var(--on-deep-soft);
+		font:
+			italic 400 16px/1 'Instrument Serif',
+			serif;
+		cursor: pointer;
+		padding: 6px 4px;
+	}
+	.hold-dismiss:hover {
+		color: var(--on-deep);
+	}
+
+	/* — center readout — */
+	.hold-stage__center {
+		display: grid;
+		justify-items: center;
+		align-content: center;
+		gap: clamp(1rem, 4vh, 1.75rem);
+		text-align: center;
+	}
+	.hold-readout {
+		display: flex;
+		align-items: baseline;
+		justify-content: center;
+		gap: 0.02em;
+		font:
+			italic 400 clamp(5rem, 28vw, 11rem) / 0.9 'Instrument Serif',
+			'Times New Roman',
+			serif;
+		letter-spacing: -0.04em;
+		font-variant-numeric: tabular-nums;
+		color: var(--on-deep);
+		text-shadow: 0 4px 30px rgba(0, 0, 0, 0.45);
+		animation: hold-readout-in 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+	}
+	@keyframes hold-readout-in {
+		from {
+			transform: translateY(8px);
+			opacity: 0;
+		}
+		to {
+			transform: translateY(0);
+			opacity: 1;
+		}
+	}
+	.hold-readout__seg {
+		display: inline-block;
+	}
+	.hold-readout__colon {
+		display: inline-block;
+		transform: translateY(-0.06em);
+		padding: 0 0.05em;
+		color: var(--clay-2);
+		opacity: 0.95;
+	}
+	.hold-readout--running .hold-readout__colon {
+		animation: hold-colon-blink 1s steps(2, jump-none) infinite;
+	}
+	.hold-readout--complete {
+		color: var(--success);
+	}
+	.hold-readout--complete .hold-readout__colon {
+		color: var(--success);
+	}
+	@keyframes hold-colon-blink {
+		0%,
+		49% {
+			opacity: 1;
+		}
+		50%,
+		100% {
+			opacity: 0.18;
+		}
+	}
+
+	/* — wick (horizontal burning progress) — */
+	.hold-wick {
+		position: relative;
+		width: min(78vw, 24rem);
+		height: 14px;
+		--wick-color: var(--clay);
+	}
+	.hold-wick[data-tone='warning'] {
+		--wick-color: var(--gold);
+	}
+	.hold-wick[data-tone='steady'] {
+		--wick-color: var(--success);
+	}
+	.hold-wick--complete {
+		--wick-color: var(--success);
+	}
+	.hold-wick__rail {
+		position: absolute;
+		inset: 50% 0 auto 0;
+		height: 1px;
+		transform: translateY(-50%);
+		background:
+			linear-gradient(
+				to right,
+				transparent 0,
+				rgba(243, 236, 225, 0.16) 8%,
+				rgba(243, 236, 225, 0.16) 92%,
+				transparent 100%
+			);
+	}
+	.hold-wick__burn {
+		position: absolute;
+		left: 0;
+		top: 50%;
+		height: 3px;
+		width: var(--p, 0%);
+		transform: translateY(-50%);
+		background: linear-gradient(
+			to right,
+			rgba(79, 125, 84, 0.5) 0%,
+			var(--gold) 35%,
+			var(--clay-2) 70%,
+			var(--wick-color) 100%
+		);
+		border-radius: 999px;
+		box-shadow:
+			0 0 12px rgba(255, 94, 31, 0.38),
+			0 0 26px rgba(255, 94, 31, 0.22);
+		transition:
+			width 250ms linear,
+			background 320ms ease;
+	}
+	.hold-wick--complete .hold-wick__burn {
+		background: var(--success);
+		box-shadow: 0 0 14px rgba(111, 160, 116, 0.38);
+	}
+	.hold-wick__ember {
+		position: absolute;
+		top: 50%;
+		left: var(--p, 0%);
+		width: 14px;
+		height: 14px;
+		border-radius: 999px;
+		transform: translate(-50%, -50%);
+		background: radial-gradient(
+			circle at 50% 50%,
+			#fff7e9 0%,
+			var(--clay-2) 35%,
+			var(--clay) 60%,
+			transparent 75%
+		);
+		filter: blur(0.3px);
+		transition: left 250ms linear;
+		opacity: 1;
+	}
+	.hold-stage[data-state='paused'] .hold-wick__ember {
+		opacity: 0.55;
+	}
+	.hold-wick--complete .hold-wick__ember {
+		opacity: 0;
+	}
+	.hold-stage[data-state='running'] .hold-wick__ember {
+		animation: hold-ember-flicker 1.4s ease-in-out infinite;
+	}
+	@keyframes hold-ember-flicker {
+		0%,
+		100% {
+			filter: blur(0.3px) brightness(1);
+		}
+		50% {
+			filter: blur(0.6px) brightness(1.25);
+		}
+	}
+
+	/* — meta + complete flourish — */
+	.hold-meta {
+		margin: 0;
+		font:
+			500 13px/1.5 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--on-deep-soft);
+		letter-spacing: 0.02em;
+	}
+	.hold-meta em {
+		font:
+			italic 400 16px/1 'Instrument Serif',
+			serif;
+		color: var(--on-deep);
+		margin-right: 2px;
+	}
+	.hold-meta__sep {
+		margin: 0 6px;
+		color: rgba(243, 236, 225, 0.3);
+	}
+	.hold-flourish {
+		margin: 0;
+		font:
+			italic 400 22px/1 'Instrument Serif',
+			serif;
+		color: var(--success);
+		animation: hold-flourish-in 460ms 80ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+	}
+	@keyframes hold-flourish-in {
+		from {
+			transform: translateY(6px);
+			opacity: 0;
+		}
+		to {
+			transform: translateY(0);
+			opacity: 1;
+		}
+	}
+
+	/* — bottom actions — */
+	.hold-stage__bottom {
+		display: grid;
+		gap: 14px;
+		justify-items: center;
+		width: 100%;
+		max-width: 24rem;
+		margin: 0 auto;
+	}
+	.hold-cta {
+		appearance: none;
+		border: 0;
+		cursor: pointer;
+		width: 100%;
+		padding: 18px 22px;
+		border-radius: 999px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 12px;
+		background: linear-gradient(180deg, var(--clay-2), var(--clay));
+		color: #fff7ed;
+		font:
+			800 15px/1 'Onest',
+			system-ui,
+			sans-serif;
+		letter-spacing: 0.02em;
+		box-shadow:
+			0 18px 36px -12px rgba(255, 94, 31, 0.55),
+			inset 0 -3px 0 var(--clay-deep);
+		transition:
+			transform 120ms ease,
+			box-shadow 220ms ease;
+	}
+	.hold-cta:active {
+		transform: translateY(1px);
+		box-shadow:
+			0 10px 24px -14px rgba(255, 94, 31, 0.5),
+			inset 0 -2px 0 var(--clay-deep);
+	}
+	.hold-cta__arrow {
+		font-size: 18px;
+		line-height: 1;
+		opacity: 0.92;
+	}
+	.hold-cta--quiet {
+		background: rgba(243, 236, 225, 0.08);
+		color: var(--on-deep);
+		box-shadow: inset 0 0 0 1px rgba(243, 236, 225, 0.14);
+	}
+	.hold-cta--quiet:active {
+		box-shadow: inset 0 0 0 1px rgba(243, 236, 225, 0.22);
+	}
+
+	.hold-secondary {
+		display: flex;
+		gap: 18px;
+		align-items: center;
+		justify-content: center;
+	}
+	.hold-link {
+		appearance: none;
+		border: 0;
+		background: transparent;
+		cursor: pointer;
+		color: var(--on-deep-soft);
+		font:
+			italic 400 15px/1 'Instrument Serif',
+			serif;
+		padding: 6px 4px;
+		position: relative;
+	}
+	.hold-link::after {
+		content: '';
+		position: absolute;
+		left: 4px;
+		right: 4px;
+		bottom: 2px;
+		height: 1px;
+		background: currentColor;
+		opacity: 0.4;
+	}
+	.hold-link:hover {
+		color: var(--on-deep);
+	}
+	.hold-link:hover::after {
+		opacity: 0.7;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.hold-stage,
+		.hold-readout,
+		.hold-flourish,
+		.hold-readout__colon,
+		.hold-eyebrow__dot,
+		.hold-wick__ember,
+		.hold-wick__burn {
+			animation: none !important;
+			transition: none !important;
+		}
 	}
 </style>
