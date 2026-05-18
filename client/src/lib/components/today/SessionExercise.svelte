@@ -73,11 +73,47 @@
 	let editingSetId = $state<number | null>(null);
 	let settingsOpen = $state(false);
 
+	// Timer overlay state (countdown for timed sets)
+	let timerRunning = $state(false);
+	let timerTargetSeconds = $state(0);
+	let timerRemainingSeconds = $state(0);
+	let timerEndsAt = 0;
+	let timerInterval: ReturnType<typeof setInterval> | undefined;
+
 	let locked = $derived(exercise.status === 'done' && !editing);
 
 	let tracksReps = $derived(exercise.tracksReps ?? true);
 	let tracksTime = $derived(exercise.tracksTime ?? false);
 	let tracksWeight = $derived(exercise.tracksWeight ?? true);
+
+	let timerOverlayOpen = $derived(tracksTime && timerTargetSeconds > 0);
+	let timerComplete = $derived(
+		timerTargetSeconds > 0 && timerRemainingSeconds <= 0 && !timerRunning
+	);
+	let timerDisplaySeconds = $derived(
+		timerTargetSeconds > 0 ? timerRemainingSeconds : setDurationSeconds
+	);
+	let timerElapsedSeconds = $derived(
+		timerTargetSeconds > 0
+			? Math.max(0, timerTargetSeconds - Math.max(0, timerRemainingSeconds))
+			: 0
+	);
+	let timerCanSave = $derived(timerComplete || (!timerRunning && timerElapsedSeconds > 0));
+	let timerProgress = $derived(
+		timerTargetSeconds > 0
+			? Math.max(0, Math.min(1, timerRemainingSeconds / timerTargetSeconds))
+			: 1
+	);
+	let timerProgressPct = $derived(`${Math.round(timerProgress * 100)}%`);
+	let timerTone = $derived(
+		timerComplete || timerProgress <= 0.15
+			? 'steady'
+			: timerProgress <= 0.4
+				? 'warning'
+				: 'danger'
+	);
+
+	$effect(() => stopTimerInterval);
 
 	let setCount = $derived(exercise.sets.length);
 	let summary = $derived.by(() => {
@@ -160,6 +196,70 @@
 		if (locked) return;
 		onTogglePerSideWeight?.(enabled);
 		if (!enabled) onToggleSplitWeight?.(false);
+	}
+
+	function formatDuration(value: number) {
+		const v = Math.max(0, Math.round(value));
+		return `${Math.floor(v / 60)}:${String(v % 60).padStart(2, '0')}`;
+	}
+
+	function stopTimerInterval() {
+		if (timerInterval !== undefined) clearInterval(timerInterval);
+		timerInterval = undefined;
+	}
+
+	function tickTimer() {
+		timerRemainingSeconds = Math.max(0, Math.ceil((timerEndsAt - Date.now()) / 1000));
+		if (timerRemainingSeconds > 0) return;
+		timerRunning = false;
+		stopTimerInterval();
+		setDurationSeconds = timerTargetSeconds;
+	}
+
+	function startTimer() {
+		if (locked || !tracksTime || timerRunning || typeof window === 'undefined') return;
+		const target = timerTargetSeconds || Math.max(1, Math.round(setDurationSeconds));
+		const remaining = timerRemainingSeconds > 0 ? timerRemainingSeconds : target;
+		timerTargetSeconds = target;
+		timerRemainingSeconds = remaining;
+		setDurationSeconds = target;
+		timerRunning = true;
+		timerEndsAt = Date.now() + remaining * 1000;
+		tickTimer();
+		timerInterval = setInterval(tickTimer, 250);
+	}
+
+	function pauseTimer() {
+		if (!timerRunning) return;
+		tickTimer();
+		timerRunning = false;
+		stopTimerInterval();
+	}
+
+	function resetTimer() {
+		timerRunning = false;
+		timerTargetSeconds = 0;
+		timerRemainingSeconds = 0;
+		timerEndsAt = 0;
+		stopTimerInterval();
+	}
+
+	function resetCountdown() {
+		const target = timerTargetSeconds || Math.max(1, Math.round(setDurationSeconds));
+		timerRunning = false;
+		timerTargetSeconds = target;
+		timerRemainingSeconds = target;
+		timerEndsAt = 0;
+		stopTimerInterval();
+		setDurationSeconds = target;
+	}
+
+	function saveTimedSet() {
+		if (timerRunning) pauseTimer();
+		if (!timerCanSave) return;
+		setDurationSeconds = timerComplete ? timerTargetSeconds : timerElapsedSeconds;
+		commitSet();
+		resetTimer();
 	}
 
 	let prGroupIndex = $derived.by(() => {
@@ -405,6 +505,15 @@
 									min={1}
 									unit="s"
 								/>
+								<button
+									type="button"
+									class="start-timer"
+									onclick={startTimer}
+									disabled={locked || timerRunning}
+									aria-label="Start countdown timer"
+								>
+									▶ Start timer
+								</button>
 							</div>
 						{/if}
 						{#if tracksWeight && !exercise.perSideWeight}
@@ -464,6 +573,54 @@
 		</div>
 	{/if}
 </article>
+
+{#if timerOverlayOpen}
+	<div class="timer-overlay" role="dialog" aria-modal="true" aria-label={`${exercise.name} timer`}>
+		<div class="timer-panel">
+			<div class="timer-heading">
+				<div class="timer-kicker">{timerComplete ? 'Timer complete' : 'Timed set'}</div>
+				<div class="timer-title">{exercise.name}</div>
+			</div>
+
+			<div
+				class="timer-dial"
+				class:paused={!timerRunning && !timerComplete}
+				data-tone={timerTone}
+				style={`--timer-progress:${timerProgressPct}`}
+			>
+				<div class="timer-dial__inner">
+					<div class="timer-state">
+						{timerComplete ? 'Complete' : timerRunning ? 'Running' : 'Paused'}
+					</div>
+					<div class="timer-value">{formatDuration(timerDisplaySeconds)}</div>
+					<div class="timer-caption">
+						Target {formatDuration(timerTargetSeconds)} • Set {exercise.sets.length + 1}
+					</div>
+				</div>
+			</div>
+
+			<div class="timer-actions">
+				{#if timerRunning}
+					<button type="button" class="t-btn t-btn--soft" onclick={pauseTimer}>Pause</button>
+				{:else if timerComplete}
+					<button type="button" class="t-btn t-btn--soft" onclick={resetCountdown}>Repeat</button>
+				{:else}
+					<button type="button" class="t-btn t-btn--soft" onclick={startTimer}>Resume</button>
+				{/if}
+				<button
+					type="button"
+					class="t-btn t-btn--primary"
+					onclick={saveTimedSet}
+					disabled={!timerCanSave}
+				>
+					Add set
+				</button>
+				<button type="button" class="t-btn t-btn--ghost" onclick={resetCountdown}>Reset</button>
+				<button type="button" class="t-btn t-btn--ghost" onclick={resetTimer}>Close</button>
+			</div>
+		</div>
+	</div>
+{/if}
 
 <style>
 	.ex {
@@ -881,5 +1038,183 @@
 		display: flex;
 		justify-content: flex-end;
 		gap: 8px;
+	}
+
+	/* ── Timed-set countdown overlay ─────────────────────────────────── */
+	.start-timer {
+		margin-top: 2px;
+		align-self: start;
+		border: 0;
+		border-radius: 999px;
+		padding: 8px 14px;
+		background: var(--ink);
+		color: var(--card);
+		font:
+			800 11px/1 'Onest',
+			system-ui,
+			sans-serif;
+		letter-spacing: 0.04em;
+		cursor: pointer;
+	}
+	.start-timer:disabled {
+		opacity: 0.45;
+		cursor: not-allowed;
+	}
+
+	.timer-overlay {
+		position: fixed;
+		inset: 0;
+		z-index: 80;
+		display: grid;
+		place-items: center;
+		padding: 1.25rem;
+		padding-bottom: calc(1.25rem + var(--sab));
+		background:
+			radial-gradient(900px 600px at 0% 0%, rgba(255, 122, 42, 0.18), transparent 60%),
+			radial-gradient(900px 600px at 100% 100%, rgba(213, 162, 58, 0.12), transparent 55%),
+			rgba(24, 19, 13, 0.78);
+		backdrop-filter: blur(14px);
+		-webkit-backdrop-filter: blur(14px);
+	}
+
+	.timer-panel {
+		width: min(100%, 22rem);
+		display: grid;
+		justify-items: center;
+		gap: 1.1rem;
+		color: var(--on-deep);
+		text-align: center;
+	}
+
+	.timer-heading {
+		display: grid;
+		gap: 0.3rem;
+	}
+	.timer-kicker {
+		font:
+			800 10px/1 'Onest',
+			system-ui,
+			sans-serif;
+		letter-spacing: 0.22em;
+		text-transform: uppercase;
+		color: var(--on-deep-soft);
+	}
+	.timer-title {
+		font:
+			800 18px/1.15 'Onest',
+			system-ui,
+			sans-serif;
+		letter-spacing: -0.01em;
+	}
+
+	.timer-dial {
+		width: min(74vw, 17rem);
+		aspect-ratio: 1;
+		border-radius: 9999px;
+		display: grid;
+		place-items: center;
+		padding: 0.85rem;
+		--timer-ring-color: var(--clay);
+		--timer-track-color: rgba(243, 236, 225, 0.12);
+		background:
+			conic-gradient(
+				from -90deg,
+				var(--timer-ring-color) 0 var(--timer-progress),
+				var(--timer-track-color) var(--timer-progress) 100%
+			),
+			rgba(24, 19, 13, 0.85);
+		box-shadow:
+			0 24px 60px -18px rgba(0, 0, 0, 0.55),
+			inset 0 0 0 1px rgba(243, 236, 225, 0.06);
+		transition: filter 220ms ease;
+	}
+	.timer-dial[data-tone='danger'] {
+		--timer-ring-color: var(--clay);
+	}
+	.timer-dial[data-tone='warning'] {
+		--timer-ring-color: var(--gold);
+	}
+	.timer-dial[data-tone='steady'] {
+		--timer-ring-color: var(--success);
+	}
+	.timer-dial.paused {
+		filter: saturate(0.55) brightness(0.92);
+	}
+
+	.timer-dial__inner {
+		width: 100%;
+		height: 100%;
+		border-radius: inherit;
+		background:
+			radial-gradient(circle at 50% 35%, rgba(243, 236, 225, 0.06), transparent 60%),
+			#1a140f;
+		display: grid;
+		place-items: center;
+		gap: 0.35rem;
+		padding: 1rem;
+	}
+	.timer-state {
+		font:
+			800 10px/1 'Onest',
+			system-ui,
+			sans-serif;
+		letter-spacing: 0.22em;
+		text-transform: uppercase;
+		color: var(--on-deep-soft);
+	}
+	.timer-value {
+		font:
+			800 clamp(2.6rem, 11vw, 3.4rem) / 1 'Onest',
+			system-ui,
+			sans-serif;
+		letter-spacing: -0.02em;
+		font-variant-numeric: tabular-nums;
+		color: var(--on-deep);
+	}
+	.timer-caption {
+		font:
+			500 11px/1.3 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--on-deep-soft);
+		max-width: 14rem;
+	}
+
+	.timer-actions {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 8px;
+		width: 100%;
+	}
+	.t-btn {
+		border: 0;
+		border-radius: 999px;
+		padding: 12px 18px;
+		font:
+			800 13px/1 'Onest',
+			system-ui,
+			sans-serif;
+		cursor: pointer;
+		min-width: 92px;
+	}
+	.t-btn:disabled {
+		opacity: 0.45;
+		cursor: not-allowed;
+	}
+	.t-btn--primary {
+		background: linear-gradient(180deg, var(--clay-2), var(--clay));
+		color: white;
+		box-shadow:
+			0 14px 28px -10px rgba(255, 94, 31, 0.55),
+			inset 0 -3px 0 var(--clay-deep);
+	}
+	.t-btn--soft {
+		background: rgba(243, 236, 225, 0.14);
+		color: var(--on-deep);
+	}
+	.t-btn--ghost {
+		background: transparent;
+		color: var(--on-deep-soft);
 	}
 </style>
