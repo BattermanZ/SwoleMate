@@ -40,6 +40,7 @@
 
 	let showDemoAction = $state(false);
 	let templatePickerOpen = $state(false);
+	let composerEl = $state<HTMLElement | null>(null);
 	let templateLoading = $state(false);
 	let templateError = $state<string | null>(null);
 	let templates = $state<WorkoutTemplate[]>([]);
@@ -66,6 +67,11 @@
 		await c.startSessionFromTemplate(templateId);
 		// `c.error` is the raw store, so peek via $- in the template; here we just close optimistically.
 		templatePickerOpen = false;
+	}
+
+	function markDoneAndScroll(exerciseId: number) {
+		c.markExerciseDone(exerciseId);
+		composerEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 	}
 </script>
 
@@ -186,7 +192,7 @@
 						lastTime={c.getLastTimeForExercise(ex.name)}
 						onToggle={() => c.toggleExercise(ex.id)}
 						onDelete={() => c.removeExercise(ex.id)}
-						onMarkDone={() => c.markExerciseDone(ex.id)}
+						onMarkDone={() => markDoneAndScroll(ex.id)}
 						onAddSet={(p) =>
 							c.addSet(ex.id, p.reps, p.weight, p.weightLeft, p.weightRight, p.durationSeconds)}
 						onUpdateSet={(setId, p) =>
@@ -210,6 +216,7 @@
 			</div>
 		{/if}
 
+		<div bind:this={composerEl}>
 		<ExerciseComposer
 			bind:query={$exerciseQuery}
 			suggestions={$suggestions}
@@ -219,6 +226,7 @@
 			onAdd={(name) => c.addExercise(name)}
 			onAddTemplateExercise={(id) => c.startPlannedTemplateExercise(id)}
 		/>
+		</div>
 	{/if}
 
 	<RecentSessions
