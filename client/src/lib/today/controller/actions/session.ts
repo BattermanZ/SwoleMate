@@ -235,6 +235,8 @@ export function createSessionActions(args: {
 
 			state.loading.set(true);
 			await cancelWorkout(session.id);
+			const cancelKey = sessionKeyForId(session.id);
+			await deleteOfflineSession(cancelKey).catch(() => undefined);
 			state.currentSession.set(null);
 			state.sessionNotes.set('');
 			state.openExerciseIds.set([]);
@@ -331,6 +333,8 @@ export function createSessionActions(args: {
 				feedback: mood
 			});
 
+			const endKey = sessionKeyForId(session.id);
+			await deleteOfflineSession(endKey).catch(() => undefined);
 			state.currentSession.set(null);
 			state.sessionNotes.set('');
 			state.openExerciseIds.set([]);
