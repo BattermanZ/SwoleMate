@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { fly } from 'svelte/transition';
 	import { getWorkoutTemplates } from '$lib/api';
 	import { readDemoModePreference } from '$lib/preferences/demoMode';
 	import { createTodayController } from '$lib/today/controller';
@@ -41,6 +42,7 @@
 	let showDemoAction = $state(false);
 	let templatePickerOpen = $state(false);
 	let composerEl = $state<HTMLElement | null>(null);
+	let composerPulsing = $state(false);
 	let templateLoading = $state(false);
 	let templateError = $state<string | null>(null);
 	let templates = $state<WorkoutTemplate[]>([]);
@@ -72,6 +74,10 @@
 	function markDoneAndScroll(exerciseId: number) {
 		c.markExerciseDone(exerciseId);
 		composerEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		setTimeout(() => {
+			composerPulsing = true;
+			setTimeout(() => (composerPulsing = false), 650);
+		}, 380);
 	}
 </script>
 
@@ -185,6 +191,7 @@
 		{:else}
 			<div class="ex-list">
 				{#each $currentSession.exercises as ex (ex.id)}
+					<div in:fly={{ y: 14, duration: 220, opacity: 0 }}>
 					<SessionExercise
 						exercise={ex}
 						isOpen={$openExerciseIds.includes(ex.id)}
@@ -212,11 +219,12 @@
 						onToggleSplitWeight={(e) => c.toggleExerciseSplitWeight(ex.id, e)}
 						onUpdateTracking={(t) => c.updateExerciseTracking(ex.id, t)}
 					/>
+					</div>
 				{/each}
 			</div>
 		{/if}
 
-		<div bind:this={composerEl}>
+		<div bind:this={composerEl} class:composer-pulse={composerPulsing}>
 		<ExerciseComposer
 			bind:query={$exerciseQuery}
 			suggestions={$suggestions}
@@ -353,5 +361,23 @@
 			system-ui,
 			sans-serif;
 		color: var(--ink-soft);
+	}
+
+	@keyframes composer-glow {
+		0% {
+			box-shadow: 0 0 0 0 color-mix(in oklab, var(--clay) 0%, transparent);
+			border-radius: 18px;
+		}
+		25% {
+			box-shadow: 0 0 0 5px color-mix(in oklab, var(--clay) 38%, transparent);
+			border-radius: 18px;
+		}
+		100% {
+			box-shadow: 0 0 0 0 color-mix(in oklab, var(--clay) 0%, transparent);
+			border-radius: 18px;
+		}
+	}
+	.composer-pulse {
+		animation: composer-glow 650ms ease-out both;
 	}
 </style>

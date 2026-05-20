@@ -35,6 +35,40 @@
 		return `${m}:${String(s).padStart(2, '0')}`;
 	}
 
+	// Stat tick animation tracking
+	let setCountTicking = $state(false);
+	let volumeTicking = $state(false);
+	let _prevSetCount = setCount;
+	let _prevVolumeKg = volumeKg;
+	let _setCountInit = false;
+	let _volumeInit = false;
+
+	$effect(() => {
+		const curr = setCount;
+		if (_setCountInit && curr !== _prevSetCount) {
+			setCountTicking = false;
+			requestAnimationFrame(() => {
+				setCountTicking = true;
+				setTimeout(() => (setCountTicking = false), 200);
+			});
+		}
+		_prevSetCount = curr;
+		_setCountInit = true;
+	});
+
+	$effect(() => {
+		const curr = volumeKg;
+		if (_volumeInit && curr !== _prevVolumeKg) {
+			volumeTicking = false;
+			requestAnimationFrame(() => {
+				volumeTicking = true;
+				setTimeout(() => (volumeTicking = false), 200);
+			});
+		}
+		_prevVolumeKg = curr;
+		_volumeInit = true;
+	});
+
 	// progress ring circumference for r=68: 2*pi*68 ≈ 427
 	const RING_CIRC = 427;
 	const elapsedMin = $derived(() => {
@@ -95,11 +129,11 @@
 				</div>
 				<div class="cell">
 					<div class="k">Sets done</div>
-					<div class="v">{setCount}</div>
+					<div class="v" class:stat-tick={setCountTicking}>{setCount}</div>
 				</div>
 				<div class="cell">
 					<div class="k">{volumeKg > 0 ? 'Volume' : 'Time'}</div>
-					<div class="v">
+					<div class="v" class:stat-tick={volumeTicking}>
 						{#if volumeKg > 0}
 							{Math.round(volumeKg).toLocaleString()}<small>kg</small>
 						{:else}
@@ -207,6 +241,15 @@
 			sans-serif;
 		color: var(--on-deep-soft);
 		font-weight: 600;
+	}
+
+	@keyframes stat-tick {
+		0% { transform: scale(1); }
+		40% { transform: scale(1.1); }
+		100% { transform: scale(1); }
+	}
+	.stat-tick {
+		animation: stat-tick 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
 	}
 
 	.cancel,

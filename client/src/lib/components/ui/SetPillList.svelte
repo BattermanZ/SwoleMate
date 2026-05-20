@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { scale } from 'svelte/transition';
 	import Spill from './Spill.svelte';
 	import { groupSets, type SetLike } from '$lib/today/setPills';
 
@@ -24,16 +25,18 @@
 
 <div class="set-pills">
 	{#each groups as g, i (i)}
-		<Spill
-			count={g.count > 1 ? g.count : undefined}
-			reps={g.reps}
-			duration={g.durationLabel}
-			weight={g.weightLabel}
-			intensity={g.intensity}
-			bodyweight={g.bodyweight}
-			pr={prGroupIndex === i}
-			{size}
-		/>
+		<span in:scale={{ duration: 180, start: 0.65, opacity: 0 }} style="display: inline-flex;">
+			<Spill
+				count={g.count > 1 ? g.count : undefined}
+				reps={g.reps}
+				duration={g.durationLabel}
+				weight={g.weightLabel}
+				intensity={g.intensity}
+				bodyweight={g.bodyweight}
+				pr={prGroupIndex === i}
+				{size}
+			/>
+		</span>
 	{/each}
 </div>
 
