@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { fly } from 'svelte/transition';
 	import { getWorkoutTemplates } from '$lib/api';
 	import { readDemoModePreference } from '$lib/preferences/demoMode';
 	import { createTodayController } from '$lib/today/controller';
@@ -191,7 +190,6 @@
 		{:else}
 			<div class="ex-list">
 				{#each $currentSession.exercises as ex (ex.id)}
-					<div in:fly={{ y: 14, duration: 220, opacity: 0 }}>
 					<SessionExercise
 						exercise={ex}
 						isOpen={$openExerciseIds.includes(ex.id)}
@@ -219,7 +217,6 @@
 						onToggleSplitWeight={(e) => c.toggleExerciseSplitWeight(ex.id, e)}
 						onUpdateTracking={(t) => c.updateExerciseTracking(ex.id, t)}
 					/>
-					</div>
 				{/each}
 			</div>
 		{/if}

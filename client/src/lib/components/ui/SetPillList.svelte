@@ -24,7 +24,7 @@
 </script>
 
 <div class="set-pills">
-	{#each groups as g, i (i)}
+	{#each groups as g, i (`${g.reps ?? ''}_${g.weightLabel ?? ''}_${g.durationLabel ?? ''}`)}
 		<span in:scale={{ duration: 180, start: 0.65, opacity: 0 }} style="display: inline-flex;">
 			<Spill
 				count={g.count > 1 ? g.count : undefined}

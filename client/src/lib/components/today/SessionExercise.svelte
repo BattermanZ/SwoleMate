@@ -686,12 +686,19 @@
 {/if}
 
 <style>
+	@keyframes ex-enter {
+		from {
+			transform: translateY(18px);
+			opacity: 0;
+		}
+	}
 	.ex {
 		background: var(--card);
 		border-radius: 22px;
 		padding: 16px;
 		border: 1px solid var(--line);
 		box-shadow: 0 8px 20px -12px var(--shadow-card);
+		animation: ex-enter 280ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 	}
 	.ex.live {
 		border-color: color-mix(in oklab, var(--clay) 40%, var(--line));
