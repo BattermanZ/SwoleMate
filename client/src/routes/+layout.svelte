@@ -7,6 +7,7 @@
 	import { logger } from '$lib/logger';
 	import { BottomNav, type NavItem } from '$lib/components/ui';
 	import AppBar from '$lib/components/shell/AppBar.svelte';
+	import SideNav from '$lib/components/shell/SideNav.svelte';
 	import type { Snippet } from 'svelte';
 
 	interface Props {
@@ -135,9 +136,8 @@
 		{ href: '/progress', label: 'Progress', icon: iconProgress },
 		{ href: '/more', label: 'More', icon: iconMore }
 	] satisfies NavItem[]}
-	<div class="shell">
-		<AppBar onLogout={$authState.status === 'authenticated' ? logout : undefined} />
 
+	{#snippet offlineBanner()}
 		{#if $authState.offline}
 			<div class="offline-wrap">
 				<div class="offline">
@@ -146,20 +146,45 @@
 				</div>
 			</div>
 		{/if}
+	{/snippet}
 
+	<!-- Mobile shell (shown < 1024px via CSS) -->
+	<div class="shell shell-mobile">
+		<AppBar onLogout={$authState.status === 'authenticated' ? logout : undefined} />
+		{@render offlineBanner()}
 		<main>
 			{@render children?.()}
 		</main>
-
 		<BottomNav items={navItems} current={currentPath} />
+	</div>
+
+	<!-- Desktop shell (shown >= 1024px via CSS) -->
+	<div class="shell shell-desktop">
+		<div class="sidenav-host">
+			<SideNav
+				items={navItems}
+				current={currentPath}
+				onLogout={$authState.status === 'authenticated' ? logout : undefined}
+			/>
+		</div>
+		<div class="desktop-content">
+			{@render offlineBanner()}
+			<main class="desktop-main">
+				{@render children?.()}
+			</main>
+		</div>
 	</div>
 {/if}
 
 <style>
-	.shell {
+	/* Default (mobile-first): show mobile shell, hide desktop shell. */
+	.shell-mobile {
 		min-height: 100dvh;
 		display: flex;
 		flex-direction: column;
+	}
+	.shell-desktop {
+		display: none;
 	}
 	main {
 		flex: 1;
@@ -192,5 +217,36 @@
 		height: 6px;
 		border-radius: 50%;
 		background: var(--warn);
+	}
+
+	/* Desktop: swap shells. Breakpoint MUST match DESKTOP_MIN_WIDTH (1024) in
+	   lib/stores/viewport.ts. */
+	@media (min-width: 1024px) {
+		.shell-mobile {
+			display: none;
+		}
+		.shell-desktop {
+			display: flex;
+			min-height: 100dvh;
+		}
+		.sidenav-host {
+			position: sticky;
+			top: 0;
+			align-self: flex-start;
+			height: 100dvh;
+			flex: none;
+		}
+		.desktop-content {
+			flex: 1;
+			min-width: 0;
+			display: flex;
+			flex-direction: column;
+		}
+		.desktop-main {
+			flex: 1;
+			padding: 24px;
+			max-width: none;
+			margin: 0;
+		}
 	}
 </style>
