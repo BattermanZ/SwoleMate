@@ -44,6 +44,8 @@
 
 	let activeMcpTokens = $derived(mcpTokens.filter((t) => !t.revoked_at));
 
+	let mcpUrl = $derived(typeof window !== 'undefined' ? `${window.location.origin}/mcp` : '/mcp');
+
 	function mcpScopesForAccess(access: 'read' | 'write'): string[] {
 		if (access === 'write') return ['workouts.read', 'progress.read', 'workouts.write'];
 		return ['workouts.read', 'progress.read'];
@@ -177,6 +179,15 @@
 		try {
 			await navigator.clipboard?.writeText(createdToken.token);
 			mcpNotice = 'Token copied to clipboard.';
+		} catch {
+			mcpNotice = 'Could not copy — select the value manually.';
+		}
+	}
+
+	async function copyMcpUrl() {
+		try {
+			await navigator.clipboard?.writeText(mcpUrl);
+			mcpNotice = 'Endpoint URL copied to clipboard.';
 		} catch {
 			mcpNotice = 'Could not copy — select the value manually.';
 		}
@@ -415,6 +426,34 @@
 				{/each}
 			{/if}
 		</div>
+
+		<div class="connect">
+			<h4>Connecting an AI client</h4>
+			<p>
+				In your client (Claude Desktop or any MCP-capable tool), add a custom/remote MCP server
+				pointing at the endpoint below and supply the token as a bearer credential.
+			</p>
+			<ol class="steps">
+				<li>
+					<span class="step-lbl">Endpoint URL</span>
+					<div class="row">
+						<code class="value">{mcpUrl}</code>
+						<Btn variant="ink" size="sm" onclick={copyMcpUrl}>Copy</Btn>
+					</div>
+				</li>
+				<li>
+					<span class="step-lbl">Authorization header</span>
+					<code class="value">Authorization: Bearer smcp_…</code>
+					<p class="hint">Use a token minted above as the <b>smcp_…</b> value.</p>
+				</li>
+				<li>
+					<span class="step-lbl">Access level</span>
+					<p class="hint">
+						Read or read + write is set by the token's scope chosen when you create it.
+					</p>
+				</li>
+			</ol>
+		</div>
 	</Card>
 </div>
 
@@ -648,6 +687,81 @@
 		flex-wrap: wrap;
 	}
 	.meta2 b {
+		color: var(--ink);
+		font-weight: 700;
+	}
+
+	.connect {
+		margin-top: 14px;
+		padding-top: 14px;
+		border-top: 1px solid var(--line);
+	}
+	.connect h4 {
+		margin: 0 0 6px;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
+		letter-spacing: 0.18em;
+		text-transform: uppercase;
+		color: var(--ink-soft);
+	}
+	.connect > p {
+		margin: 0 0 12px;
+		font:
+			500 13px/1.5 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--ink-soft);
+	}
+	.steps {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+	.steps .step-lbl {
+		display: block;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
+		letter-spacing: 0.18em;
+		text-transform: uppercase;
+		color: var(--ink-soft);
+		margin-bottom: 6px;
+	}
+	.steps .row {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+	.steps .row .value {
+		flex: 1;
+		margin: 0;
+	}
+	.steps .value {
+		display: block;
+		padding: 10px 12px;
+		background: var(--surface-deep);
+		color: var(--on-deep);
+		border-radius: 10px;
+		font:
+			500 12px/1.5 'JetBrains Mono',
+			monospace;
+		overflow-x: auto;
+	}
+	.steps .hint {
+		margin: 6px 0 0;
+		font:
+			500 12px/1.4 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--ink-soft);
+	}
+	.steps .hint b {
 		color: var(--ink);
 		font-weight: 700;
 	}

@@ -6,7 +6,7 @@ use crate::models::{
     CreateExerciseRequest, CreateSetRequest, CreateWorkoutRequest,
     CreateWorkoutTemplateFromWorkoutRequest, CreateWorkoutTemplateRequest,
     DuplicateWorkoutTemplateRequest, StartWorkoutFromTemplateRequest, UpdateExerciseRequest,
-    UpdateWorkoutRequest, UpdateWorkoutTemplateRequest,
+    UpdateWorkoutRequest, UpdateWorkoutTemplateRequest, UpdateWorkoutTimesRequest,
 };
 use crate::services::{authz, exercises, progress, templates, workouts};
 use actix_web::http::header;
@@ -66,6 +66,13 @@ struct EndWorkoutToolArgs {
     id: i64,
     #[serde(flatten)]
     request: UpdateWorkoutRequest,
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateWorkoutTimesToolArgs {
+    id: i64,
+    #[serde(flatten)]
+    request: UpdateWorkoutTimesRequest,
 }
 
 #[derive(Debug, Deserialize)]
@@ -138,7 +145,7 @@ fn rpc_error_with_data(id: Option<Value>, code: i64, message: &str, data: Value)
 }
 
 fn tool_definitions() -> Value {
-    json!([
+    let mut defs = json!([
         {
             "name": "list_workouts",
             "description": "List the authenticated user's workouts. Use this first when you need workout IDs before fetching details or editing a workout.",
@@ -482,7 +489,35 @@ fn tool_definitions() -> Value {
                 "additionalProperties": false
             }
         }
-    ])
+    ]);
+    if let Value::Array(entries) = &mut defs {
+        entries.push(json!({
+            "name": "get_progress_overview",
+            "description": "Fetch an overall training progress summary for the authenticated user: last-7-day and last-30-day period summaries with comparisons against the preceding period, plus recent personal records (recent_prs) and recent best efforts (recent_bests). Requires progress.read scope.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }
+        }));
+        entries.push(json!({
+            "name": "update_workout_times",
+            "description": "Edit an existing workout's start_time and end_time, with optional notes and feedback. Requires the workout id. Use ISO 8601 date-time strings; UTC is safest. end_time must be greater than or equal to start_time. feedback must be one of 😊, 😐, or 😞. Requires workouts.write scope.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "integer", "description": "Workout ID from list_workouts or get_workout." },
+                    "start_time": { "type": "string", "format": "date-time", "description": "New workout start time as ISO 8601." },
+                    "end_time": { "type": "string", "format": "date-time", "description": "New workout end time as ISO 8601." },
+                    "notes": { "type": ["string", "null"], "description": "Optional workout notes. Pass null to clear." },
+                    "feedback": { "type": ["string", "null"], "description": "Optional workout feedback (😊, 😐, or 😞). Pass null to clear." }
+                },
+                "required": ["id", "start_time", "end_time"],
+                "additionalProperties": false
+            }
+        }));
+    }
+    defs
 }
 
 fn tool_success(payload: Value) -> Value {
@@ -995,6 +1030,13 @@ async fn call_tool(
                 .map_err(rpc_error_from_app_error)?;
             Ok(tool_success(data))
         }
+        "get_progress_overview" => {
+            require_scope(principal, authz::McpScope::ProgressRead)?;
+            let data = progress::get_progress_overview(db, principal.user_id, 0)
+                .await
+                .map_err(rpc_error_from_app_error)?;
+            Ok(tool_success(data))
+        }
         "get_volume_stats" => {
             require_scope(principal, authz::McpScope::ProgressRead)?;
             let exercise_type = args
@@ -1137,6 +1179,17 @@ async fn call_tool(
                 .map_err(rpc_error_from_app_error)?;
             Ok(tool_success(json!({
                 "message": "Workout ended successfully"
+            })))
+        }
+        "update_workout_times" => {
+            require_scope(principal, authz::McpScope::WorkoutsWrite)?;
+            let request: UpdateWorkoutTimesToolArgs = parse_args(args)?;
+            request.request.validate().map_err(invalid_params)?;
+            workouts::update_workout_times(db, principal.user_id, request.id, &request.request)
+                .await
+                .map_err(rpc_error_from_app_error)?;
+            Ok(tool_success(json!({
+                "message": "Workout times updated successfully"
             })))
         }
         _ => Err((-32601, "Tool not found", "tool_not_found", None)),
