@@ -10,6 +10,7 @@
 	import type { ExerciseProgress, ProgressOverview, VolumeStats, WorkoutStats } from '$lib/types';
 	import { logger } from '$lib/logger';
 	import { Card, SegmentedTabs } from '$lib/components/ui';
+	import { isDesktop, isDesktopView } from '$lib/stores/viewport';
 	import ProgressHero from '$lib/components/progress/ProgressHero.svelte';
 	import PeriodCard from '$lib/components/progress/PeriodCard.svelte';
 	import RecordsFeed from '$lib/components/progress/RecordsFeed.svelte';
@@ -17,6 +18,7 @@
 	import ExerciseCharts from '$lib/components/progress/ExerciseCharts.svelte';
 	import RecentExerciseSessions from '$lib/components/progress/RecentExerciseSessions.svelte';
 	import OverallCharts from '$lib/components/progress/OverallCharts.svelte';
+	import ProgressDesktop from '$lib/components/progress/ProgressDesktop.svelte';
 
 	type ProgressTab = 'overview' | 'exercise' | 'trends';
 
@@ -136,7 +138,17 @@
 		const stored = localStorage.getItem('progress.selectedTab');
 		if (isProgressTab(stored)) selectedTab = stored;
 		await refreshAll();
-		if (selectedTab === 'exercise') await ensureExerciseTabLoaded();
+		// Desktop shows the exercise deep-dive inline (no tabs), so its data must
+		// be loaded regardless of the persisted mobile tab.
+		if (selectedTab === 'exercise' || isDesktopView($isDesktop)) await ensureExerciseTabLoaded();
+	});
+
+	let desktop = $derived(isDesktopView($isDesktop));
+
+	// When the viewport crosses into desktop after mount (e.g. window resize),
+	// the deep-dive becomes visible — make sure its data is present.
+	$effect(() => {
+		if (desktop) void ensureExerciseTabLoaded();
 	});
 
 	// Hero stats
@@ -152,69 +164,96 @@
 	let consistencyDone = $derived(last30Workouts);
 </script>
 
-<div class="page">
-	<ProgressHero
+{#if desktop}
+	<ProgressDesktop
 		{consistencyDone}
-		consistencyWindow={30}
 		totalWorkouts={workoutStats?.total_workouts ?? 0}
 		{perWeek}
 		perWeekDelta={perWeekTrend}
-		avgDurationMin={avgDuration}
+		{avgDuration}
 		{avgDurationDelta}
-		focusExercise={selectedExercise || undefined}
-		loading={loadingOverall}
-		error={errorOverall}
+		{workoutStats}
+		{progressOverview}
+		{volumeStats}
+		{exerciseProgress}
+		{exerciseTypes}
+		bind:selectedExercise
+		{loadedExercise}
+		{loadingOverall}
+		{loadingExercise}
+		{errorOverall}
+		{errorExercise}
 		onRefresh={refreshAll}
+		{onSelectExercise}
 	/>
-
-	<SegmentedTabs
-		items={[
-			{ id: 'overview' as const, label: 'Overview' },
-			{ id: 'exercise' as const, label: 'Exercise' },
-			{ id: 'trends' as const, label: 'Trends' }
-		]}
-		bind:selected={selectedTab}
-		onselect={onTabSelect}
-		aria-label="Progress sections"
-	/>
-
-	{#if selectedTab === 'overview'}
-		{#if errorOverall}
-			<Card><div class="err">{errorOverall}</div></Card>
-		{:else if loadingOverall && !progressOverview}
-			<Card>
-				{#snippet title()}Current progress{/snippet}
-				<div class="skel"></div>
-			</Card>
-		{:else if progressOverview}
-			<Card>
-				{#snippet title()}Current progress <em>— vs previous matching period</em>{/snippet}
-				{#snippet lede()}Recent work compared to the matching window before it.{/snippet}
-				<PeriodCard period={progressOverview.last_7_days} variant="primary" />
-				<PeriodCard period={progressOverview.last_30_days} variant="secondary" />
-			</Card>
-
-			<RecordsFeed prs={progressOverview.recent_prs} recentBests={progressOverview.recent_bests} />
-		{:else}
-			<Card><div class="empty">No progress summary yet.</div></Card>
-		{/if}
-	{:else if selectedTab === 'exercise'}
-		<ExerciseFocusPanel
-			bind:selectedExercise
-			{exerciseTypes}
-			{volumeStats}
-			{loadingExercise}
-			{errorExercise}
-			onSelect={onSelectExercise}
+{:else}
+	<div class="page">
+		<ProgressHero
+			{consistencyDone}
+			consistencyWindow={30}
+			totalWorkouts={workoutStats?.total_workouts ?? 0}
+			{perWeek}
+			perWeekDelta={perWeekTrend}
+			avgDurationMin={avgDuration}
+			{avgDurationDelta}
+			focusExercise={selectedExercise || undefined}
+			loading={loadingOverall}
+			error={errorOverall}
+			onRefresh={refreshAll}
 		/>
-		{#if volumeStats && loadedExercise === selectedExercise}
-			<ExerciseCharts {volumeStats} {exerciseProgress} />
-			<RecentExerciseSessions {exerciseProgress} />
+
+		<SegmentedTabs
+			items={[
+				{ id: 'overview' as const, label: 'Overview' },
+				{ id: 'exercise' as const, label: 'Exercise' },
+				{ id: 'trends' as const, label: 'Trends' }
+			]}
+			bind:selected={selectedTab}
+			onselect={onTabSelect}
+			aria-label="Progress sections"
+		/>
+
+		{#if selectedTab === 'overview'}
+			{#if errorOverall}
+				<Card><div class="err">{errorOverall}</div></Card>
+			{:else if loadingOverall && !progressOverview}
+				<Card>
+					{#snippet title()}Current progress{/snippet}
+					<div class="skel"></div>
+				</Card>
+			{:else if progressOverview}
+				<Card>
+					{#snippet title()}Current progress <em>— vs previous matching period</em>{/snippet}
+					{#snippet lede()}Recent work compared to the matching window before it.{/snippet}
+					<PeriodCard period={progressOverview.last_7_days} variant="primary" />
+					<PeriodCard period={progressOverview.last_30_days} variant="secondary" />
+				</Card>
+
+				<RecordsFeed
+					prs={progressOverview.recent_prs}
+					recentBests={progressOverview.recent_bests}
+				/>
+			{:else}
+				<Card><div class="empty">No progress summary yet.</div></Card>
+			{/if}
+		{:else if selectedTab === 'exercise'}
+			<ExerciseFocusPanel
+				bind:selectedExercise
+				{exerciseTypes}
+				{volumeStats}
+				{loadingExercise}
+				{errorExercise}
+				onSelect={onSelectExercise}
+			/>
+			{#if volumeStats && loadedExercise === selectedExercise}
+				<ExerciseCharts {volumeStats} {exerciseProgress} />
+				<RecentExerciseSessions {exerciseProgress} />
+			{/if}
+		{:else}
+			<OverallCharts {workoutStats} />
 		{/if}
-	{:else}
-		<OverallCharts {workoutStats} />
-	{/if}
-</div>
+	</div>
+{/if}
 
 <style>
 	.page {
