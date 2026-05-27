@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { isActive } from '$lib/components/shell/nav';
 
 	export type NavItem = {
 		href: string;
@@ -14,17 +15,11 @@
 	}
 
 	let { items, current, 'aria-label': ariaLabel = 'Primary navigation' }: Props = $props();
-
-	function isActive(href: string): boolean {
-		if (!current) return false;
-		if (href === '/') return current === '/';
-		return current === href || current.startsWith(`${href}/`);
-	}
 </script>
 
 <nav class="tabs" aria-label={ariaLabel}>
 	{#each items as item (item.href)}
-		{@const active = isActive(item.href)}
+		{@const active = isActive(item.href, current)}
 		<a href={item.href} class:active aria-current={active ? 'page' : undefined}>
 			<span class="pill">{@render item.icon()}</span>
 			<span class="lbl">{item.label}</span>
