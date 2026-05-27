@@ -23,11 +23,15 @@
 		TRACKING_FIELDS_SETTING_KEY
 	} from '$lib/today/tracking';
 	import { Btn, Card, Chk, PageHero } from '$lib/components/ui';
+	import TemplatesDesktop from '$lib/components/templates/TemplatesDesktop.svelte';
+	import { isDesktop, isDesktopView } from '$lib/stores/viewport';
 
 	interface Props {
 		data: { templates: WorkoutTemplate[] };
 	}
 	let { data }: Props = $props();
+
+	let desktop = $derived(isDesktopView($isDesktop));
 
 	type DraftSetting = { localId: string; key: string; value: string };
 	type DraftExercise = {
@@ -292,7 +296,7 @@
 	});
 </script>
 
-<div class="page">
+{#snippet hero()}
 	<PageHero kicker="► Plans · templates">
 		{#snippet title()}Repeatable <em>workouts.</em>{/snippet}
 		{#snippet sub()}Templates preload your exercise plan. Sets and weights are not saved.{/snippet}
@@ -300,14 +304,18 @@
 			<Btn variant="primary" onclick={openNewTemplate}>+ New template</Btn>
 		{/snippet}
 	</PageHero>
+{/snippet}
 
+{#snippet notices()}
 	{#if pageError}
 		<Card><div class="err">{pageError}</div></Card>
 	{/if}
 	{#if pageNotice}
 		<Card><div class="ok">{pageNotice}</div></Card>
 	{/if}
+{/snippet}
 
+{#snippet list()}
 	<Card>
 		{#snippet title()}Your templates <em>({templates.length})</em>{/snippet}
 
@@ -336,7 +344,9 @@
 			{/each}
 		</div>
 	</Card>
+{/snippet}
 
+{#snippet editor()}
 	<Card>
 		{#snippet title()}
 			{typeof selectedId === 'number' ? 'Edit template' : 'Create template'}
@@ -517,7 +527,18 @@
 			</div>
 		{/if}
 	</Card>
-</div>
+{/snippet}
+
+{#if desktop}
+	<TemplatesDesktop {hero} {notices} {list} {editor} />
+{:else}
+	<div class="page">
+		{@render hero()}
+		{@render notices()}
+		{@render list()}
+		{@render editor()}
+	</div>
+{/if}
 
 <style>
 	.page {
@@ -620,6 +641,14 @@
 		display: flex;
 		flex-direction: column;
 		gap: 12px;
+	}
+	/* Desktop editor pane is wide enough to flow exercise cards 2-up. */
+	@media (min-width: 1024px) {
+		.ex-cards {
+			display: grid;
+			grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+			align-items: start;
+		}
 	}
 	.ex-card {
 		background: var(--card-3);
