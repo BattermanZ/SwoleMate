@@ -2,11 +2,15 @@
 	import { createBackup, deleteBackup, getBackups, restoreBackup, type BackupInfo } from '$lib/api';
 	import { auth } from '$lib/auth';
 	import { Btn, Card, Badge, PageHero } from '$lib/components/ui';
+	import BackupsDesktop from '$lib/components/backups/BackupsDesktop.svelte';
+	import { isDesktop, isDesktopView } from '$lib/stores/viewport';
 
 	interface Props {
 		data: { backups: BackupInfo[] };
 	}
 	let { data }: Props = $props();
+
+	let desktop = $derived(isDesktopView($isDesktop));
 
 	let backups = $derived(data.backups);
 	let loading = $state(false);
@@ -90,12 +94,14 @@
 	let manualBackups = $derived(backups.filter((b) => b.backup_type === 'Manual'));
 </script>
 
-<div class="page">
+{#snippet hero()}
 	<PageHero kicker="► Data & backups">
 		{#snippet title()}Snapshot, <em>restore.</em>{/snippet}
 		{#snippet sub()}Manual + automatic backups of your training database.{/snippet}
 	</PageHero>
+{/snippet}
 
+{#snippet actionsCard()}
 	<Card>
 		{#snippet title()}Actions{/snippet}
 		{#snippet lede()}Trigger a manual snapshot or refresh the backup list.{/snippet}
@@ -110,7 +116,9 @@
 			</Btn>
 		</div>
 	</Card>
+{/snippet}
 
+{#snippet manualCard()}
 	<Card>
 		{#snippet title()}Manual backups{/snippet}
 		{#if manualBackups.length === 0}
@@ -141,7 +149,9 @@
 			</div>
 		{/if}
 	</Card>
+{/snippet}
 
+{#snippet autoCard()}
 	<Card>
 		{#snippet title()}Automatic backups{/snippet}
 		{#snippet lede()}Auto-snapshots run weekly. Older ones are pruned.{/snippet}
@@ -170,7 +180,18 @@
 			</div>
 		{/if}
 	</Card>
-</div>
+{/snippet}
+
+{#if desktop}
+	<BackupsDesktop {hero} {actionsCard} {manualCard} {autoCard} />
+{:else}
+	<div class="page">
+		{@render hero()}
+		{@render actionsCard()}
+		{@render manualCard()}
+		{@render autoCard()}
+	</div>
+{/if}
 
 <style>
 	.page {

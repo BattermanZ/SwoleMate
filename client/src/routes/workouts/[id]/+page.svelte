@@ -4,12 +4,16 @@
 	import { auth } from '$lib/auth';
 	import { formatDateRelative, formatTime } from '$lib/utils/date';
 	import { Btn, Card, Badge, Chip, PageHero, SetPillList } from '$lib/components/ui';
+	import SessionDetailDesktop from '$lib/components/history/SessionDetailDesktop.svelte';
+	import { isDesktop, isDesktopView } from '$lib/stores/viewport';
 	import type { WorkoutWithExercises } from '$lib/types';
 
 	interface Props {
 		data: { workout: WorkoutWithExercises | null; error: string | null };
 	}
 	let { data }: Props = $props();
+
+	let desktop = $derived(isDesktopView($isDesktop));
 
 	const authState = auth.state;
 
@@ -84,7 +88,7 @@
 	}
 </script>
 
-<div class="page">
+{#snippet hero()}
 	<PageHero kicker="► Workout">
 		{#snippet title()}
 			{#if workout}{formatDateRelative(workout.start_time)}{:else}Workout{/if}<em> — details.</em>
@@ -96,7 +100,9 @@
 			{/if}
 		{/snippet}
 	</PageHero>
+{/snippet}
 
+{#snippet summary()}
 	{#if loadError}
 		<Card><div class="err">{loadError}</div></Card>
 	{:else if !workout}
@@ -127,58 +133,87 @@
 			</div>
 			{#if error}<div class="err">{error}</div>{/if}
 		</Card>
+	{/if}
+{/snippet}
 
+{#snippet exercises()}
+	{#if workout}
 		{#if workout.exercises.length > 0}
-			{#each workout.exercises as ex (ex.exercise.id ?? ex.exercise.start_time)}
-				<Card>
-					{#snippet title()}{ex.exercise.exercise_type}{/snippet}
-					{#snippet lede()}
-						{formatTime(ex.exercise.start_time)} – {formatTime(ex.exercise.end_time)}
-					{/snippet}
+			<div class="ex-grid">
+				{#each workout.exercises as ex (ex.exercise.id ?? ex.exercise.start_time)}
+					<Card>
+						{#snippet title()}{ex.exercise.exercise_type}{/snippet}
+						{#snippet lede()}
+							{formatTime(ex.exercise.start_time)} – {formatTime(ex.exercise.end_time)}
+						{/snippet}
 
-					{#if ex.exercise.settings && ex.exercise.settings.length > 0}
-						<div class="settings">
-							{#each ex.exercise.settings as s (s.id ?? s.key)}
-								<Chip size="xs">{s.key}: {s.value}</Chip>
-							{/each}
-						</div>
-					{/if}
+						{#if ex.exercise.settings && ex.exercise.settings.length > 0}
+							<div class="settings">
+								{#each ex.exercise.settings as s (s.id ?? s.key)}
+									<Chip size="xs">{s.key}: {s.value}</Chip>
+								{/each}
+							</div>
+						{/if}
 
-					{#if ex.sets.length > 0}
-						<div class="pills">
-							<SetPillList
-								sets={ex.sets.map((s) => ({
-									reps: s.reps,
-									weight: s.weight,
-									weightLeft: s.weight_left,
-									weightRight: s.weight_right,
-									durationSeconds: s.duration_seconds
-								}))}
-								perSideWeight={ex.exercise.per_side_weight ?? false}
-								splitWeight={ex.exercise.split_weight ?? false}
-								size="sm"
-							/>
-						</div>
-					{:else}
-						<div class="muted">No sets logged.</div>
-					{/if}
+						{#if ex.sets.length > 0}
+							<div class="pills">
+								<SetPillList
+									sets={ex.sets.map((s) => ({
+										reps: s.reps,
+										weight: s.weight,
+										weightLeft: s.weight_left,
+										weightRight: s.weight_right,
+										durationSeconds: s.duration_seconds
+									}))}
+									perSideWeight={ex.exercise.per_side_weight ?? false}
+									splitWeight={ex.exercise.split_weight ?? false}
+									size="sm"
+								/>
+							</div>
+						{:else}
+							<div class="muted">No sets logged.</div>
+						{/if}
 
-					{#if ex.exercise.notes}
-						<p class="notes">Notes: {ex.exercise.notes}</p>
-					{/if}
-				</Card>
-			{/each}
+						{#if ex.exercise.notes}
+							<p class="notes">Notes: {ex.exercise.notes}</p>
+						{/if}
+					</Card>
+				{/each}
+			</div>
 		{:else}
 			<Card><div class="muted">No exercises recorded.</div></Card>
 		{/if}
 	{/if}
-</div>
+{/snippet}
+
+{#if desktop}
+	<SessionDetailDesktop ready={Boolean(workout) && !loadError} {hero} {summary} {exercises} />
+{:else}
+	<div class="page">
+		{@render hero()}
+		{@render summary()}
+		{@render exercises()}
+	</div>
+{/if}
 
 <style>
 	.page {
 		display: flex;
 		flex-direction: column;
 		gap: 14px;
+	}
+	.ex-grid {
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+	}
+	/* Desktop main column flows exercise cards 2-up. */
+	@media (min-width: 1024px) {
+		.ex-grid {
+			display: grid;
+			grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+			align-items: start;
+		}
 	}
 	.meta-row {
 		display: flex;

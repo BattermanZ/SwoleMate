@@ -9,8 +9,12 @@
 		type AdminUserListItem
 	} from '$lib/api';
 	import { Btn, Card, Badge, PageHero } from '$lib/components/ui';
+	import AdminDesktop from '$lib/components/admin/AdminDesktop.svelte';
+	import { isDesktop, isDesktopView } from '$lib/stores/viewport';
 
 	const authState = auth.state;
+
+	let desktop = $derived(isDesktopView($isDesktop));
 
 	let users = $state<AdminUserListItem[]>([]);
 	let loading = $state(false);
@@ -28,6 +32,7 @@
 
 	let isAdmin = $derived($authState.user?.role === 'admin');
 	let blocked = $derived($authState.offline || $authState.status !== 'authenticated' || !isAdmin);
+	let ready = $derived(isAdmin && !$authState.offline);
 	let usersLoaded = $state(false);
 
 	async function loadUsers() {
@@ -135,12 +140,14 @@
 	});
 </script>
 
-<div class="page">
+{#snippet hero()}
 	<PageHero kicker="► Admin">
 		{#snippet title()}Manage <em>users.</em>{/snippet}
 		{#snippet sub()}Create, reset, disable, or delete accounts. Admins only.{/snippet}
 	</PageHero>
+{/snippet}
 
+{#snippet gate()}
 	{#if !isAdmin}
 		<Card>
 			<div class="muted">You need admin privileges to view this page.</div>
@@ -149,134 +156,150 @@
 		<Card>
 			<div class="muted">Offline mode — admin actions are disabled.</div>
 		</Card>
-	{:else}
+	{/if}
+{/snippet}
+
+{#snippet createPanel()}
+	<Card>
+		{#snippet title()}Create user{/snippet}
+		<form
+			class="form"
+			onsubmit={(e) => {
+				e.preventDefault();
+				void handleCreateUser();
+			}}
+		>
+			<div class="grid-2">
+				<label>
+					<span class="lbl">Username</span>
+					<input bind:value={createUsername} disabled={loading} autocomplete="off" />
+				</label>
+				<label>
+					<span class="lbl">Password</span>
+					<input
+						type="password"
+						bind:value={createPassword}
+						disabled={loading}
+						autocomplete="new-password"
+					/>
+				</label>
+			</div>
+			<label>
+				<span class="lbl">Role</span>
+				<select bind:value={createRole} disabled={loading}>
+					<option value="user">User</option>
+					<option value="admin">Admin</option>
+				</select>
+			</label>
+			{#if error}<div class="err">{error}</div>{/if}
+			{#if notice}<div class="ok">{notice}</div>{/if}
+			<Btn variant="primary" type="submit" disabled={loading}>
+				{loading ? 'Creating…' : 'Create user'}
+			</Btn>
+		</form>
+	</Card>
+{/snippet}
+
+{#snippet usersList()}
+	<Card>
+		{#snippet title()}Users{/snippet}
+		{#snippet actions()}
+			<Btn variant="soft" size="sm" onclick={loadUsers} disabled={loading}>
+				{loading ? 'Loading…' : 'Refresh'}
+			</Btn>
+		{/snippet}
+
+		{#if users.length === 0}
+			<div class="muted">No users yet.</div>
+		{:else}
+			<div class="users">
+				{#each users as u (u.id)}
+					<div class="user">
+						<div class="head">
+							<div>
+								<div class="t">{u.username}</div>
+								<div class="meta">
+									<Badge tone={u.role === 'admin' ? 'pr' : 'soft'}>{u.role}</Badge>
+									{#if u.disabled_at}<Badge tone="warn">Disabled</Badge>{/if}
+								</div>
+							</div>
+							<div class="actions">
+								<Btn variant="soft" size="sm" disabled={loading} onclick={() => (resetTarget = u)}>
+									Reset pw
+								</Btn>
+								<Btn
+									variant="soft"
+									size="sm"
+									disabled={loading || !!u.disabled_at}
+									onclick={() => handleDisable(u)}
+								>
+									Disable
+								</Btn>
+								<Btn variant="soft" size="sm" disabled={loading} onclick={() => handleDelete(u)}>
+									Delete
+								</Btn>
+							</div>
+						</div>
+					</div>
+				{/each}
+			</div>
+		{/if}
+	</Card>
+{/snippet}
+
+{#snippet resetCard()}
+	{#if resetTarget}
+		{@const target = resetTarget}
 		<Card>
-			{#snippet title()}Create user{/snippet}
+			{#snippet title()}Reset password <em>— {target.username}</em>{/snippet}
 			<form
 				class="form"
 				onsubmit={(e) => {
 					e.preventDefault();
-					void handleCreateUser();
+					void handleReset();
 				}}
 			>
-				<div class="grid-2">
-					<label>
-						<span class="lbl">Username</span>
-						<input bind:value={createUsername} disabled={loading} autocomplete="off" />
-					</label>
-					<label>
-						<span class="lbl">Password</span>
-						<input
-							type="password"
-							bind:value={createPassword}
-							disabled={loading}
-							autocomplete="new-password"
-						/>
-					</label>
-				</div>
 				<label>
-					<span class="lbl">Role</span>
-					<select bind:value={createRole} disabled={loading}>
-						<option value="user">User</option>
-						<option value="admin">Admin</option>
-					</select>
+					<span class="lbl">New password</span>
+					<input type="password" bind:value={resetPassword} autocomplete="new-password" />
 				</label>
-				{#if error}<div class="err">{error}</div>{/if}
-				{#if notice}<div class="ok">{notice}</div>{/if}
-				<Btn variant="primary" type="submit" disabled={loading}>
-					{loading ? 'Creating…' : 'Create user'}
-				</Btn>
+				<label>
+					<span class="lbl">Confirm</span>
+					<input type="password" bind:value={resetConfirm} autocomplete="new-password" />
+				</label>
+				{#if resetError}<div class="err">{resetError}</div>{/if}
+				<div class="actions">
+					<Btn variant="primary" type="submit" disabled={loading}>
+						{loading ? 'Resetting…' : 'Reset password'}
+					</Btn>
+					<Btn
+						variant="soft"
+						onclick={() => {
+							resetTarget = null;
+							resetPassword = resetConfirm = '';
+							resetError = null;
+						}}>Cancel</Btn
+					>
+				</div>
 			</form>
 		</Card>
-
-		<Card>
-			{#snippet title()}Users{/snippet}
-			{#snippet actions()}
-				<Btn variant="soft" size="sm" onclick={loadUsers} disabled={loading}>
-					{loading ? 'Loading…' : 'Refresh'}
-				</Btn>
-			{/snippet}
-
-			{#if users.length === 0}
-				<div class="muted">No users yet.</div>
-			{:else}
-				<div class="users">
-					{#each users as u (u.id)}
-						<div class="user">
-							<div class="head">
-								<div>
-									<div class="t">{u.username}</div>
-									<div class="meta">
-										<Badge tone={u.role === 'admin' ? 'pr' : 'soft'}>{u.role}</Badge>
-										{#if u.disabled_at}<Badge tone="warn">Disabled</Badge>{/if}
-									</div>
-								</div>
-								<div class="actions">
-									<Btn
-										variant="soft"
-										size="sm"
-										disabled={loading}
-										onclick={() => (resetTarget = u)}
-									>
-										Reset pw
-									</Btn>
-									<Btn
-										variant="soft"
-										size="sm"
-										disabled={loading || !!u.disabled_at}
-										onclick={() => handleDisable(u)}
-									>
-										Disable
-									</Btn>
-									<Btn variant="soft" size="sm" disabled={loading} onclick={() => handleDelete(u)}>
-										Delete
-									</Btn>
-								</div>
-							</div>
-						</div>
-					{/each}
-				</div>
-			{/if}
-		</Card>
-
-		{#if resetTarget}
-			{@const target = resetTarget}
-			<Card>
-				{#snippet title()}Reset password <em>— {target.username}</em>{/snippet}
-				<form
-					class="form"
-					onsubmit={(e) => {
-						e.preventDefault();
-						void handleReset();
-					}}
-				>
-					<label>
-						<span class="lbl">New password</span>
-						<input type="password" bind:value={resetPassword} autocomplete="new-password" />
-					</label>
-					<label>
-						<span class="lbl">Confirm</span>
-						<input type="password" bind:value={resetConfirm} autocomplete="new-password" />
-					</label>
-					{#if resetError}<div class="err">{resetError}</div>{/if}
-					<div class="actions">
-						<Btn variant="primary" type="submit" disabled={loading}>
-							{loading ? 'Resetting…' : 'Reset password'}
-						</Btn>
-						<Btn
-							variant="soft"
-							onclick={() => {
-								resetTarget = null;
-								resetPassword = resetConfirm = '';
-								resetError = null;
-							}}>Cancel</Btn
-						>
-					</div>
-				</form>
-			</Card>
-		{/if}
 	{/if}
-</div>
+{/snippet}
+
+{#if desktop}
+	<AdminDesktop {ready} {hero} {gate} {createPanel} {usersList} {resetCard} />
+{:else}
+	<div class="page">
+		{@render hero()}
+		{#if !ready}
+			{@render gate()}
+		{:else}
+			{@render createPanel()}
+			{@render usersList()}
+			{@render resetCard()}
+		{/if}
+	</div>
+{/if}
 
 <style>
 	.page {
