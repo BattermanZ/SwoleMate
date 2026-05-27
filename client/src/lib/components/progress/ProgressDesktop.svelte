@@ -62,7 +62,7 @@
 		onSelectExercise
 	}: Props = $props();
 
-	let sessionDates = $derived(workoutStats?.session_start_times ?? []);
+	let sessionSamples = $derived(workoutStats?.session_start_samples ?? []);
 	let showExerciseDetail = $derived(!!volumeStats && loadedExercise === selectedExercise);
 
 	const RING_CIRC = 427;
@@ -80,7 +80,7 @@
 	<!-- Headline numbers — a horizontal command band across the full width. -->
 	<header class="dhero">
 		<div class="ring-block">
-			<div class="ring">
+			<div class="dial">
 				<svg width="118" height="118" viewBox="0 0 150 150" aria-hidden="true">
 					<circle
 						cx="75"
@@ -156,8 +156,8 @@
 	</header>
 
 	<!-- Consistency centerpiece -->
-	{#if sessionDates.length > 0}
-		<SessionHeatmap dates={sessionDates} />
+	{#if sessionSamples.length > 0}
+		<SessionHeatmap samples={sessionSamples} />
 	{/if}
 
 	<!-- Two-column workspace: per-exercise deep dive beside the aggregate story. -->
@@ -264,7 +264,7 @@
 		flex: none;
 		z-index: 1;
 	}
-	.ring {
+	.dial {
 		width: 118px;
 		height: 118px;
 		position: relative;

@@ -1,13 +1,18 @@
 <script lang="ts">
 	import { Card } from '$lib/components/ui';
 
+	interface Sample {
+		start_time: string;
+		exercise_count?: number;
+	}
+
 	interface Props {
-		/** ISO session start timestamps (rolling ~12 months from the API). */
-		dates: string[];
+		/** Rolling ~12-month session samples from the API. */
+		samples: Sample[];
 		/** Number of week-columns to render. */
 		weeks?: number;
 	}
-	let { dates, weeks = 53 }: Props = $props();
+	let { samples, weeks = 53 }: Props = $props();
 
 	const DAY = 86_400_000;
 	const DOW_LABELS = ['Mon', '', 'Wed', '', 'Fri', '', ''];
@@ -30,55 +35,76 @@
 		return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 	}
 
+	type Day = { sessions: number; exercises: number };
 	type Cell = {
 		key: string;
 		date: Date;
-		count: number;
-		level: 0 | 1 | 2 | 3;
+		sessions: number;
+		exercises: number;
+		level: 0 | 1 | 2 | 3 | 4;
 		future: boolean;
 	};
 
 	let model = $derived.by(() => {
-		// Bucket sessions by local calendar day.
-		const counts = new Map<string, number>();
-		for (const iso of dates) {
-			const d = new Date(iso);
+		// Bucket sessions + exercises by local calendar day.
+		const days = new Map<string, Day>();
+		for (const s of samples) {
+			const d = new Date(s.start_time);
 			if (Number.isNaN(d.getTime())) continue;
 			const k = dayKey(d);
-			counts.set(k, (counts.get(k) ?? 0) + 1);
+			const cur = days.get(k) ?? { sessions: 0, exercises: 0 };
+			cur.sessions += 1;
+			cur.exercises += s.exercise_count ?? 0;
+			days.set(k, cur);
 		}
+
+		// Adaptive colour scale: split non-empty days into four bands by their
+		// exercise count so the gradient is meaningful regardless of routine size.
+		const exCounts = [...days.values()]
+			.map((d) => d.exercises)
+			.filter((n) => n > 0)
+			.sort((a, b) => a - b);
+		const q = (p: number) =>
+			exCounts.length
+				? exCounts[Math.min(exCounts.length - 1, Math.floor(p * exCounts.length))]
+				: 0;
+		const t1 = Math.max(1, q(0.25));
+		const t2 = Math.max(t1 + 1, q(0.55));
+		const t3 = Math.max(t2 + 1, q(0.8));
+		const level = (ex: number): Cell['level'] =>
+			ex <= 0 ? 0 : ex <= t1 ? 1 : ex <= t2 ? 2 : ex <= t3 ? 3 : 4;
 
 		const today = new Date();
 		today.setHours(0, 0, 0, 0);
-		// Monday-anchored weeks. getDay(): 0=Sun … 6=Sat → shift so Mon=0.
-		const dowToday = (today.getDay() + 6) % 7;
+		const dowToday = (today.getDay() + 6) % 7; // Monday = 0
 		const thisMonday = new Date(today.getTime() - dowToday * DAY);
 		const firstMonday = new Date(thisMonday.getTime() - (weeks - 1) * 7 * DAY);
-
-		const level = (c: number): 0 | 1 | 2 | 3 => (c <= 0 ? 0 : c === 1 ? 1 : c === 2 ? 2 : 3);
 
 		const columns: Cell[][] = [];
 		const monthLabels: Array<{ col: number; label: string }> = [];
 		const weekHas: boolean[] = [];
 		let lastMonth = -1;
-		let total = 0;
+		let totalSessions = 0;
+		let totalExercises = 0;
 		let activeDays = 0;
 
 		for (let w = 0; w < weeks; w++) {
 			const col: Cell[] = [];
-			let weekCount = 0;
+			let weekHit = false;
 			for (let dd = 0; dd < 7; dd++) {
 				const date = new Date(firstMonday.getTime() + (w * 7 + dd) * DAY);
 				const future = date.getTime() > today.getTime();
-				const count = future ? 0 : (counts.get(dayKey(date)) ?? 0);
-				if (!future && count > 0) {
-					total += count;
+				const d = future ? undefined : days.get(dayKey(date));
+				const sessions = d?.sessions ?? 0;
+				const exercises = d?.exercises ?? 0;
+				if (sessions > 0) {
+					totalSessions += sessions;
+					totalExercises += exercises;
 					activeDays += 1;
-					weekCount += count;
+					weekHit = true;
 				}
-				col.push({ key: dayKey(date), date, count, level: level(count), future });
+				col.push({ key: dayKey(date), date, sessions, exercises, level: level(exercises), future });
 
-				// Month label sits on the top cell of the column where the month flips.
 				if (dd === 0) {
 					const m = date.getMonth();
 					if (m !== lastMonth) {
@@ -87,12 +113,11 @@
 					}
 				}
 			}
-			weekHas.push(weekCount > 0);
+			weekHas.push(weekHit);
 			columns.push(col);
 		}
 
-		// Streaks in consecutive *weeks* with at least one session — a truer read of
-		// training consistency than raw day counts for a lift-on-rest-day routine.
+		// Streaks measured in consecutive weeks with at least one session.
 		let longestStreak = 0;
 		let run = 0;
 		for (const has of weekHas) {
@@ -100,12 +125,19 @@
 			if (run > longestStreak) longestStreak = run;
 		}
 		let currentStreak = 0;
-		// Allow the in-progress final week to be empty without breaking the streak.
 		let i = weekHas.length - 1;
-		if (i >= 0 && !weekHas[i]) i--;
+		if (i >= 0 && !weekHas[i]) i--; // allow the in-progress week to be empty
 		for (; i >= 0 && weekHas[i]; i--) currentStreak++;
 
-		return { columns, monthLabels, total, activeDays, currentStreak, longestStreak };
+		return {
+			columns,
+			monthLabels,
+			totalSessions,
+			totalExercises,
+			activeDays,
+			currentStreak,
+			longestStreak
+		};
 	});
 
 	function tip(c: Cell): string {
@@ -115,8 +147,10 @@
 			month: 'short'
 		});
 		if (c.future) return label;
-		if (c.count === 0) return `No sessions · ${label}`;
-		return `${c.count} session${c.count === 1 ? '' : 's'} · ${label}`;
+		if (c.sessions === 0) return `No training · ${label}`;
+		const ex = `${c.exercises} exercise${c.exercises === 1 ? '' : 's'}`;
+		const se = c.sessions > 1 ? ` · ${c.sessions} sessions` : '';
+		return `${ex}${se} · ${label}`;
 	}
 </script>
 
@@ -124,51 +158,50 @@
 	{#snippet title()}Training calendar <em>— last 12 months</em>{/snippet}
 	{#snippet actions()}
 		<div class="summary">
-			<span><b>{model.total}</b> sessions</span>
+			<span><b>{model.totalExercises}</b> exercises</span>
 			<span><b>{model.activeDays}</b> active days</span>
 			<span><b>{model.currentStreak}</b>w streak</span>
 			<span>best <b>{model.longestStreak}</b>w</span>
 		</div>
 	{/snippet}
 
-	<div class="scroll">
-		<div class="grid-wrap">
-			<div class="months" style="--cols: {model.columns.length}">
-				{#each model.monthLabels as m (m.col)}
-					<span class="month" style="grid-column: {m.col + 1}">{m.label}</span>
+	<div class="heatmap" style="--cols: {model.columns.length}">
+		<div class="months">
+			{#each model.monthLabels as m (m.col)}
+				<span class="month" style="grid-column: {m.col + 1}">{m.label}</span>
+			{/each}
+		</div>
+		<div class="body">
+			<div class="dow">
+				{#each DOW_LABELS as d, i (i)}
+					<span>{d}</span>
 				{/each}
 			</div>
-			<div class="body">
-				<div class="dow">
-					{#each DOW_LABELS as d, i (i)}
-						<span>{d}</span>
-					{/each}
-				</div>
-				<div class="grid">
-					{#each model.columns as col, ci (ci)}
-						<div class="col">
-							{#each col as cell (cell.key)}
-								<span
-									class="cell"
-									class:future={cell.future}
-									data-level={cell.level}
-									title={tip(cell)}
-								></span>
-							{/each}
-						</div>
-					{/each}
-				</div>
+			<div class="grid">
+				{#each model.columns as col, ci (ci)}
+					<div class="col">
+						{#each col as cell (cell.key)}
+							<span
+								class="cell"
+								class:future={cell.future}
+								data-level={cell.level}
+								title={tip(cell)}
+							></span>
+						{/each}
+					</div>
+				{/each}
 			</div>
 		</div>
 	</div>
 
 	<div class="legend">
-		<span class="lbl">Less</span>
+		<span class="lbl">Fewer</span>
 		<span class="cell" data-level="0"></span>
 		<span class="cell" data-level="1"></span>
 		<span class="cell" data-level="2"></span>
 		<span class="cell" data-level="3"></span>
-		<span class="lbl">More</span>
+		<span class="cell" data-level="4"></span>
+		<span class="lbl">More exercises</span>
 	</div>
 </Card>
 
@@ -189,27 +222,21 @@
 		font-variant-numeric: tabular-nums;
 	}
 
-	.scroll {
-		overflow-x: auto;
-		padding-bottom: 4px;
-	}
-	.grid-wrap {
-		min-width: max-content;
-	}
-
-	/* Cell sizing shared by grid + month header so labels line up. */
-	.grid,
-	.months {
-		--cell: 13px;
-		--gap: 3px;
+	.heatmap {
+		--dow-w: 28px;
+		--body-gap: 8px;
+		--gap: 4px;
+		width: 100%;
 	}
 
+	/* Month header divides the same width as the day grid into equal columns,
+	   offset by the day-of-week gutter so labels sit above their week. */
 	.months {
 		display: grid;
-		grid-template-columns: repeat(var(--cols), calc(var(--cell) + var(--gap)));
-		margin-left: 30px;
-		margin-bottom: 4px;
-		height: 13px;
+		grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+		margin-left: calc(var(--dow-w) + var(--body-gap));
+		margin-bottom: 6px;
+		height: 12px;
 	}
 	.month {
 		font:
@@ -223,70 +250,86 @@
 
 	.body {
 		display: flex;
-		gap: 6px;
+		gap: var(--body-gap);
+		align-items: stretch;
 	}
 	.dow {
-		display: grid;
-		grid-template-rows: repeat(7, var(--cell, 13px));
-		gap: var(--gap, 3px);
-		width: 24px;
+		width: var(--dow-w);
 		flex: none;
+		display: flex;
+		flex-direction: column;
+		gap: var(--gap);
 	}
 	.dow span {
+		flex: 1;
+		display: flex;
+		align-items: center;
 		font:
-			700 8px/1 'Onest',
+			700 9px/1 'Onest',
 			system-ui,
 			sans-serif;
 		color: var(--ink-dim);
-		align-self: center;
 	}
 
+	/* Columns share the remaining width equally; cells stay square via aspect-ratio,
+	   so the grid grows to fill whatever the card offers. */
 	.grid {
+		flex: 1;
+		min-width: 0;
 		display: flex;
 		gap: var(--gap);
 	}
 	.col {
-		display: grid;
-		grid-template-rows: repeat(7, var(--cell));
+		flex: 1 1 0;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
 		gap: var(--gap);
 	}
 	.cell {
-		width: var(--cell, 13px);
-		height: var(--cell, 13px);
+		width: 100%;
+		aspect-ratio: 1 / 1;
 		border-radius: 3px;
 		background: var(--card-3);
 		border: 1px solid color-mix(in oklab, var(--line) 60%, transparent);
 		transition: transform 120ms ease;
 	}
 	.cell[data-level='1'] {
-		background: color-mix(in oklab, var(--clay) 45%, var(--card));
+		background: color-mix(in oklab, var(--clay) 32%, var(--card));
 		border-color: transparent;
 	}
 	.cell[data-level='2'] {
-		background: color-mix(in oklab, var(--clay) 72%, var(--card));
+		background: color-mix(in oklab, var(--clay) 55%, var(--card));
 		border-color: transparent;
 	}
 	.cell[data-level='3'] {
+		background: color-mix(in oklab, var(--clay) 80%, var(--card));
+		border-color: transparent;
+	}
+	.cell[data-level='4'] {
 		background: var(--clay);
 		border-color: transparent;
-		box-shadow: 0 0 0 1px color-mix(in oklab, var(--clay) 40%, transparent);
+		box-shadow: 0 0 0 1px color-mix(in oklab, var(--clay) 35%, transparent);
 	}
 	.cell.future {
 		background: transparent;
 		border-color: transparent;
 	}
 	.cell:not(.future):hover {
-		transform: scale(1.25);
+		transform: scale(1.18);
 	}
 
 	.legend {
 		display: flex;
 		align-items: center;
 		gap: 4px;
-		margin-top: 12px;
+		margin-top: 14px;
 		justify-content: flex-end;
 	}
 	.legend .cell {
+		width: 13px;
+		height: 13px;
+		aspect-ratio: auto;
 		transition: none;
 	}
 	.legend .lbl {
