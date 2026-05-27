@@ -496,7 +496,9 @@ fn tool_definitions() -> Value {
             "description": "Fetch an overall training progress summary for the authenticated user: last-7-day and last-30-day period summaries with comparisons against the preceding period, plus recent personal records (recent_prs) and recent best efforts (recent_bests). Requires progress.read scope.",
             "inputSchema": {
                 "type": "object",
-                "properties": {},
+                "properties": {
+                    "timezone_offset_minutes": { "type": "integer", "description": "The user's local offset from UTC in minutes, used to bucket activity by local day and time-of-day. Defaults to 0 (UTC) when omitted." }
+                },
                 "additionalProperties": false
             }
         }));
@@ -1032,7 +1034,13 @@ async fn call_tool(
         }
         "get_progress_overview" => {
             require_scope(principal, authz::McpScope::ProgressRead)?;
-            let data = progress::get_progress_overview(db, principal.user_id, 0)
+            let timezone_offset_minutes = match args.get("timezone_offset_minutes") {
+                None | Some(Value::Null) => 0,
+                Some(value) => value
+                    .as_i64()
+                    .ok_or_else(|| invalid_params("timezone_offset_minutes must be an integer"))?,
+            };
+            let data = progress::get_progress_overview(db, principal.user_id, timezone_offset_minutes)
                 .await
                 .map_err(rpc_error_from_app_error)?;
             Ok(tool_success(data))
