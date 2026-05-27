@@ -391,8 +391,27 @@ impl Database {
             template_id
         );
 
-        let template = self.get_workout_template(user_id, template_id).await?;
         let pool = self.pool().await;
+
+        let active_count = sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count!: i64" FROM workouts WHERE user_id = ? AND end_time <= start_time"#,
+            user_id
+        )
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| {
+            error!(target: "database", "Failed to check for active workouts: {}", e);
+            AppError::DatabaseError(e)
+        })?;
+
+        if active_count > 0 {
+            return Err(AppError::Conflict(
+                "You already have an active session. End or cancel it before starting a new one."
+                    .to_string(),
+            ));
+        }
+
+        let template = self.get_workout_template(user_id, template_id).await?;
         let mut tx = pool.begin().await.map_err(AppError::DatabaseError)?;
 
         let workout = CreateWorkoutRequest {

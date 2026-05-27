@@ -194,6 +194,7 @@ export interface WorkoutStats {
 	session_start_samples?: Array<{
 		start_time: string;
 		timezone_offset_minutes?: number | null;
+		exercise_count?: number;
 	}>;
 }
 

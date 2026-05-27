@@ -9,9 +9,14 @@
 	} from '$lib/api';
 	import { auth } from '$lib/auth';
 	import { readDemoModePreference, writeDemoModePreference } from '$lib/preferences/demoMode';
-	import { Btn, Card, Chk, Badge, PageHero } from '$lib/components/ui';
+	import { Btn, Card, Chk, Badge, PageHero, Notice } from '$lib/components/ui';
+	import SettingsDesktop from '$lib/components/settings/SettingsDesktop.svelte';
+	import { isDesktop, isDesktopView } from '$lib/stores/viewport';
+	import { openConfirm } from '$lib/stores/confirm';
 
 	const authState = auth.state;
+
+	let desktop = $derived(isDesktopView($isDesktop));
 
 	// Account
 	let currentPassword = $state('');
@@ -43,6 +48,8 @@
 	let mcpTokensLoaded = $state(false);
 
 	let activeMcpTokens = $derived(mcpTokens.filter((t) => !t.revoked_at));
+
+	let mcpUrl = $derived(typeof window !== 'undefined' ? `${window.location.origin}/mcp` : '/mcp');
 
 	function mcpScopesForAccess(access: 'read' | 'write'): string[] {
 		if (access === 'write') return ['workouts.read', 'progress.read', 'workouts.write'];
@@ -158,7 +165,15 @@
 	}
 
 	async function handleRevokeMcpToken(token: McpTokenSummary) {
-		if (!confirm(`Revoke ${token.name}? Clients using it will lose access immediately.`)) return;
+		if (
+			!(await openConfirm({
+				title: `Revoke ${token.name}?`,
+				message: 'Clients using it will lose access immediately.',
+				confirmLabel: 'Revoke',
+				danger: true
+			}))
+		)
+			return;
 		revokingTokenId = token.id;
 		mcpError = mcpNotice = null;
 		try {
@@ -177,6 +192,15 @@
 		try {
 			await navigator.clipboard?.writeText(createdToken.token);
 			mcpNotice = 'Token copied to clipboard.';
+		} catch {
+			mcpNotice = 'Could not copy — select the value manually.';
+		}
+	}
+
+	async function copyMcpUrl() {
+		try {
+			await navigator.clipboard?.writeText(mcpUrl);
+			mcpNotice = 'Endpoint URL copied to clipboard.';
 		} catch {
 			mcpNotice = 'Could not copy — select the value manually.';
 		}
@@ -203,12 +227,14 @@
 	});
 </script>
 
-<div class="page">
+{#snippet hero()}
 	<PageHero kicker="► Settings">
 		{#snippet title()}Your account, <em>tuned.</em>{/snippet}
 		{#snippet sub()}Password, demo mode, and the MCP tokens AI tools use to reach SwoleMate.{/snippet}
 	</PageHero>
+{/snippet}
 
+{#snippet accountCard()}
 	<Card>
 		{#snippet title()}Account{/snippet}
 		{#snippet lede()}Sessions stay signed in for a long time so offline mode keeps working.{/snippet}
@@ -264,8 +290,8 @@
 				/>
 			</label>
 
-			{#if accountError}<div class="err">{accountError}</div>{/if}
-			{#if accountNotice}<div class="ok">{accountNotice}</div>{/if}
+			{#if accountError}<Notice tone="error">{accountError}</Notice>{/if}
+			{#if accountNotice}<Notice tone="success">{accountNotice}</Notice>{/if}
 
 			<div class="actions">
 				<Btn variant="primary" type="submit" disabled={accountLoading || !$authState.user}>
@@ -275,7 +301,9 @@
 			</div>
 		</form>
 	</Card>
+{/snippet}
 
+{#snippet toolsCard()}
 	<Card>
 		{#snippet title()}Workout tools{/snippet}
 		{#snippet lede()}Hide demo session tools unless you want quick access for testing.{/snippet}
@@ -292,7 +320,9 @@
 			/>
 		</div>
 	</Card>
+{/snippet}
 
+{#snippet mcpCard()}
 	<Card>
 		{#snippet title()}AI access · MCP tokens{/snippet}
 		{#snippet lede()}Tokens AI tools use to reach the MCP endpoint. Each token is shown once.{/snippet}
@@ -337,8 +367,8 @@
 					Write tokens can change workout data. A shorter expiry such as 7 days is recommended.
 				</div>
 			{/if}
-			{#if mcpError}<div class="err">{mcpError}</div>{/if}
-			{#if mcpNotice}<div class="ok">{mcpNotice}</div>{/if}
+			{#if mcpError}<Notice tone="error">{mcpError}</Notice>{/if}
+			{#if mcpNotice}<Notice tone="success">{mcpNotice}</Notice>{/if}
 
 			<div class="actions">
 				<Btn
@@ -415,8 +445,47 @@
 				{/each}
 			{/if}
 		</div>
+
+		<div class="connect">
+			<h4>Connecting an AI client</h4>
+			<p>
+				In your client (Claude Desktop or any MCP-capable tool), add a custom/remote MCP server
+				pointing at the endpoint below and supply the token as a bearer credential.
+			</p>
+			<ol class="steps">
+				<li>
+					<span class="step-lbl">Endpoint URL</span>
+					<div class="row">
+						<code class="value">{mcpUrl}</code>
+						<Btn variant="ink" size="sm" onclick={copyMcpUrl}>Copy</Btn>
+					</div>
+				</li>
+				<li>
+					<span class="step-lbl">Authorization header</span>
+					<code class="value">Authorization: Bearer smcp_…</code>
+					<p class="hint">Use a token minted above as the <b>smcp_…</b> value.</p>
+				</li>
+				<li>
+					<span class="step-lbl">Access level</span>
+					<p class="hint">
+						Read or read + write is set by the token's scope chosen when you create it.
+					</p>
+				</li>
+			</ol>
+		</div>
 	</Card>
-</div>
+{/snippet}
+
+{#if desktop}
+	<SettingsDesktop {hero} {accountCard} {toolsCard} {mcpCard} />
+{:else}
+	<div class="page">
+		{@render hero()}
+		{@render accountCard()}
+		{@render toolsCard()}
+		{@render mcpCard()}
+	</div>
+{/if}
 
 <style>
 	.page {
@@ -483,20 +552,6 @@
 		gap: 6px;
 		flex-wrap: wrap;
 		margin: 6px 0;
-	}
-	.err {
-		font:
-			600 13px/1.4 'Onest',
-			system-ui,
-			sans-serif;
-		color: var(--clay-text);
-	}
-	.ok {
-		font:
-			600 13px/1.4 'Onest',
-			system-ui,
-			sans-serif;
-		color: var(--sage);
 	}
 	.warn {
 		padding: 10px 12px;
@@ -648,6 +703,81 @@
 		flex-wrap: wrap;
 	}
 	.meta2 b {
+		color: var(--ink);
+		font-weight: 700;
+	}
+
+	.connect {
+		margin-top: 14px;
+		padding-top: 14px;
+		border-top: 1px solid var(--line);
+	}
+	.connect h4 {
+		margin: 0 0 6px;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
+		letter-spacing: 0.18em;
+		text-transform: uppercase;
+		color: var(--ink-soft);
+	}
+	.connect > p {
+		margin: 0 0 12px;
+		font:
+			500 13px/1.5 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--ink-soft);
+	}
+	.steps {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+	.steps .step-lbl {
+		display: block;
+		font:
+			700 10px/1 'Onest',
+			system-ui,
+			sans-serif;
+		letter-spacing: 0.18em;
+		text-transform: uppercase;
+		color: var(--ink-soft);
+		margin-bottom: 6px;
+	}
+	.steps .row {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+	.steps .row .value {
+		flex: 1;
+		margin: 0;
+	}
+	.steps .value {
+		display: block;
+		padding: 10px 12px;
+		background: var(--surface-deep);
+		color: var(--on-deep);
+		border-radius: 10px;
+		font:
+			500 12px/1.5 'JetBrains Mono',
+			monospace;
+		overflow-x: auto;
+	}
+	.steps .hint {
+		margin: 6px 0 0;
+		font:
+			500 12px/1.4 'Onest',
+			system-ui,
+			sans-serif;
+		color: var(--ink-soft);
+	}
+	.steps .hint b {
 		color: var(--ink);
 		font-weight: 700;
 	}

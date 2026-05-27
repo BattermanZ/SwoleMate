@@ -1,8 +1,19 @@
 <script lang="ts">
 	import { Btn, Card, PageHero } from '$lib/components/ui';
+	import HelpDesktop from '$lib/components/help/HelpDesktop.svelte';
+	import { isDesktop, isDesktopView } from '$lib/stores/viewport';
+	import { openConfirm } from '$lib/stores/confirm';
 
-	function resetUiPreferences() {
-		if (!confirm('Reset local UI preferences? (Theme, progress selection, legacy settings)')) {
+	let desktop = $derived(isDesktopView($isDesktop));
+
+	async function resetUiPreferences() {
+		if (
+			!(await openConfirm({
+				title: 'Reset local UI preferences?',
+				message: 'Clears theme, progress selection, and legacy settings.',
+				confirmLabel: 'Reset'
+			}))
+		) {
 			return;
 		}
 		const keys = [
@@ -26,13 +37,15 @@
 	}
 </script>
 
-<div class="page">
+{#snippet hero()}
 	<PageHero kicker="► Help">
 		{#snippet title()}Quick guidance, <em>safe resets.</em>{/snippet}
 		{#snippet sub()}How to use SwoleMate, plus a place to clear local UI state if something feels
 			stuck.{/snippet}
 	</PageHero>
+{/snippet}
 
+{#snippet howToCard()}
 	<Card>
 		{#snippet title()}How to use{/snippet}
 		{#snippet lede()}The workflow is built to be fast and repeatable.{/snippet}
@@ -60,7 +73,9 @@
 			</div>
 		</div>
 	</Card>
+{/snippet}
 
+{#snippet goodToKnowCard()}
 	<Card>
 		{#snippet title()}Good to know{/snippet}
 		<ul>
@@ -70,13 +85,26 @@
 			<li>Marked-done exercises lock editing until you tap Edit.</li>
 		</ul>
 	</Card>
+{/snippet}
 
+{#snippet troubleshootCard()}
 	<Card>
 		{#snippet title()}Troubleshooting{/snippet}
 		{#snippet lede()}If the theme or page state gets weird, a local reset usually fixes it.{/snippet}
 		<Btn variant="ink" onclick={resetUiPreferences}>↻ Reset local UI preferences</Btn>
 	</Card>
-</div>
+{/snippet}
+
+{#if desktop}
+	<HelpDesktop {hero} {howToCard} {goodToKnowCard} {troubleshootCard} />
+{:else}
+	<div class="page">
+		{@render hero()}
+		{@render howToCard()}
+		{@render goodToKnowCard()}
+		{@render troubleshootCard()}
+	</div>
+{/if}
 
 <style>
 	.page {

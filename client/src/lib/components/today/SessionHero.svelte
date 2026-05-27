@@ -10,6 +10,8 @@
 		durationSeconds: number;
 		prCount?: number;
 		startedAtLabel?: string;
+		titleLead?: string;
+		titleAccent?: string;
 		onCancel?: () => void;
 		onEnd?: () => void;
 		disabled?: boolean;
@@ -23,6 +25,8 @@
 		durationSeconds,
 		prCount = 0,
 		startedAtLabel,
+		titleLead = 'Session',
+		titleAccent = 'in progress.',
 		onCancel,
 		onEnd,
 		disabled = false
@@ -47,7 +51,7 @@
 </script>
 
 <PageHero kicker={`► Session live · ${elapsedLabel} in`}>
-	{#snippet title()}Push day, <em>going off.</em>{/snippet}
+	{#snippet title()}{titleLead} <em>{titleAccent}</em>{/snippet}
 	{#snippet sub()}
 		{#if startedAtLabel}Started {startedAtLabel}{/if}
 	{/snippet}
@@ -95,17 +99,21 @@
 				</div>
 				<div class="cell">
 					<div class="k">Sets done</div>
-					<div class="v">{setCount}</div>
+					{#key setCount}
+						<div class="v ticker">{setCount}</div>
+					{/key}
 				</div>
 				<div class="cell">
 					<div class="k">{volumeKg > 0 ? 'Volume' : 'Time'}</div>
-					<div class="v">
-						{#if volumeKg > 0}
-							{Math.round(volumeKg).toLocaleString()}<small>kg</small>
-						{:else}
-							{formatTime(durationSeconds)}
-						{/if}
-					</div>
+					{#key volumeKg}
+						<div class="v ticker">
+							{#if volumeKg > 0}
+								{Math.round(volumeKg).toLocaleString()}<small>kg</small>
+							{:else}
+								{formatTime(durationSeconds)}
+							{/if}
+						</div>
+					{/key}
 				</div>
 				<div class="cell">
 					<div class="k">Records</div>
@@ -207,6 +215,16 @@
 			sans-serif;
 		color: var(--on-deep-soft);
 		font-weight: 600;
+	}
+
+	@keyframes stat-tick {
+		from {
+			transform: translateY(-5px) scale(1.1);
+			opacity: 0.5;
+		}
+	}
+	.ticker {
+		animation: stat-tick 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 	}
 
 	.cancel,

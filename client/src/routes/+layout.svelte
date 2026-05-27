@@ -6,7 +6,9 @@
 	import { auth } from '$lib/auth';
 	import { logger } from '$lib/logger';
 	import { BottomNav, type NavItem } from '$lib/components/ui';
+	import ConfirmHost from '$lib/components/ui/ConfirmHost.svelte';
 	import AppBar from '$lib/components/shell/AppBar.svelte';
+	import SideNav from '$lib/components/shell/SideNav.svelte';
 	import type { Snippet } from 'svelte';
 
 	interface Props {
@@ -135,31 +137,61 @@
 		{ href: '/progress', label: 'Progress', icon: iconProgress },
 		{ href: '/more', label: 'More', icon: iconMore }
 	] satisfies NavItem[]}
+
 	<div class="shell">
-		<AppBar onLogout={$authState.status === 'authenticated' ? logout : undefined} />
+		<div class="chrome chrome-appbar">
+			<AppBar onLogout={$authState.status === 'authenticated' ? logout : undefined} />
+		</div>
+		<div class="chrome chrome-sidenav">
+			<SideNav
+				items={navItems}
+				current={currentPath}
+				onLogout={$authState.status === 'authenticated' ? logout : undefined}
+			/>
+		</div>
 
-		{#if $authState.offline}
-			<div class="offline-wrap">
-				<div class="offline">
-					<span class="dot"></span>
-					Offline mode — showing cached data. Some actions are disabled.
+		<div class="content">
+			{#if $authState.offline}
+				<div class="offline-wrap">
+					<div class="offline">
+						<span class="dot"></span>
+						Offline mode — showing cached data. Some actions are disabled.
+					</div>
 				</div>
-			</div>
-		{/if}
+			{/if}
+			<main>
+				{@render children?.()}
+			</main>
+		</div>
 
-		<main>
-			{@render children?.()}
-		</main>
-
-		<BottomNav items={navItems} current={currentPath} />
+		<div class="chrome chrome-bottomnav">
+			<BottomNav items={navItems} current={currentPath} />
+		</div>
 	</div>
 {/if}
+
+<ConfirmHost />
 
 <style>
 	.shell {
 		min-height: 100dvh;
 		display: flex;
 		flex-direction: column;
+	}
+	/* Chrome wrappers are layout-transparent on mobile so AppBar's sticky and
+	   BottomNav's fixed positioning behave as if direct children of .shell. */
+	.chrome-appbar,
+	.chrome-bottomnav {
+		display: contents;
+	}
+	.chrome-sidenav {
+		display: none;
+	}
+	.content {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
 	}
 	main {
 		flex: 1;
@@ -192,5 +224,31 @@
 		height: 6px;
 		border-radius: 50%;
 		background: var(--warn);
+	}
+
+	/* Desktop: sidebar rail + content column. Children render ONCE; only the
+	   chrome swaps. Breakpoint MUST match DESKTOP_MIN_WIDTH (1024) in
+	   lib/stores/viewport.ts. */
+	@media (min-width: 1024px) {
+		.shell {
+			flex-direction: row;
+		}
+		.chrome-appbar,
+		.chrome-bottomnav {
+			display: none;
+		}
+		.chrome-sidenav {
+			display: block;
+			position: sticky;
+			top: 0;
+			align-self: flex-start;
+			height: 100dvh;
+			flex: none;
+		}
+		main {
+			padding: 24px;
+			max-width: none;
+			margin: 0;
+		}
 	}
 </style>

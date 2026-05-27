@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(*) as \"count!: i64\" FROM workouts WHERE user_id = ? AND end_time <= start_time",
+  "describe": {
+    "columns": [
+      {
+        "name": "count!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c98b98e54d7f419db7ff4499fa078d8a53dd30cf1549390f123192254e5cfc12"
+}

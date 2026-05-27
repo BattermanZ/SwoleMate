@@ -3,13 +3,19 @@
 	import { cancelWorkout, createWorkoutTemplateFromWorkout } from '$lib/api';
 	import { auth } from '$lib/auth';
 	import { formatDateRelative, formatTime } from '$lib/utils/date';
-	import { Btn, Card, Badge, Chip, PageHero, SetPillList } from '$lib/components/ui';
+	import { Btn, Card, Badge, Chip, PageHero, SetPillList, Notice } from '$lib/components/ui';
+	import SessionDetailDesktop from '$lib/components/history/SessionDetailDesktop.svelte';
+	import { isDesktop, isDesktopView } from '$lib/stores/viewport';
+	import { isTrackingFieldsSetting } from '$lib/today/tracking';
+	import { openConfirm, openPrompt } from '$lib/stores/confirm';
 	import type { WorkoutWithExercises } from '$lib/types';
 
 	interface Props {
 		data: { workout: WorkoutWithExercises | null; error: string | null };
 	}
 	let { data }: Props = $props();
+
+	let desktop = $derived(isDesktopView($isDesktop));
 
 	const authState = auth.state;
 
@@ -41,7 +47,15 @@
 			error = 'Offline mode: delete workouts when you are back online.';
 			return;
 		}
-		if (!confirm('Delete this workout? This cannot be undone.')) return;
+		if (
+			!(await openConfirm({
+				title: 'Delete workout?',
+				message: 'This cannot be undone.',
+				confirmLabel: 'Delete',
+				danger: true
+			}))
+		)
+			return;
 
 		deleting = true;
 		error = null;
@@ -68,7 +82,13 @@
 			workout.exercises.length > 0
 				? `${workout.exercises[0].exercise.exercise_type} template`
 				: 'Workout template';
-		const name = prompt('Template name:', defaultName)?.trim();
+		const name = (
+			await openPrompt({
+				title: 'Save as template',
+				inputLabel: 'Template name',
+				defaultValue: defaultName
+			})
+		)?.trim();
 		if (!name) return;
 
 		savingTemplate = true;
@@ -84,7 +104,7 @@
 	}
 </script>
 
-<div class="page">
+{#snippet hero()}
 	<PageHero kicker="► Workout">
 		{#snippet title()}
 			{#if workout}{formatDateRelative(workout.start_time)}{:else}Workout{/if}<em> — details.</em>
@@ -96,9 +116,11 @@
 			{/if}
 		{/snippet}
 	</PageHero>
+{/snippet}
 
+{#snippet summary()}
 	{#if loadError}
-		<Card><div class="err">{loadError}</div></Card>
+		<Notice tone="error">{loadError}</Notice>
 	{:else if !workout}
 		<Card><div class="muted">Loading…</div></Card>
 	{:else}
@@ -125,60 +147,92 @@
 					{deleting ? 'Deleting…' : 'Delete'}
 				</Btn>
 			</div>
-			{#if error}<div class="err">{error}</div>{/if}
+			{#if error}<Notice tone="error">{error}</Notice>{/if}
 		</Card>
+	{/if}
+{/snippet}
 
+{#snippet exercises()}
+	{#if workout}
 		{#if workout.exercises.length > 0}
-			{#each workout.exercises as ex (ex.exercise.id ?? ex.exercise.start_time)}
-				<Card>
-					{#snippet title()}{ex.exercise.exercise_type}{/snippet}
-					{#snippet lede()}
-						{formatTime(ex.exercise.start_time)} – {formatTime(ex.exercise.end_time)}
-					{/snippet}
+			<div class="ex-grid">
+				{#each workout.exercises as ex (ex.exercise.id ?? ex.exercise.start_time)}
+					{@const visibleSettings = (ex.exercise.settings ?? []).filter(
+						(s) => !isTrackingFieldsSetting(s)
+					)}
+					<Card>
+						{#snippet title()}{ex.exercise.exercise_type}{/snippet}
+						{#snippet lede()}
+							{formatTime(ex.exercise.start_time)} – {formatTime(ex.exercise.end_time)}
+						{/snippet}
 
-					{#if ex.exercise.settings && ex.exercise.settings.length > 0}
-						<div class="settings">
-							{#each ex.exercise.settings as s (s.id ?? s.key)}
-								<Chip size="xs">{s.key}: {s.value}</Chip>
-							{/each}
-						</div>
-					{/if}
+						{#if visibleSettings.length > 0}
+							<div class="settings">
+								{#each visibleSettings as s (s.id ?? s.key)}
+									<Chip size="xs">{s.key}: {s.value}</Chip>
+								{/each}
+							</div>
+						{/if}
 
-					{#if ex.sets.length > 0}
-						<div class="pills">
-							<SetPillList
-								sets={ex.sets.map((s) => ({
-									reps: s.reps,
-									weight: s.weight,
-									weightLeft: s.weight_left,
-									weightRight: s.weight_right,
-									durationSeconds: s.duration_seconds
-								}))}
-								perSideWeight={ex.exercise.per_side_weight ?? false}
-								splitWeight={ex.exercise.split_weight ?? false}
-								size="sm"
-							/>
-						</div>
-					{:else}
-						<div class="muted">No sets logged.</div>
-					{/if}
+						{#if ex.sets.length > 0}
+							<div class="pills">
+								<SetPillList
+									sets={ex.sets.map((s) => ({
+										reps: s.reps,
+										weight: s.weight,
+										weightLeft: s.weight_left,
+										weightRight: s.weight_right,
+										durationSeconds: s.duration_seconds
+									}))}
+									perSideWeight={ex.exercise.per_side_weight ?? false}
+									splitWeight={ex.exercise.split_weight ?? false}
+									size="sm"
+								/>
+							</div>
+						{:else}
+							<div class="muted">No sets logged.</div>
+						{/if}
 
-					{#if ex.exercise.notes}
-						<p class="notes">Notes: {ex.exercise.notes}</p>
-					{/if}
-				</Card>
-			{/each}
+						{#if ex.exercise.notes}
+							<p class="notes">Notes: {ex.exercise.notes}</p>
+						{/if}
+					</Card>
+				{/each}
+			</div>
 		{:else}
 			<Card><div class="muted">No exercises recorded.</div></Card>
 		{/if}
 	{/if}
-</div>
+{/snippet}
+
+{#if desktop}
+	<SessionDetailDesktop ready={Boolean(workout) && !loadError} {hero} {summary} {exercises} />
+{:else}
+	<div class="page">
+		{@render hero()}
+		{@render summary()}
+		{@render exercises()}
+	</div>
+{/if}
 
 <style>
 	.page {
 		display: flex;
 		flex-direction: column;
 		gap: 14px;
+	}
+	.ex-grid {
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+	}
+	/* Desktop main column flows exercise cards 2-up. */
+	@media (min-width: 1024px) {
+		.ex-grid {
+			display: grid;
+			grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+			align-items: start;
+		}
 	}
 	.meta-row {
 		display: flex;
@@ -203,14 +257,6 @@
 		display: flex;
 		gap: 8px;
 		flex-wrap: wrap;
-	}
-	.err {
-		margin-top: 10px;
-		font:
-			600 13px/1.4 'Onest',
-			system-ui,
-			sans-serif;
-		color: var(--clay-text);
 	}
 	.muted {
 		font:

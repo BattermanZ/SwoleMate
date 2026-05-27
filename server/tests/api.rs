@@ -1930,7 +1930,7 @@ async fn login_is_rate_limited_by_ip_across_usernames() {
     for i in 0..3 {
         let req = test::TestRequest::post()
             .uri("/api/auth/login")
-            .insert_header((actix_web::http::header::X_FORWARDED_FOR, "203.0.113.50"))
+            .insert_header(("x-real-ip", "203.0.113.50"))
             .set_json(json!({ "username": format!("nouser-{i}"), "password": "wrong-password" }))
             .to_request();
         let resp = test::call_service(&app, req).await;
@@ -1939,7 +1939,7 @@ async fn login_is_rate_limited_by_ip_across_usernames() {
 
     let req = test::TestRequest::post()
         .uri("/api/auth/login")
-        .insert_header((actix_web::http::header::X_FORWARDED_FOR, "203.0.113.50"))
+        .insert_header(("x-real-ip", "203.0.113.50"))
         .set_json(json!({ "username": "another-user", "password": "wrong-password" }))
         .to_request();
     let resp = test::call_service(&app, req).await;
@@ -3373,7 +3373,7 @@ async fn oauth_authorize_is_rate_limited_by_ip() {
     for _ in 0..2 {
         let req = test::TestRequest::post()
             .uri("/oauth/authorize")
-            .insert_header((actix_web::http::header::X_FORWARDED_FOR, "203.0.113.60"))
+            .insert_header(("x-real-ip", "203.0.113.60"))
             .set_form(&[
                 ("response_type", "code"),
                 ("client_id", client_id),
@@ -3393,7 +3393,7 @@ async fn oauth_authorize_is_rate_limited_by_ip() {
 
     let req = test::TestRequest::post()
         .uri("/oauth/authorize")
-        .insert_header((actix_web::http::header::X_FORWARDED_FOR, "203.0.113.60"))
+        .insert_header(("x-real-ip", "203.0.113.60"))
         .set_form(&[
             ("response_type", "code"),
             ("client_id", client_id),

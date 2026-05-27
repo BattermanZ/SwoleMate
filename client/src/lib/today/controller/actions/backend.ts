@@ -1,5 +1,6 @@
 import { getWorkout, getWorkouts } from '$lib/api';
 import { kvSet } from '$lib/offline/storage';
+import { deleteOfflineSession } from '$lib/offline/todaySessions';
 import { toUiSession, workoutIsActive } from '$lib/today/backend';
 import { get } from 'svelte/store';
 import {
@@ -41,20 +42,33 @@ export async function refreshFromBackend(state: TodayState) {
 		} else {
 			const offlineInProgress = await findInProgressOffline();
 			if (offlineInProgress?.session) {
-				state.currentSession.set(offlineInProgress.session);
-				state.sessionNotes.set(offlineInProgress.session.notes);
-				state.openExerciseIds.set(
-					offlineInProgress.session.exercises
-						.filter((exercise) => exercise.status !== 'done')
-						.map((exercise) => exercise.id)
-				);
-				if (get(state.plannedTemplateExercises).length === 0) {
-					const restored = await loadPlannedTemplate(offlineInProgress.session.id);
-					if (restored && restored.length > 0) {
-						state.plannedTemplateExercises.set(restored);
+				const offlineSessionId =
+					offlineInProgress.server_workout_id ?? offlineInProgress.session.id;
+				const isAlreadyCompleted =
+					offlineSessionId > 0 && workouts.some((w) => w.id === offlineSessionId);
+				if (isAlreadyCompleted) {
+					await deleteOfflineSession(offlineInProgress.key).catch(() => undefined);
+					state.currentSession.set(null);
+					state.sessionNotes.set('');
+					state.openExerciseIds.set([]);
+					state.plannedTemplateExercises.set([]);
+					void clearPlannedTemplate();
+				} else {
+					state.currentSession.set(offlineInProgress.session);
+					state.sessionNotes.set(offlineInProgress.session.notes);
+					state.openExerciseIds.set(
+						offlineInProgress.session.exercises
+							.filter((exercise) => exercise.status !== 'done')
+							.map((exercise) => exercise.id)
+					);
+					if (get(state.plannedTemplateExercises).length === 0) {
+						const restored = await loadPlannedTemplate(offlineInProgress.session.id);
+						if (restored && restored.length > 0) {
+							state.plannedTemplateExercises.set(restored);
+						}
 					}
+					state.notice.set('Local session in progress. You can keep logging and sync later.');
 				}
-				state.notice.set('Local session in progress. You can keep logging and sync later.');
 			} else {
 				state.currentSession.set(null);
 				state.sessionNotes.set('');

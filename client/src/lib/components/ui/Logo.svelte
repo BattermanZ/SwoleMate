@@ -5,12 +5,7 @@
 		fontSize?: number;
 		'aria-label'?: string;
 	}
-	let {
-		size = 30,
-		radius,
-		fontSize,
-		'aria-label': ariaLabel = 'SwoleMate logo'
-	}: Props = $props();
+	let { size = 30, radius, fontSize, 'aria-label': ariaLabel = 'SwoleMate logo' }: Props = $props();
 	let r = $derived(radius ?? Math.round(size * 0.3));
 	let fs = $derived(fontSize ?? Math.round(size * 0.43));
 </script>

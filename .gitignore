@@ -57,9 +57,15 @@ client/build/
 client/test-results/
 client/playwright-report/
 
+# Playwright MCP output + ad-hoc verification screenshots at repo/client root
+**/.playwright-mcp/
+/*.png
+/client/*.png
+
 
 # backups
 server/backups/
 
 # mockup-only screenshot captures (local visual audits)
 mockups/.shots/
+.superpowers/

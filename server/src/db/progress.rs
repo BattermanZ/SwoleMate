@@ -678,7 +678,13 @@ impl Database {
             r#"
             SELECT
                 start_time as "start_time: DateTime<Utc>",
-                timezone_offset_minutes
+                timezone_offset_minutes,
+                (
+                    SELECT COUNT(*)
+                    FROM exercises e
+                    WHERE e.workout_id = workouts.id
+                      AND e.user_id = workouts.user_id
+                ) as "exercise_count!: i64"
             FROM workouts
             WHERE end_time > start_time
               AND user_id = ?
@@ -708,7 +714,8 @@ impl Database {
             .map(|row| {
                 json!({
                     "start_time": row.start_time,
-                    "timezone_offset_minutes": row.timezone_offset_minutes
+                    "timezone_offset_minutes": row.timezone_offset_minutes,
+                    "exercise_count": row.exercise_count
                 })
             })
             .collect::<Vec<_>>();
