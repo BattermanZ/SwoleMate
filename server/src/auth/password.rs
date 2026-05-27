@@ -4,6 +4,7 @@ use rand::rngs::OsRng;
 use std::sync::OnceLock;
 
 const MIN_PASSWORD_LEN: usize = 12;
+const MAX_PASSWORD_LEN: usize = 1024;
 
 fn argon2() -> Argon2<'static> {
     // Balanced defaults for a small self-hosted server.
@@ -20,6 +21,9 @@ pub fn validate_new_password(password: &str) -> Result<(), String> {
         return Err(format!(
             "password must be at least {MIN_PASSWORD_LEN} characters"
         ));
+    }
+    if password.len() > MAX_PASSWORD_LEN {
+        return Err(format!("password must be at most {MAX_PASSWORD_LEN} characters"));
     }
     Ok(())
 }

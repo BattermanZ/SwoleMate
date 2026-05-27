@@ -91,7 +91,6 @@ fn should_skip_auth(req: &ServiceRequest) -> bool {
         "/api/health" => true,
         "/api/auth/login" => true,
         "/mcp" => true,
-        "/sse" => true,
         _ => false,
     }) || req.path().starts_with("/oauth/")
         || req.path().starts_with("/.well-known/")
