@@ -46,6 +46,7 @@ pub async fn login(
         if let Some(ip) = client_ip.as_deref() {
             record_ip_failure(ip, now);
         }
+        password::verify_dummy_password(&body.password);
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
         return Err(AppError::Unauthorized);
     };

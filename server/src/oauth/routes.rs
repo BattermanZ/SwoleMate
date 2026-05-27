@@ -465,6 +465,7 @@ pub async fn authorize_post(
             if let Some(ip) = client_ip.as_deref() {
                 record_ip_failure(ip, now);
             }
+            password::verify_dummy_password(&form.password);
             tokio::time::sleep(std::time::Duration::from_millis(200)).await;
             return HttpResponse::Unauthorized().json(serde_json::json!({
                 "error": "access_denied"
