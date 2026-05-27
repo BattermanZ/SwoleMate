@@ -13,8 +13,12 @@
 	import ExerciseComposer from '$lib/components/today/ExerciseComposer.svelte';
 	import RecentSessions from '$lib/components/today/RecentSessions.svelte';
 	import EndSessionModal from '$lib/components/today/EndSessionModal.svelte';
+	import TodayDesktop from '$lib/components/today/TodayDesktop.svelte';
+	import { isDesktop, isDesktopView } from '$lib/stores/viewport';
 
 	const c = createTodayController();
+
+	let desktop = $derived(isDesktopView($isDesktop));
 
 	// Pull stores out of the controller so the auto-subscribe $-prefix works cleanly in the template.
 	const error = c.error;
@@ -80,7 +84,7 @@
 	}
 </script>
 
-<div class="page">
+{#snippet notices()}
 	{#if $notice || $pendingSyncCount}
 		<Notice
 			tone="info"
@@ -105,7 +109,9 @@
 	{#if $error}
 		<Notice tone="error">{$error}</Notice>
 	{/if}
+{/snippet}
 
+{#snippet hero()}
 	{#if $currentSession}
 		<SessionHero
 			elapsedLabel={$elapsedLabel}
@@ -129,7 +135,9 @@
 			onDemo={() => c.startSession('demo')}
 		/>
 	{/if}
+{/snippet}
 
+{#snippet templatePicker()}
 	{#if templatePickerOpen && !$currentSession}
 		<Card>
 			{#snippet title()}Start from template <em>— preloads exercise plan</em>{/snippet}
@@ -162,7 +170,9 @@
 			{/if}
 		</Card>
 	{/if}
+{/snippet}
 
+{#snippet primary()}
 	{#if $currentSession}
 		<Card>
 			<label class="notes-label">
@@ -222,18 +232,20 @@
 		{/if}
 
 		<div bind:this={composerEl} class:composer-pulse={composerPulsing}>
-		<ExerciseComposer
-			bind:query={$exerciseQuery}
-			suggestions={$suggestions}
-			templatePicks={$plannedTemplateExercises}
-			quickPicks={$quickPicks}
-			disabled={$loading}
-			onAdd={(name) => c.addExercise(name)}
-			onAddTemplateExercise={(id) => c.startPlannedTemplateExercise(id)}
-		/>
+			<ExerciseComposer
+				bind:query={$exerciseQuery}
+				suggestions={$suggestions}
+				templatePicks={$plannedTemplateExercises}
+				quickPicks={$quickPicks}
+				disabled={$loading}
+				onAdd={(name) => c.addExercise(name)}
+				onAddTemplateExercise={(id) => c.startPlannedTemplateExercise(id)}
+			/>
 		</div>
 	{/if}
+{/snippet}
 
+{#snippet recall()}
 	<RecentSessions
 		sessions={$recentSessions}
 		canAdd={Boolean($currentSession) && !$loading}
@@ -248,16 +260,35 @@
 				settings: p.settings
 			})}
 	/>
+{/snippet}
 
-	<EndSessionModal
-		open={$endModalOpen}
-		bind:notes={$endNotes}
-		bind:mood={$endMood}
-		disabled={$loading}
-		onCancel={() => endModalOpen.set(false)}
-		onSubmit={c.submitEndSession}
+{#if desktop}
+	<TodayDesktop
+		hasSession={Boolean($currentSession)}
+		{notices}
+		{hero}
+		{templatePicker}
+		{primary}
+		{recall}
 	/>
-</div>
+{:else}
+	<div class="page">
+		{@render notices()}
+		{@render hero()}
+		{@render templatePicker()}
+		{@render primary()}
+		{@render recall()}
+	</div>
+{/if}
+
+<EndSessionModal
+	open={$endModalOpen}
+	bind:notes={$endNotes}
+	bind:mood={$endMood}
+	disabled={$loading}
+	onCancel={() => endModalOpen.set(false)}
+	onSubmit={c.submitEndSession}
+/>
 
 <style>
 	.page {
