@@ -137,54 +137,58 @@
 		{ href: '/more', label: 'More', icon: iconMore }
 	] satisfies NavItem[]}
 
-	{#snippet offlineBanner()}
-		{#if $authState.offline}
-			<div class="offline-wrap">
-				<div class="offline">
-					<span class="dot"></span>
-					Offline mode — showing cached data. Some actions are disabled.
-				</div>
-			</div>
-		{/if}
-	{/snippet}
-
-	<!-- Mobile shell (shown < 1024px via CSS) -->
-	<div class="shell shell-mobile">
-		<AppBar onLogout={$authState.status === 'authenticated' ? logout : undefined} />
-		{@render offlineBanner()}
-		<main>
-			{@render children?.()}
-		</main>
-		<BottomNav items={navItems} current={currentPath} />
-	</div>
-
-	<!-- Desktop shell (shown >= 1024px via CSS) -->
-	<div class="shell shell-desktop">
-		<div class="sidenav-host">
+	<div class="shell">
+		<div class="chrome chrome-appbar">
+			<AppBar onLogout={$authState.status === 'authenticated' ? logout : undefined} />
+		</div>
+		<div class="chrome chrome-sidenav">
 			<SideNav
 				items={navItems}
 				current={currentPath}
 				onLogout={$authState.status === 'authenticated' ? logout : undefined}
 			/>
 		</div>
-		<div class="desktop-content">
-			{@render offlineBanner()}
-			<main class="desktop-main">
+
+		<div class="content">
+			{#if $authState.offline}
+				<div class="offline-wrap">
+					<div class="offline">
+						<span class="dot"></span>
+						Offline mode — showing cached data. Some actions are disabled.
+					</div>
+				</div>
+			{/if}
+			<main>
 				{@render children?.()}
 			</main>
+		</div>
+
+		<div class="chrome chrome-bottomnav">
+			<BottomNav items={navItems} current={currentPath} />
 		</div>
 	</div>
 {/if}
 
 <style>
-	/* Default (mobile-first): show mobile shell, hide desktop shell. */
-	.shell-mobile {
+	.shell {
 		min-height: 100dvh;
 		display: flex;
 		flex-direction: column;
 	}
-	.shell-desktop {
+	/* Chrome wrappers are layout-transparent on mobile so AppBar's sticky and
+	   BottomNav's fixed positioning behave as if direct children of .shell. */
+	.chrome-appbar,
+	.chrome-bottomnav {
+		display: contents;
+	}
+	.chrome-sidenav {
 		display: none;
+	}
+	.content {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
 	}
 	main {
 		flex: 1;
@@ -219,31 +223,26 @@
 		background: var(--warn);
 	}
 
-	/* Desktop: swap shells. Breakpoint MUST match DESKTOP_MIN_WIDTH (1024) in
+	/* Desktop: sidebar rail + content column. Children render ONCE; only the
+	   chrome swaps. Breakpoint MUST match DESKTOP_MIN_WIDTH (1024) in
 	   lib/stores/viewport.ts. */
 	@media (min-width: 1024px) {
-		.shell-mobile {
+		.shell {
+			flex-direction: row;
+		}
+		.chrome-appbar,
+		.chrome-bottomnav {
 			display: none;
 		}
-		.shell-desktop {
-			display: flex;
-			min-height: 100dvh;
-		}
-		.sidenav-host {
+		.chrome-sidenav {
+			display: block;
 			position: sticky;
 			top: 0;
 			align-self: flex-start;
 			height: 100dvh;
 			flex: none;
 		}
-		.desktop-content {
-			flex: 1;
-			min-width: 0;
-			display: flex;
-			flex-direction: column;
-		}
-		.desktop-main {
-			flex: 1;
+		main {
 			padding: 24px;
 			max-width: none;
 			margin: 0;
