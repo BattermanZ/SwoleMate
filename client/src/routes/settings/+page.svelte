@@ -10,8 +10,12 @@
 	import { auth } from '$lib/auth';
 	import { readDemoModePreference, writeDemoModePreference } from '$lib/preferences/demoMode';
 	import { Btn, Card, Chk, Badge, PageHero } from '$lib/components/ui';
+	import SettingsDesktop from '$lib/components/settings/SettingsDesktop.svelte';
+	import { isDesktop, isDesktopView } from '$lib/stores/viewport';
 
 	const authState = auth.state;
+
+	let desktop = $derived(isDesktopView($isDesktop));
 
 	// Account
 	let currentPassword = $state('');
@@ -214,12 +218,14 @@
 	});
 </script>
 
-<div class="page">
+{#snippet hero()}
 	<PageHero kicker="► Settings">
 		{#snippet title()}Your account, <em>tuned.</em>{/snippet}
 		{#snippet sub()}Password, demo mode, and the MCP tokens AI tools use to reach SwoleMate.{/snippet}
 	</PageHero>
+{/snippet}
 
+{#snippet accountCard()}
 	<Card>
 		{#snippet title()}Account{/snippet}
 		{#snippet lede()}Sessions stay signed in for a long time so offline mode keeps working.{/snippet}
@@ -286,7 +292,9 @@
 			</div>
 		</form>
 	</Card>
+{/snippet}
 
+{#snippet toolsCard()}
 	<Card>
 		{#snippet title()}Workout tools{/snippet}
 		{#snippet lede()}Hide demo session tools unless you want quick access for testing.{/snippet}
@@ -303,7 +311,9 @@
 			/>
 		</div>
 	</Card>
+{/snippet}
 
+{#snippet mcpCard()}
 	<Card>
 		{#snippet title()}AI access · MCP tokens{/snippet}
 		{#snippet lede()}Tokens AI tools use to reach the MCP endpoint. Each token is shown once.{/snippet}
@@ -455,7 +465,18 @@
 			</ol>
 		</div>
 	</Card>
-</div>
+{/snippet}
+
+{#if desktop}
+	<SettingsDesktop {hero} {accountCard} {toolsCard} {mcpCard} />
+{:else}
+	<div class="page">
+		{@render hero()}
+		{@render accountCard()}
+		{@render toolsCard()}
+		{@render mcpCard()}
+	</div>
+{/if}
 
 <style>
 	.page {

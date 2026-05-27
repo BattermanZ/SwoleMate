@@ -5,11 +5,15 @@
 	import { formatDateRelative } from '$lib/utils/date';
 	import { isWithinRange, resolveDateRange, type DateRangePreset } from '$lib/history/dateRange';
 	import { Btn, Card, Badge, PageHero, MetricTile } from '$lib/components/ui';
+	import HistoryDesktop from '$lib/components/history/HistoryDesktop.svelte';
+	import { isDesktop, isDesktopView } from '$lib/stores/viewport';
 
 	interface Props {
 		data: { workouts: Workout[] };
 	}
 	let { data }: Props = $props();
+
+	let desktop = $derived(isDesktopView($isDesktop));
 
 	let workouts = $derived(data.workouts);
 
@@ -121,12 +125,14 @@
 	}
 </script>
 
-<div class="page">
+{#snippet hero()}
 	<PageHero kicker="► History">
 		{#snippet title()}Past <em>sessions.</em>{/snippet}
 		{#snippet sub()}Filter, sort, and review notes + set schemes from every workout.{/snippet}
 	</PageHero>
+{/snippet}
 
+{#snippet metrics()}
 	<div class="metrics">
 		<MetricTile label="Total" value={String(summary.total)} rail="clay" />
 		<MetricTile label="Last 30d" value={String(summary.last30)} rail="warn" />
@@ -137,7 +143,9 @@
 			rail="sage"
 		/>
 	</div>
+{/snippet}
 
+{#snippet filters()}
 	<Card>
 		{#snippet title()}Filters{/snippet}
 		{#snippet actions()}
@@ -193,7 +201,9 @@
 
 		{#if error}<div class="err">{error}</div>{/if}
 	</Card>
+{/snippet}
 
+{#snippet list()}
 	{#if filteredWorkouts.length === 0}
 		<Card>
 			<div class="empty">
@@ -242,7 +252,18 @@
 			{/each}
 		</div>
 	{/if}
-</div>
+{/snippet}
+
+{#if desktop}
+	<HistoryDesktop {hero} {metrics} {filters} {list} />
+{:else}
+	<div class="page">
+		{@render hero()}
+		{@render metrics()}
+		{@render filters()}
+		{@render list()}
+	</div>
+{/if}
 
 <style>
 	.page {
@@ -345,6 +366,14 @@
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
+	}
+	/* Desktop main column is wide enough to flow session cards 2-up. */
+	@media (min-width: 1024px) {
+		.list {
+			display: grid;
+			grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+			align-items: start;
+		}
 	}
 	.w-card {
 		display: block;

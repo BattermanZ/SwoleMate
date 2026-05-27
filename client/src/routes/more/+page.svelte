@@ -1,17 +1,23 @@
 <script lang="ts">
 	import { auth } from '$lib/auth';
 	import { Card, PageHero } from '$lib/components/ui';
+	import MoreDesktop from '$lib/components/more/MoreDesktop.svelte';
+	import { isDesktop, isDesktopView } from '$lib/stores/viewport';
 
 	const authState = auth.state;
 	let isAdmin = $derived($authState.user?.role === 'admin');
+
+	let desktop = $derived(isDesktopView($isDesktop));
 </script>
 
-<div class="page">
+{#snippet hero()}
 	<PageHero kicker="► More">
 		{#snippet title()}Everything <em>else.</em>{/snippet}
 		{#snippet sub()}Settings, help, and admin tools for when you need them.{/snippet}
 	</PageHero>
+{/snippet}
 
+{#snippet menu()}
 	<Card>
 		<nav class="links">
 			<a href="/settings">
@@ -50,7 +56,16 @@
 			{/if}
 		</nav>
 	</Card>
-</div>
+{/snippet}
+
+{#if desktop}
+	<MoreDesktop {hero} {menu} />
+{:else}
+	<div class="page">
+		{@render hero()}
+		{@render menu()}
+	</div>
+{/if}
 
 <style>
 	.page {
@@ -62,6 +77,14 @@
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
+	}
+	/* Desktop: flow the nav links into a 2-up grid instead of stretched rows. */
+	@media (min-width: 1024px) {
+		.links {
+			display: grid;
+			grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+			align-items: start;
+		}
 	}
 	a {
 		display: grid;
