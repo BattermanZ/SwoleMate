@@ -15,3 +15,4 @@ export { default as MetricTile } from './MetricTile.svelte';
 export { default as PRRow } from './PRRow.svelte';
 export { default as RPill } from './RPill.svelte';
 export { default as Logo } from './Logo.svelte';
+export { default as MasterDetail } from './MasterDetail.svelte';
