@@ -556,7 +556,12 @@
 								▶ Start timer
 							</button>
 						{/if}
-						<button class="commit-set" type="button" onclick={commitSet}>
+						<button
+							class="commit-set"
+							type="button"
+							onclick={commitSet}
+							disabled={(tracksTime && setDurationSeconds < 1) || false}
+						>
 							{editingSetId === null ? `▶ Log set ${setCount + 1}` : '✓ Save set'}
 						</button>
 					</div>
