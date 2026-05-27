@@ -4,7 +4,7 @@
 	import { logger } from '$lib/logger';
 	import { formatDateRelative } from '$lib/utils/date';
 	import { isWithinRange, resolveDateRange, type DateRangePreset } from '$lib/history/dateRange';
-	import { Btn, Card, Badge, PageHero, MetricTile } from '$lib/components/ui';
+	import { Btn, Card, Badge, PageHero, MetricTile, Notice } from '$lib/components/ui';
 	import HistoryDesktop from '$lib/components/history/HistoryDesktop.svelte';
 	import { isDesktop, isDesktopView } from '$lib/stores/viewport';
 
@@ -199,7 +199,7 @@
 			</label>
 		</div>
 
-		{#if error}<div class="err">{error}</div>{/if}
+		{#if error}<div class="err-wrap"><Notice tone="error">{error}</Notice></div>{/if}
 	</Card>
 {/snippet}
 
@@ -327,13 +327,8 @@
 		border-color: var(--clay);
 		box-shadow: 0 0 0 3px rgba(255, 94, 31, 0.16);
 	}
-	.err {
+	.err-wrap {
 		margin-top: 10px;
-		font:
-			600 13px/1.4 'Onest',
-			system-ui,
-			sans-serif;
-		color: var(--clay-text);
 	}
 
 	.pager {

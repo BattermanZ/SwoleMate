@@ -22,8 +22,9 @@
 		trackingFieldsSetting,
 		TRACKING_FIELDS_SETTING_KEY
 	} from '$lib/today/tracking';
-	import { Btn, Card, Chk, PageHero } from '$lib/components/ui';
+	import { Btn, Card, Chk, PageHero, Notice } from '$lib/components/ui';
 	import TemplatesDesktop from '$lib/components/templates/TemplatesDesktop.svelte';
+	import { openConfirm } from '$lib/stores/confirm';
 	import { isDesktop, isDesktopView } from '$lib/stores/viewport';
 
 	interface Props {
@@ -247,7 +248,8 @@
 
 	async function handleDelete() {
 		if (typeof selectedId !== 'number') return;
-		if (!confirm('Delete this template?')) return;
+		if (!(await openConfirm({ title: 'Delete template?', confirmLabel: 'Delete', danger: true })))
+			return;
 		deleting = true;
 		pageError = pageNotice = null;
 		try {
@@ -308,10 +310,10 @@
 
 {#snippet notices()}
 	{#if pageError}
-		<Card><div class="err">{pageError}</div></Card>
+		<Notice tone="error">{pageError}</Notice>
 	{/if}
 	{#if pageNotice}
-		<Card><div class="ok">{pageNotice}</div></Card>
+		<Notice tone="success">{pageNotice}</Notice>
 	{/if}
 {/snippet}
 
@@ -370,7 +372,7 @@
 		{/if}
 
 		{#if detailError}
-			<div class="err">{detailError}</div>
+			<Notice tone="error">{detailError}</Notice>
 		{:else if loadingDetail}
 			<div class="muted">Loading template…</div>
 		{:else}
@@ -736,21 +738,6 @@
 			sans-serif;
 		color: var(--ink-soft);
 	}
-	.err {
-		font:
-			600 13px/1.4 'Onest',
-			system-ui,
-			sans-serif;
-		color: var(--clay-text);
-	}
-	.ok {
-		font:
-			600 13px/1.4 'Onest',
-			system-ui,
-			sans-serif;
-		color: var(--sage);
-	}
-
 	.save-bar {
 		margin-top: 14px;
 		display: flex;

@@ -8,8 +8,9 @@
 		adminResetUserPassword,
 		type AdminUserListItem
 	} from '$lib/api';
-	import { Btn, Card, Badge, PageHero } from '$lib/components/ui';
+	import { Btn, Card, Badge, PageHero, Notice } from '$lib/components/ui';
 	import AdminDesktop from '$lib/components/admin/AdminDesktop.svelte';
+	import { openConfirm } from '$lib/stores/confirm';
 	import { isDesktop, isDesktopView } from '$lib/stores/viewport';
 
 	const authState = auth.state;
@@ -76,7 +77,15 @@
 
 	async function handleDisable(u: AdminUserListItem) {
 		if (blocked) return;
-		if (!confirm(`Disable ${u.username}? They will not be able to sign in.`)) return;
+		if (
+			!(await openConfirm({
+				title: `Disable ${u.username}?`,
+				message: 'They will not be able to sign in.',
+				confirmLabel: 'Disable',
+				danger: true
+			}))
+		)
+			return;
 		loading = true;
 		error = notice = null;
 		try {
@@ -92,7 +101,14 @@
 
 	async function handleDelete(u: AdminUserListItem) {
 		if (blocked) return;
-		if (!confirm(`Delete ${u.username}? This removes ALL their data and cannot be undone.`)) {
+		if (
+			!(await openConfirm({
+				title: `Delete ${u.username}?`,
+				message: 'This removes ALL their data and cannot be undone.',
+				confirmLabel: 'Delete',
+				danger: true
+			}))
+		) {
 			return;
 		}
 		loading = true;
@@ -191,8 +207,8 @@
 					<option value="admin">Admin</option>
 				</select>
 			</label>
-			{#if error}<div class="err">{error}</div>{/if}
-			{#if notice}<div class="ok">{notice}</div>{/if}
+			{#if error}<Notice tone="error">{error}</Notice>{/if}
+			{#if notice}<Notice tone="success">{notice}</Notice>{/if}
 			<Btn variant="primary" type="submit" disabled={loading}>
 				{loading ? 'Creating…' : 'Create user'}
 			</Btn>
@@ -267,7 +283,7 @@
 					<span class="lbl">Confirm</span>
 					<input type="password" bind:value={resetConfirm} autocomplete="new-password" />
 				</label>
-				{#if resetError}<div class="err">{resetError}</div>{/if}
+				{#if resetError}<Notice tone="error">{resetError}</Notice>{/if}
 				<div class="actions">
 					<Btn variant="primary" type="submit" disabled={loading}>
 						{loading ? 'Resetting…' : 'Reset password'}
@@ -359,20 +375,6 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 8px;
-	}
-	.err {
-		font:
-			600 13px/1.4 'Onest',
-			system-ui,
-			sans-serif;
-		color: var(--clay-text);
-	}
-	.ok {
-		font:
-			600 13px/1.4 'Onest',
-			system-ui,
-			sans-serif;
-		color: var(--sage);
 	}
 	.muted {
 		font:

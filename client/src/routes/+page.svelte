@@ -5,10 +5,9 @@
 	import { createTodayController } from '$lib/today/controller';
 	import type { WorkoutTemplate } from '$lib/types';
 	import { formatTime, formatDateRelative } from '$lib/utils/date';
-	import { Btn, Card } from '$lib/components/ui';
+	import { Btn, Card, Notice } from '$lib/components/ui';
 	import SessionHero from '$lib/components/today/SessionHero.svelte';
 	import NoSessionState from '$lib/components/today/NoSessionState.svelte';
-	import Notice from '$lib/components/today/Notice.svelte';
 	import SessionExercise from '$lib/components/today/SessionExercise.svelte';
 	import ExerciseComposer from '$lib/components/today/ExerciseComposer.svelte';
 	import RecentSessions from '$lib/components/today/RecentSessions.svelte';
@@ -19,6 +18,14 @@
 	const c = createTodayController();
 
 	let desktop = $derived(isDesktopView($isDesktop));
+
+	function sessionTitle(startedAt: string | undefined): { lead: string; accent: string } {
+		const hour = startedAt ? new Date(startedAt).getHours() : new Date().getHours();
+		if (hour >= 5 && hour < 12) return { lead: 'Morning', accent: 'grind.' };
+		if (hour >= 12 && hour < 17) return { lead: 'Afternoon', accent: 'session.' };
+		if (hour >= 17 && hour < 22) return { lead: 'Evening', accent: 'lift.' };
+		return { lead: 'Late', accent: 'session.' };
+	}
 
 	// Pull stores out of the controller so the auto-subscribe $-prefix works cleanly in the template.
 	const error = c.error;
@@ -121,6 +128,8 @@
 			volumeKg={$totalVolumeKg}
 			durationSeconds={$totalDurationSeconds}
 			startedAtLabel={`${formatTime($currentSession.startedAt)} · ${formatDateRelative($currentSession.startedAt)}`}
+			titleLead={sessionTitle($currentSession.startedAt).lead}
+			titleAccent={sessionTitle($currentSession.startedAt).accent}
 			onCancel={c.cancelSession}
 			onEnd={c.openEndModal}
 			disabled={$loading}

@@ -2,7 +2,7 @@
 	import { Btn } from '$lib/components/ui';
 	import type { Snippet } from 'svelte';
 
-	type Tone = 'info' | 'warn' | 'error';
+	type Tone = 'info' | 'success' | 'warn' | 'error';
 	interface Props {
 		tone?: Tone;
 		message?: string;
@@ -19,6 +19,8 @@
 				!
 			{:else if tone === 'warn'}
 				⚠
+			{:else if tone === 'success'}
+				✓
 			{:else}
 				↻
 			{/if}
@@ -68,7 +70,8 @@
 			system-ui,
 			sans-serif;
 	}
-	.t-info .ico {
+	.t-info .ico,
+	.t-success .ico {
 		background: color-mix(in oklab, var(--sage) 18%, transparent);
 		color: var(--sage);
 	}

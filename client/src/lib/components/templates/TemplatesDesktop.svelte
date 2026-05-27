@@ -52,6 +52,8 @@
 	.col-rail {
 		position: sticky;
 		top: 24px;
+		max-height: calc(100dvh - 48px);
+		overflow-y: auto;
 		display: flex;
 		flex-direction: column;
 		gap: 14px;

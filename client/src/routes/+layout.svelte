@@ -6,6 +6,7 @@
 	import { auth } from '$lib/auth';
 	import { logger } from '$lib/logger';
 	import { BottomNav, type NavItem } from '$lib/components/ui';
+	import ConfirmHost from '$lib/components/ui/ConfirmHost.svelte';
 	import AppBar from '$lib/components/shell/AppBar.svelte';
 	import SideNav from '$lib/components/shell/SideNav.svelte';
 	import type { Snippet } from 'svelte';
@@ -168,6 +169,8 @@
 		</div>
 	</div>
 {/if}
+
+<ConfirmHost />
 
 <style>
 	.shell {

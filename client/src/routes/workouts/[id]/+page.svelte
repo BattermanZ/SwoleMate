@@ -3,9 +3,11 @@
 	import { cancelWorkout, createWorkoutTemplateFromWorkout } from '$lib/api';
 	import { auth } from '$lib/auth';
 	import { formatDateRelative, formatTime } from '$lib/utils/date';
-	import { Btn, Card, Badge, Chip, PageHero, SetPillList } from '$lib/components/ui';
+	import { Btn, Card, Badge, Chip, PageHero, SetPillList, Notice } from '$lib/components/ui';
 	import SessionDetailDesktop from '$lib/components/history/SessionDetailDesktop.svelte';
 	import { isDesktop, isDesktopView } from '$lib/stores/viewport';
+	import { isTrackingFieldsSetting } from '$lib/today/tracking';
+	import { openConfirm, openPrompt } from '$lib/stores/confirm';
 	import type { WorkoutWithExercises } from '$lib/types';
 
 	interface Props {
@@ -45,7 +47,15 @@
 			error = 'Offline mode: delete workouts when you are back online.';
 			return;
 		}
-		if (!confirm('Delete this workout? This cannot be undone.')) return;
+		if (
+			!(await openConfirm({
+				title: 'Delete workout?',
+				message: 'This cannot be undone.',
+				confirmLabel: 'Delete',
+				danger: true
+			}))
+		)
+			return;
 
 		deleting = true;
 		error = null;
@@ -72,7 +82,13 @@
 			workout.exercises.length > 0
 				? `${workout.exercises[0].exercise.exercise_type} template`
 				: 'Workout template';
-		const name = prompt('Template name:', defaultName)?.trim();
+		const name = (
+			await openPrompt({
+				title: 'Save as template',
+				inputLabel: 'Template name',
+				defaultValue: defaultName
+			})
+		)?.trim();
 		if (!name) return;
 
 		savingTemplate = true;
@@ -104,7 +120,7 @@
 
 {#snippet summary()}
 	{#if loadError}
-		<Card><div class="err">{loadError}</div></Card>
+		<Notice tone="error">{loadError}</Notice>
 	{:else if !workout}
 		<Card><div class="muted">Loading…</div></Card>
 	{:else}
@@ -131,7 +147,7 @@
 					{deleting ? 'Deleting…' : 'Delete'}
 				</Btn>
 			</div>
-			{#if error}<div class="err">{error}</div>{/if}
+			{#if error}<Notice tone="error">{error}</Notice>{/if}
 		</Card>
 	{/if}
 {/snippet}
@@ -141,15 +157,18 @@
 		{#if workout.exercises.length > 0}
 			<div class="ex-grid">
 				{#each workout.exercises as ex (ex.exercise.id ?? ex.exercise.start_time)}
+					{@const visibleSettings = (ex.exercise.settings ?? []).filter(
+						(s) => !isTrackingFieldsSetting(s)
+					)}
 					<Card>
 						{#snippet title()}{ex.exercise.exercise_type}{/snippet}
 						{#snippet lede()}
 							{formatTime(ex.exercise.start_time)} – {formatTime(ex.exercise.end_time)}
 						{/snippet}
 
-						{#if ex.exercise.settings && ex.exercise.settings.length > 0}
+						{#if visibleSettings.length > 0}
 							<div class="settings">
-								{#each ex.exercise.settings as s (s.id ?? s.key)}
+								{#each visibleSettings as s (s.id ?? s.key)}
 									<Chip size="xs">{s.key}: {s.value}</Chip>
 								{/each}
 							</div>
@@ -238,14 +257,6 @@
 		display: flex;
 		gap: 8px;
 		flex-wrap: wrap;
-	}
-	.err {
-		margin-top: 10px;
-		font:
-			600 13px/1.4 'Onest',
-			system-ui,
-			sans-serif;
-		color: var(--clay-text);
 	}
 	.muted {
 		font:

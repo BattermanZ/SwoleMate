@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { createBackup, deleteBackup, getBackups, restoreBackup, type BackupInfo } from '$lib/api';
 	import { auth } from '$lib/auth';
-	import { Btn, Card, Badge, PageHero } from '$lib/components/ui';
+	import { Btn, Card, Badge, PageHero, Notice } from '$lib/components/ui';
 	import BackupsDesktop from '$lib/components/backups/BackupsDesktop.svelte';
+	import { openConfirm } from '$lib/stores/confirm';
 	import { isDesktop, isDesktopView } from '$lib/stores/viewport';
 
 	interface Props {
@@ -47,7 +48,12 @@
 
 	async function handleRestore(b: BackupInfo) {
 		if (
-			!confirm(`Restore from ${b.filename}? Your current data will be REPLACED with this backup.`)
+			!(await openConfirm({
+				title: 'Restore this backup?',
+				message: `Your current data will be REPLACED with ${b.filename}.`,
+				confirmLabel: 'Restore',
+				danger: true
+			}))
 		)
 			return;
 		loading = true;
@@ -63,7 +69,15 @@
 	}
 
 	async function handleDelete(b: BackupInfo) {
-		if (!confirm(`Delete ${b.filename}? This cannot be undone.`)) return;
+		if (
+			!(await openConfirm({
+				title: 'Delete backup?',
+				message: `${b.filename} cannot be recovered.`,
+				confirmLabel: 'Delete',
+				danger: true
+			}))
+		)
+			return;
 		loading = true;
 		error = notice = null;
 		try {
@@ -105,8 +119,8 @@
 	<Card>
 		{#snippet title()}Actions{/snippet}
 		{#snippet lede()}Trigger a manual snapshot or refresh the backup list.{/snippet}
-		{#if error}<div class="err">{error}</div>{/if}
-		{#if notice}<div class="ok">{notice}</div>{/if}
+		{#if error}<Notice tone="error">{error}</Notice>{/if}
+		{#if notice}<Notice tone="success">{notice}</Notice>{/if}
 		<div class="actions">
 			<Btn variant="primary" onclick={createNow} disabled={loading || $authState.offline}>
 				{loading ? 'Working…' : '+ New backup'}
@@ -203,22 +217,6 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 8px;
-	}
-	.err {
-		font:
-			600 13px/1.4 'Onest',
-			system-ui,
-			sans-serif;
-		color: var(--clay-text);
-		margin-bottom: 10px;
-	}
-	.ok {
-		font:
-			600 13px/1.4 'Onest',
-			system-ui,
-			sans-serif;
-		color: var(--sage);
-		margin-bottom: 10px;
 	}
 	.muted {
 		font:

@@ -9,9 +9,10 @@
 	} from '$lib/api';
 	import { auth } from '$lib/auth';
 	import { readDemoModePreference, writeDemoModePreference } from '$lib/preferences/demoMode';
-	import { Btn, Card, Chk, Badge, PageHero } from '$lib/components/ui';
+	import { Btn, Card, Chk, Badge, PageHero, Notice } from '$lib/components/ui';
 	import SettingsDesktop from '$lib/components/settings/SettingsDesktop.svelte';
 	import { isDesktop, isDesktopView } from '$lib/stores/viewport';
+	import { openConfirm } from '$lib/stores/confirm';
 
 	const authState = auth.state;
 
@@ -164,7 +165,15 @@
 	}
 
 	async function handleRevokeMcpToken(token: McpTokenSummary) {
-		if (!confirm(`Revoke ${token.name}? Clients using it will lose access immediately.`)) return;
+		if (
+			!(await openConfirm({
+				title: `Revoke ${token.name}?`,
+				message: 'Clients using it will lose access immediately.',
+				confirmLabel: 'Revoke',
+				danger: true
+			}))
+		)
+			return;
 		revokingTokenId = token.id;
 		mcpError = mcpNotice = null;
 		try {
@@ -281,8 +290,8 @@
 				/>
 			</label>
 
-			{#if accountError}<div class="err">{accountError}</div>{/if}
-			{#if accountNotice}<div class="ok">{accountNotice}</div>{/if}
+			{#if accountError}<Notice tone="error">{accountError}</Notice>{/if}
+			{#if accountNotice}<Notice tone="success">{accountNotice}</Notice>{/if}
 
 			<div class="actions">
 				<Btn variant="primary" type="submit" disabled={accountLoading || !$authState.user}>
@@ -358,8 +367,8 @@
 					Write tokens can change workout data. A shorter expiry such as 7 days is recommended.
 				</div>
 			{/if}
-			{#if mcpError}<div class="err">{mcpError}</div>{/if}
-			{#if mcpNotice}<div class="ok">{mcpNotice}</div>{/if}
+			{#if mcpError}<Notice tone="error">{mcpError}</Notice>{/if}
+			{#if mcpNotice}<Notice tone="success">{mcpNotice}</Notice>{/if}
 
 			<div class="actions">
 				<Btn
@@ -543,20 +552,6 @@
 		gap: 6px;
 		flex-wrap: wrap;
 		margin: 6px 0;
-	}
-	.err {
-		font:
-			600 13px/1.4 'Onest',
-			system-ui,
-			sans-serif;
-		color: var(--clay-text);
-	}
-	.ok {
-		font:
-			600 13px/1.4 'Onest',
-			system-ui,
-			sans-serif;
-		color: var(--sage);
 	}
 	.warn {
 		padding: 10px 12px;

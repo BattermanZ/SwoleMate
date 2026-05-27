@@ -10,6 +10,8 @@
 		durationSeconds: number;
 		prCount?: number;
 		startedAtLabel?: string;
+		titleLead?: string;
+		titleAccent?: string;
 		onCancel?: () => void;
 		onEnd?: () => void;
 		disabled?: boolean;
@@ -23,6 +25,8 @@
 		durationSeconds,
 		prCount = 0,
 		startedAtLabel,
+		titleLead = 'Session',
+		titleAccent = 'in progress.',
 		onCancel,
 		onEnd,
 		disabled = false
@@ -47,7 +51,7 @@
 </script>
 
 <PageHero kicker={`► Session live · ${elapsedLabel} in`}>
-	{#snippet title()}Push day, <em>going off.</em>{/snippet}
+	{#snippet title()}{titleLead} <em>{titleAccent}</em>{/snippet}
 	{#snippet sub()}
 		{#if startedAtLabel}Started {startedAtLabel}{/if}
 	{/snippet}

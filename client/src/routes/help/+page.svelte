@@ -2,11 +2,18 @@
 	import { Btn, Card, PageHero } from '$lib/components/ui';
 	import HelpDesktop from '$lib/components/help/HelpDesktop.svelte';
 	import { isDesktop, isDesktopView } from '$lib/stores/viewport';
+	import { openConfirm } from '$lib/stores/confirm';
 
 	let desktop = $derived(isDesktopView($isDesktop));
 
-	function resetUiPreferences() {
-		if (!confirm('Reset local UI preferences? (Theme, progress selection, legacy settings)')) {
+	async function resetUiPreferences() {
+		if (
+			!(await openConfirm({
+				title: 'Reset local UI preferences?',
+				message: 'Clears theme, progress selection, and legacy settings.',
+				confirmLabel: 'Reset'
+			}))
+		) {
 			return;
 		}
 		const keys = [
