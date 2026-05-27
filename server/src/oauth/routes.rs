@@ -483,6 +483,15 @@ pub async fn authorize_post(
         }));
     }
 
+    if let Some(locked_until) = user.locked_until {
+        if locked_until > now {
+            return HttpResponse::TooManyRequests().json(serde_json::json!({
+                "error": "too_many_requests",
+                "error_description": "Too many login attempts. Try again later."
+            }));
+        }
+    }
+
     let password_ok = match password::verify_password(&user.password_hash, &form.password) {
         Ok(result) => result,
         Err(_) => false,
