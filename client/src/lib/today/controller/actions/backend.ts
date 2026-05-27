@@ -1,6 +1,6 @@
 import { getWorkout, getWorkouts } from '$lib/api';
 import { kvSet } from '$lib/offline/storage';
-import { deleteOfflineSession, sessionKeyForId } from '$lib/offline/todaySessions';
+import { deleteOfflineSession } from '$lib/offline/todaySessions';
 import { toUiSession, workoutIsActive } from '$lib/today/backend';
 import { get } from 'svelte/store';
 import {

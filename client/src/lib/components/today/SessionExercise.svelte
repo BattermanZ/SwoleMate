@@ -114,11 +114,7 @@
 	);
 	let timerProgressPct = $derived(`${Math.round(timerProgress * 100)}%`);
 	let timerTone = $derived(
-		timerComplete || timerProgress <= 0.15
-			? 'steady'
-			: timerProgress <= 0.4
-				? 'warning'
-				: 'danger'
+		timerComplete || timerProgress <= 0.15 ? 'steady' : timerProgress <= 0.4 ? 'warning' : 'danger'
 	);
 
 	$effect(() => stopTimerInterval);
@@ -613,12 +609,7 @@
 				<span class="hold-eyebrow__dot" aria-hidden="true"></span>
 				{stateLabel}
 			</span>
-			<button
-				type="button"
-				class="hold-dismiss"
-				onclick={resetTimer}
-				aria-label="Close timer"
-			>
+			<button type="button" class="hold-dismiss" onclick={resetTimer} aria-label="Close timer">
 				Close
 			</button>
 		</header>
@@ -1147,9 +1138,8 @@
 		z-index: 80;
 		display: grid;
 		grid-template-rows: auto 1fr;
-		padding:
-			calc(1.25rem + var(--sat)) calc(1.25rem + var(--sar))
-			calc(1.25rem + var(--sab)) calc(1.25rem + var(--sal));
+		padding: calc(1.25rem + var(--sat)) calc(1.25rem + var(--sar)) calc(1.25rem + var(--sab))
+			calc(1.25rem + var(--sal));
 		color: var(--on-deep);
 		background: #120d09;
 		isolation: isolate;
@@ -1362,14 +1352,13 @@
 		inset: 50% 0 auto 0;
 		height: 1px;
 		transform: translateY(-50%);
-		background:
-			linear-gradient(
-				to right,
-				transparent 0,
-				rgba(243, 236, 225, 0.16) 8%,
-				rgba(243, 236, 225, 0.16) 92%,
-				transparent 100%
-			);
+		background: linear-gradient(
+			to right,
+			transparent 0,
+			rgba(243, 236, 225, 0.16) 8%,
+			rgba(243, 236, 225, 0.16) 92%,
+			transparent 100%
+		);
 	}
 	.hold-wick__burn {
 		position: absolute;

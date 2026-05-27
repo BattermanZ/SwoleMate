@@ -12,7 +12,8 @@
 
 <header class="desktop-topbar">
 	<h1 class="title">
-		{title}{#if subtitle} — <em>{subtitle}</em>{/if}
+		{title}{#if subtitle}
+			— <em>{subtitle}</em>{/if}
 	</h1>
 	{#if actions}
 		<div class="actions">{@render actions()}</div>
@@ -32,12 +33,17 @@
 	}
 	.title {
 		margin: 0;
-		font: 800 20px/1.05 'Onest', system-ui, sans-serif;
+		font:
+			800 20px/1.05 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: -0.02em;
 		color: var(--ink);
 	}
 	.title em {
-		font: italic 400 16px/1 'Instrument Serif', serif;
+		font:
+			italic 400 16px/1 'Instrument Serif',
+			serif;
 		color: var(--ink-soft);
 		margin-left: 6px;
 	}

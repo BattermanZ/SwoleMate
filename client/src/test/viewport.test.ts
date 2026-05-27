@@ -1,4 +1,3 @@
-import { get } from 'svelte/store';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DESKTOP_MIN_WIDTH, isDesktop, isDesktopView } from '$lib/stores/viewport';
 

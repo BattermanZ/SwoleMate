@@ -28,19 +28,49 @@
 	</div>
 
 	<div class="foot">
-		<button type="button" class="foot-btn theme-toggle" aria-label="Toggle dark mode" onclick={toggleTheme}>
-			<svg class="ico-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+		<button
+			type="button"
+			class="foot-btn theme-toggle"
+			aria-label="Toggle dark mode"
+			onclick={toggleTheme}
+		>
+			<svg
+				class="ico-moon"
+				width="18"
+				height="18"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+			>
 				<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
 			</svg>
-			<svg class="ico-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+			<svg
+				class="ico-sun"
+				width="18"
+				height="18"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+			>
 				<circle cx="12" cy="12" r="4" />
-				<path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+				<path
+					d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"
+				/>
 			</svg>
 			<span class="lbl">Theme</span>
 		</button>
 		{#if onLogout}
 			<button type="button" class="foot-btn" aria-label="Log out" onclick={onLogout}>
-				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<svg
+					width="18"
+					height="18"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+				>
 					<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
 					<polyline points="16 17 21 12 16 7" />
 					<line x1="21" y1="12" x2="9" y2="12" />
@@ -72,7 +102,10 @@
 		color: inherit;
 	}
 	.name {
-		font: 800 16px/1 'Onest', system-ui, sans-serif;
+		font:
+			800 16px/1 'Onest',
+			system-ui,
+			sans-serif;
 		letter-spacing: -0.01em;
 	}
 	.items {
@@ -86,7 +119,10 @@
 		gap: 10px;
 		padding: 9px 11px;
 		border-radius: 10px;
-		font: 700 13px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 13px/1 'Onest',
+			system-ui,
+			sans-serif;
 		color: var(--on-deep-soft);
 		text-decoration: none;
 		transition:
@@ -129,7 +165,10 @@
 		border-radius: 10px;
 		background: transparent;
 		color: var(--on-deep-soft);
-		font: 700 12px/1 'Onest', system-ui, sans-serif;
+		font:
+			700 12px/1 'Onest',
+			system-ui,
+			sans-serif;
 		cursor: pointer;
 		text-align: left;
 		transition: color 160ms ease;

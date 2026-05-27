@@ -9,7 +9,10 @@ describe('DesktopTopBar', () => {
 	});
 
 	it('renders the subtitle when provided', () => {
-		const { getByText } = render(DesktopTopBarHarness, { title: 'Plans', subtitle: 'your templates' });
+		const { getByText } = render(DesktopTopBarHarness, {
+			title: 'Plans',
+			subtitle: 'your templates'
+		});
 		expect(getByText('your templates')).toBeInTheDocument();
 	});
 
