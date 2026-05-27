@@ -59,10 +59,10 @@
 
 		const columns: Cell[][] = [];
 		const monthLabels: Array<{ col: number; label: string }> = [];
+		const weekHas: boolean[] = [];
 		let lastMonth = -1;
 		let total = 0;
 		let activeDays = 0;
-		let bestWeek = 0;
 
 		for (let w = 0; w < weeks; w++) {
 			const col: Cell[] = [];
@@ -87,11 +87,25 @@
 					}
 				}
 			}
-			if (weekCount > bestWeek) bestWeek = weekCount;
+			weekHas.push(weekCount > 0);
 			columns.push(col);
 		}
 
-		return { columns, monthLabels, total, activeDays, bestWeek };
+		// Streaks in consecutive *weeks* with at least one session — a truer read of
+		// training consistency than raw day counts for a lift-on-rest-day routine.
+		let longestStreak = 0;
+		let run = 0;
+		for (const has of weekHas) {
+			run = has ? run + 1 : 0;
+			if (run > longestStreak) longestStreak = run;
+		}
+		let currentStreak = 0;
+		// Allow the in-progress final week to be empty without breaking the streak.
+		let i = weekHas.length - 1;
+		if (i >= 0 && !weekHas[i]) i--;
+		for (; i >= 0 && weekHas[i]; i--) currentStreak++;
+
+		return { columns, monthLabels, total, activeDays, currentStreak, longestStreak };
 	});
 
 	function tip(c: Cell): string {
@@ -112,7 +126,8 @@
 		<div class="summary">
 			<span><b>{model.total}</b> sessions</span>
 			<span><b>{model.activeDays}</b> active days</span>
-			<span>best week <b>{model.bestWeek}</b></span>
+			<span><b>{model.currentStreak}</b>w streak</span>
+			<span>best <b>{model.longestStreak}</b>w</span>
 		</div>
 	{/snippet}
 
