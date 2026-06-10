@@ -83,6 +83,7 @@
 	let editing = $state(false);
 	let editingSetId = $state<number | null>(null);
 	let settingsOpen = $state(false);
+	let lastTimePrefillKey = $state('');
 
 	// Timer overlay state (countdown for timed sets)
 	let timerRunning = $state(false);
@@ -134,14 +135,26 @@
 		return `last ${last.weight}kg × ${last.reps}`;
 	});
 
-	function setFormFromSet(set: SetLike & { id?: number }) {
-		if (typeof set.id === 'number') editingSetId = set.id;
+	function setDraftFromSet(set: SetLike) {
 		setReps = set.reps;
 		setWeight = set.weight;
 		setWeightLeft = set.weightLeft ?? 0;
 		setWeightRight = set.weightRight ?? 0;
 		setDurationFromSeconds(set.durationSeconds ?? 60);
 	}
+
+	function setFormFromSet(set: SetLike & { id?: number }) {
+		if (typeof set.id === 'number') editingSetId = set.id;
+		setDraftFromSet(set);
+	}
+
+	$effect(() => {
+		const firstLastSet = lastTime?.sets[0];
+		const prefillKey = `${exercise.id}:${lastTime?.startedAt ?? ''}`;
+		if (!firstLastSet || exercise.sets.length > 0 || lastTimePrefillKey === prefillKey) return;
+		setDraftFromSet(firstLastSet);
+		lastTimePrefillKey = prefillKey;
+	});
 
 	function resetSetForm() {
 		editingSetId = null;

@@ -20,6 +20,24 @@ const exercise: UiExercise = {
 };
 
 describe('session exercise notes', () => {
+	it('prefills the add-set controls from the first set last time', () => {
+		render(SessionExercise, {
+			exercise,
+			isOpen: true,
+			lastTime: {
+				startedAt: '2025-12-20T10:00:00.000Z',
+				notes: '',
+				sets: [{ reps: 8, weight: 60 }],
+				perSideWeight: false,
+				splitWeight: false
+			},
+			onToggle: vi.fn()
+		});
+
+		expect(screen.getByRole('button', { name: 'Edit Reps' })).toHaveTextContent('8');
+		expect(screen.getByRole('button', { name: 'Edit Weight' })).toHaveTextContent('60');
+	});
+
 	it('shows previous session notes in the exercise card without filling today notes', () => {
 		render(SessionExercise, {
 			exercise,
