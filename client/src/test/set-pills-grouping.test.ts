@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { groupSets } from '$lib/today/setPills';
+import { estimatedOneRepMax, estimatedOneRepMaxPrGroupIndex, groupSets } from '$lib/today/setPills';
 
 describe('groupSets', () => {
 	it('groups identical sets and increments count', () => {
@@ -88,5 +88,31 @@ describe('groupSets', () => {
 		]);
 		expect(groups[0].intensity).toBeCloseTo(0.65, 2);
 		expect(groups[1].intensity).toBeCloseTo(0.65, 2);
+	});
+
+	it('matches the server estimated 1RM formula for eligible weighted sets', () => {
+		expect(estimatedOneRepMax({ reps: 8, weight: 100 })).toBe(124.14);
+		expect(estimatedOneRepMax({ reps: 13, weight: 100 })).toBeNull();
+		expect(estimatedOneRepMax({ reps: 8, weight: 0 })).toBeNull();
+	});
+
+	it('returns the grouped pill index for the best estimated 1RM above baseline', () => {
+		const sets = [
+			{ reps: 10, weight: 90 },
+			{ reps: 8, weight: 100 },
+			{ reps: 5, weight: 110 }
+		];
+
+		expect(estimatedOneRepMaxPrGroupIndex(sets, 123)).toBe(1);
+		expect(estimatedOneRepMaxPrGroupIndex(sets, 130)).toBeNull();
+		expect(estimatedOneRepMaxPrGroupIndex(sets, null)).toBeNull();
+	});
+
+	it('uses effective total weight for split per-side estimated 1RM PRs', () => {
+		const sets = [{ reps: 8, weight: 0, weightLeft: 50, weightRight: 52 }];
+
+		expect(
+			estimatedOneRepMaxPrGroupIndex(sets, 125, { perSideWeight: true, splitWeight: true })
+		).toBe(0);
 	});
 });

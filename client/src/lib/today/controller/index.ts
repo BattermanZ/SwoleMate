@@ -19,6 +19,7 @@ export function createTodayController() {
 		offlineMode: state.offlineMode,
 		openExerciseIds: state.openExerciseIds,
 		plannedTemplateExercises: state.plannedTemplateExercises,
+		estimated1RmBaselines: state.estimated1RmBaselines,
 		pendingSyncCount: state.pendingSyncCount,
 		quickPicks: state.quickPicks,
 		recentSessions: state.recentSessions,

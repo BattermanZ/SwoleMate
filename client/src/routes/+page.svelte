@@ -46,6 +46,7 @@
 	const suggestions = c.suggestions;
 	const quickPicks = c.quickPicks;
 	const plannedTemplateExercises = c.plannedTemplateExercises;
+	const estimated1RmBaselines = c.estimated1RmBaselines;
 	const recentSessions = c.recentSessions;
 	const openExerciseIds = c.openExerciseIds;
 
@@ -60,6 +61,12 @@
 	onMount(() => {
 		showDemoAction = readDemoModePreference();
 		return c.start();
+	});
+
+	$effect(() => {
+		for (const ex of $currentSession?.exercises ?? []) {
+			if (ex.status === 'active') void c.loadEstimated1RmBaseline(ex.name);
+		}
 	});
 
 	async function openTemplatePicker() {
@@ -215,6 +222,7 @@
 						isOpen={$openExerciseIds.includes(ex.id)}
 						disabled={$loading}
 						lastTime={c.getLastTimeForExercise(ex.name)}
+						estimated1RmBaseline={$estimated1RmBaselines[ex.name]}
 						onToggle={() => c.toggleExercise(ex.id)}
 						onDelete={() => c.removeExercise(ex.id)}
 						onMarkDone={() => markDoneAndScroll(ex.id)}

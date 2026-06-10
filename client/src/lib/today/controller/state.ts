@@ -16,6 +16,7 @@ export function createTodayState() {
 	const recentSessions = writable<UiSession[]>([]);
 	const openExerciseIds = writable<number[]>([]);
 	const plannedTemplateExercises = writable<PlannedTemplateExercise[]>([]);
+	const estimated1RmBaselines = writable<Record<string, number | null>>({});
 
 	const exerciseQuery = writable('');
 	const sessionNotes = writable('');
@@ -63,6 +64,7 @@ export function createTodayState() {
 		recentSessions,
 		openExerciseIds,
 		plannedTemplateExercises,
+		estimated1RmBaselines,
 		exerciseQuery,
 		sessionNotes,
 		endMood,

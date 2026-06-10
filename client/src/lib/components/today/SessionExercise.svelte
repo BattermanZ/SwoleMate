@@ -3,6 +3,7 @@
 	import LastTime from './LastTime.svelte';
 	import type { UiExercise } from '$lib/today/types';
 	import type { SetLike } from '$lib/today/setPills';
+	import { estimatedOneRepMaxPrGroupIndex } from '$lib/today/setPills';
 
 	type LastTimeData = {
 		startedAt: string;
@@ -25,6 +26,7 @@
 		isOpen?: boolean;
 		disabled?: boolean;
 		lastTime?: LastTimeData | undefined;
+		estimated1RmBaseline?: number | null;
 		onToggle?: () => void;
 		onDelete?: () => void;
 		onMarkDone?: () => void;
@@ -45,6 +47,7 @@
 		isOpen = false,
 		disabled = false,
 		lastTime,
+		estimated1RmBaseline,
 		onToggle,
 		onDelete,
 		onMarkDone,
@@ -266,20 +269,12 @@
 		resetTimer();
 	}
 
-	let prGroupIndex = $derived.by(() => {
-		// crude heuristic — highlight the heaviest set as PR for visual demo
-		if (exercise.sets.length === 0) return null;
-		let maxIdx = 0;
-		let max = -Infinity;
-		exercise.sets.forEach((s, i) => {
-			const w = s.weight + (s.weightLeft ?? 0) + (s.weightRight ?? 0);
-			if (w > max) {
-				max = w;
-				maxIdx = i;
-			}
-		});
-		return maxIdx;
-	});
+	let prGroupIndex = $derived(
+		estimatedOneRepMaxPrGroupIndex(exercise.sets, estimated1RmBaseline, {
+			perSideWeight: exercise.perSideWeight,
+			splitWeight: exercise.splitWeight
+		})
+	);
 </script>
 
 <article class="ex" class:live={exercise.status === 'active'}>

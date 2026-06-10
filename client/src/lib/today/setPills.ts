@@ -16,6 +16,7 @@ export type SpillGroup = {
 	weightLabel?: string;
 	bodyweight: boolean;
 	count: number;
+	sourceIndexes: number[];
 	totalWeight: number;
 	/** 0–1, computed by `groupSets` based on min/max totalWeight in the group. */
 	intensity: number;
@@ -70,7 +71,7 @@ export function groupSets(sets: SetLike[], opts: GroupSetsOptions = {}): SpillGr
 	const splitWeight = opts.splitWeight ?? false;
 
 	const groups: SpillGroup[] = [];
-	for (const set of sets) {
+	for (const [index, set] of sets.entries()) {
 		const durationLabel = set.durationSeconds ? formatDuration(set.durationSeconds) : undefined;
 		const weightLabel = formatWeight(set, perSideWeight, splitWeight);
 		const bodyweight = !hasWeight(set) && set.reps > 0 && !durationLabel;
@@ -80,6 +81,7 @@ export function groupSets(sets: SetLike[], opts: GroupSetsOptions = {}): SpillGr
 		);
 		if (existing) {
 			existing.count += 1;
+			existing.sourceIndexes.push(index);
 			continue;
 		}
 		groups.push({
@@ -88,6 +90,7 @@ export function groupSets(sets: SetLike[], opts: GroupSetsOptions = {}): SpillGr
 			weightLabel,
 			bodyweight,
 			count: 1,
+			sourceIndexes: [index],
 			totalWeight: setTotalWeight(set, perSideWeight, splitWeight),
 			intensity: 0.6 // filled in below
 		});
@@ -107,4 +110,32 @@ export function groupSets(sets: SetLike[], opts: GroupSetsOptions = {}): SpillGr
 	}
 
 	return groups;
+}
+
+export function estimatedOneRepMax(set: SetLike, opts: GroupSetsOptions = {}): number | null {
+	const perSideWeight = opts.perSideWeight ?? false;
+	const splitWeight = opts.splitWeight ?? false;
+	const effectiveWeight = setTotalWeight(set, perSideWeight, splitWeight);
+	if (set.reps < 1 || set.reps > 12 || effectiveWeight <= 0) return null;
+	return Math.round(effectiveWeight * (36 / (37 - set.reps)) * 100) / 100;
+}
+
+export function estimatedOneRepMaxPrGroupIndex(
+	sets: SetLike[],
+	baseline: number | null | undefined,
+	opts: GroupSetsOptions = {}
+): number | null {
+	if (baseline == null) return null;
+	let bestSetIndex: number | null = null;
+	let bestEstimated = baseline;
+	for (const [index, set] of sets.entries()) {
+		const estimated = estimatedOneRepMax(set, opts);
+		if (estimated == null || estimated <= bestEstimated) continue;
+		bestEstimated = estimated;
+		bestSetIndex = index;
+	}
+	if (bestSetIndex == null) return null;
+	const groups = groupSets(sets, opts);
+	const groupIndex = groups.findIndex((group) => group.sourceIndexes.includes(bestSetIndex));
+	return groupIndex >= 0 ? groupIndex : null;
 }
