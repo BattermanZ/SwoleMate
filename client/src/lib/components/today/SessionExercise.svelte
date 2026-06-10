@@ -524,21 +524,21 @@
 						{#if tracksWeight && !exercise.perSideWeight}
 							<div class="field">
 								<span class="field-lbl">Weight</span>
-								<StepperPill bind:value={setWeight} label="Weight" step={2.5} min={0} unit="kg" />
+								<StepperPill bind:value={setWeight} label="Weight" step={1} min={0} unit="kg" />
 							</div>
 						{:else if tracksWeight && !exercise.splitWeight}
 							<div class="field">
 								<span class="field-lbl">Per side · kg</span>
-								<StepperPill bind:value={setWeight} label="Per side" step={2.5} min={0} />
+								<StepperPill bind:value={setWeight} label="Per side" step={1} min={0} />
 							</div>
 						{:else if tracksWeight}
 							<div class="field">
 								<span class="field-lbl">Left · kg</span>
-								<StepperPill bind:value={setWeightLeft} label="Left" step={2.5} min={0} />
+								<StepperPill bind:value={setWeightLeft} label="Left" step={1} min={0} />
 							</div>
 							<div class="field">
 								<span class="field-lbl">Right · kg</span>
-								<StepperPill bind:value={setWeightRight} label="Right" step={2.5} min={0} />
+								<StepperPill bind:value={setWeightRight} label="Right" step={1} min={0} />
 							</div>
 						{/if}
 						{#if editingSetId !== null}

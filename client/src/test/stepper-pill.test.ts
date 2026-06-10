@@ -21,4 +21,16 @@ describe('StepperPill', () => {
 
 		expect(source).toMatch(/\.value-input\s*\{[^}]*font-size:\s*22px\s*!important;/s);
 	});
+
+	it('reserves separate space for decimal values and unit labels', () => {
+		const source = readFileSync(
+			join(process.cwd(), 'src/lib/components/ui/StepperPill.svelte'),
+			'utf8'
+		);
+
+		expect(source).toMatch(/\.value\s*\{[^}]*letter-spacing:\s*0;/s);
+		expect(source).toMatch(/\.value-button,\s*\.value-input\s*\{[^}]*max-width:\s*5ch;/s);
+		expect(source).toMatch(/\.value-input\s*\{[^}]*width:\s*5ch;/s);
+		expect(source).toMatch(/\.unit\s*\{[^}]*flex:\s*none;/s);
+	});
 });

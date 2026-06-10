@@ -195,7 +195,13 @@
 			sans-serif;
 		color: var(--ink);
 		font-variant-numeric: tabular-nums;
-		letter-spacing: -0.03em;
+		letter-spacing: 0;
+		min-width: 0;
+	}
+	.value-button,
+	.value-input {
+		flex: 0 1 auto;
+		max-width: 5ch;
 	}
 	.value-button {
 		background: transparent;
@@ -219,7 +225,7 @@
 		outline: 0;
 		padding: 4px 6px;
 		font-size: 22px !important;
-		width: 100%;
+		width: 5ch;
 		min-width: 0;
 		text-align: center;
 		-moz-appearance: textfield;
