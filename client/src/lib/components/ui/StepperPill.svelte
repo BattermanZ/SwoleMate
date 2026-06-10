@@ -218,6 +218,7 @@
 		border: 0;
 		outline: 0;
 		padding: 4px 6px;
+		font-size: 22px !important;
 		width: 100%;
 		min-width: 0;
 		text-align: center;
