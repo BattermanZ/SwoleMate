@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { getWorkoutTemplates } from '$lib/api';
 	import { readDemoModePreference } from '$lib/preferences/demoMode';
 	import { createTodayController } from '$lib/today/controller';
@@ -81,8 +81,9 @@
 		templatePickerOpen = false;
 	}
 
-	function markDoneAndScroll(exerciseId: number) {
-		c.markExerciseDone(exerciseId);
+	async function markDoneAndScroll(exerciseId: number) {
+		await c.markExerciseDone(exerciseId);
+		await tick();
 		composerEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 		setTimeout(() => {
 			composerPulsing = true;
