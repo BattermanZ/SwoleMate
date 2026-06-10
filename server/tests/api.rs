@@ -1102,18 +1102,26 @@ async fn can_create_template_from_workout_and_start_without_sets() {
     assert_eq!(template["template"]["name"], "Push A");
     assert_eq!(template["exercises"].as_array().unwrap().len(), 1);
     assert_eq!(template["exercises"][0]["exercise_type"], "Bench Press");
-    assert_eq!(template["exercises"][0]["notes"], "Touch lower chest");
+    assert!(template["exercises"][0]["notes"].is_null());
     assert_eq!(template["exercises"][0]["per_side_weight"], true);
     assert_eq!(template["exercises"][0]["split_weight"], true);
     assert_eq!(template["exercises"][0]["settings"][0]["key"], "Bench");
     assert_eq!(template["exercises"][0]["settings"][0]["value"], "Flat");
 
     let later = now + chrono::Duration::minutes(5);
+    let req = with_cookie(test::TestRequest::put(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}/end"))
+        .set_json(json!({ "end_time": later }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 200);
+
+    let template_start = later + chrono::Duration::minutes(5);
     let req = with_cookie(test::TestRequest::post(), &cookie)
         .uri(&format!("/api/templates/{template_id}/start"))
         .set_json(json!({
-            "date": later,
-            "start_time": later,
+            "date": template_start,
+            "start_time": template_start,
             "timezone_offset_minutes": -60
         }))
         .to_request();
@@ -1131,10 +1139,7 @@ async fn can_create_template_from_workout_and_start_without_sets() {
         started["exercises"][0]["exercise"]["exercise_type"],
         "Bench Press"
     );
-    assert_eq!(
-        started["exercises"][0]["exercise"]["notes"],
-        "Touch lower chest"
-    );
+    assert!(started["exercises"][0]["exercise"]["notes"].is_null());
     assert_eq!(started["exercises"][0]["exercise"]["per_side_weight"], true);
     assert_eq!(started["exercises"][0]["exercise"]["split_weight"], true);
     assert_eq!(
@@ -1172,6 +1177,7 @@ async fn can_duplicate_template_with_same_exercise_metadata() {
         .to_request();
     let original = json_body(test::call_service(&app, req).await).await;
     let original_id = original["template"]["id"].as_i64().unwrap();
+    assert!(original["exercises"][0]["notes"].is_null());
 
     let req = with_cookie(test::TestRequest::post(), &cookie)
         .uri(&format!("/api/templates/{original_id}/duplicate"))
@@ -1186,7 +1192,7 @@ async fn can_duplicate_template_with_same_exercise_metadata() {
     assert_eq!(duplicate["template"]["name"], "Leg Day Copy");
     assert_eq!(duplicate["exercises"].as_array().unwrap().len(), 1);
     assert_eq!(duplicate["exercises"][0]["exercise_type"], "Hack Squat");
-    assert_eq!(duplicate["exercises"][0]["notes"], "Feet slightly forward");
+    assert!(duplicate["exercises"][0]["notes"].is_null());
     assert_eq!(duplicate["exercises"][0]["settings"][0]["key"], "Stance");
     assert_eq!(duplicate["exercises"][0]["settings"][0]["value"], "Medium");
 

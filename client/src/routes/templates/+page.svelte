@@ -38,7 +38,6 @@
 	type DraftExercise = {
 		localId: string;
 		exercise_type: string;
-		notes: string;
 		per_side_weight: boolean;
 		split_weight: boolean;
 		tracks_reps: boolean;
@@ -83,7 +82,6 @@
 				return {
 					localId: `ex-${ex.id}`,
 					exercise_type: ex.exercise_type,
-					notes: ex.notes ?? '',
 					per_side_weight: ex.per_side_weight ?? false,
 					split_weight: ex.split_weight ?? false,
 					tracks_reps: tracking.reps,
@@ -109,7 +107,6 @@
 			name: d.name.trim(),
 			exercises: d.exercises.map((ex) => ({
 				exercise_type: ex.exercise_type.trim(),
-				notes: ex.notes.trim() || null,
 				per_side_weight: ex.per_side_weight,
 				split_weight: ex.split_weight,
 				settings: [
@@ -153,7 +150,6 @@
 			{
 				localId: makeLocalId(),
 				exercise_type: '',
-				notes: '',
 				per_side_weight: false,
 				split_weight: false,
 				tracks_reps: true,
@@ -420,20 +416,6 @@
 									/>
 								</label>
 
-								<label class="block">
-									<span class="lbl">Notes</span>
-									<textarea
-										value={ex.notes}
-										rows="2"
-										placeholder="Cues, tempo…"
-										disabled={!canEdit}
-										oninput={(e) =>
-											updateExercise(ex.localId, {
-												notes: (e.currentTarget as HTMLTextAreaElement).value
-											})}
-									></textarea>
-								</label>
-
 								<div class="toggles">
 									<Chk
 										label="Reps"
@@ -597,8 +579,7 @@
 		color: var(--ink-soft);
 		margin-bottom: 6px;
 	}
-	input,
-	textarea {
+	input {
 		width: 100%;
 		background: var(--card-3);
 		border: 1px solid var(--line);
@@ -610,14 +591,8 @@
 			sans-serif;
 		color: var(--ink);
 		outline: 0;
-		resize: vertical;
 	}
-	textarea {
-		min-height: 56px;
-		font-family: 'Onest', system-ui, sans-serif;
-	}
-	input:focus,
-	textarea:focus {
+	input:focus {
 		border-color: var(--clay);
 		box-shadow: 0 0 0 3px rgba(255, 94, 31, 0.16);
 	}
