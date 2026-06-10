@@ -412,7 +412,6 @@
 					<div class="sub-head"><h4>Last time</h4></div>
 					<LastTime
 						startedAt={lastTime.startedAt}
-						notes={lastTime.notes}
 						sets={lastTime.sets}
 						perSideWeight={lastTime.perSideWeight}
 						splitWeight={lastTime.splitWeight}
@@ -571,6 +570,12 @@
 			<!-- Notes -->
 			<section class="sub">
 				<div class="sub-head"><h4>Notes</h4></div>
+				{#if lastTime?.notes}
+					<div class="previous-notes" aria-label="Last session notes">
+						<div class="previous-notes__label">Last session notes</div>
+						<p>{lastTime.notes}</p>
+					</div>
+				{/if}
 				<textarea
 					class="notes"
 					rows="2"
@@ -1098,6 +1103,31 @@
 	}
 	.notes:focus {
 		border-color: var(--clay);
+	}
+
+	.previous-notes {
+		margin-bottom: 8px;
+		padding: 10px 12px;
+		border-radius: 10px;
+		background: var(--card-3);
+		border: 1px solid var(--line);
+	}
+	.previous-notes__label {
+		margin-bottom: 5px;
+		font:
+			800 10px/1 'Onest',
+			system-ui,
+			sans-serif;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--ink-soft);
+	}
+	.previous-notes p {
+		margin: 0;
+		font:
+			italic 400 13px/1.45 'Instrument Serif',
+			serif;
+		color: var(--ink-2);
 	}
 
 	footer {
