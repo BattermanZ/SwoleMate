@@ -535,10 +535,13 @@ export async function getExerciseProgress(
 
 export async function getVolumeStats(
 	exerciseType: string,
+	options: { excludeWorkoutId?: number } = {},
 	fetcher: Fetcher = fetch
 ): Promise<VolumeStats> {
+	const exclude =
+		options.excludeWorkoutId != null ? `&exclude_workout_id=${options.excludeWorkoutId}` : '';
 	const response = await fetcher(
-		`${API_BASE}/api/progress/volume?exercise_type=${encodeURIComponent(exerciseType)}`,
+		`${API_BASE}/api/progress/volume?exercise_type=${encodeURIComponent(exerciseType)}${exclude}`,
 		withCredentials(undefined)
 	);
 	return handleResponse(response);

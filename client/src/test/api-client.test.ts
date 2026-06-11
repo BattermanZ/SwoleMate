@@ -112,8 +112,13 @@ describe('api client behavior', () => {
 				personal_records: { all_time_max_weight: 0, max_volume: 0, estimated_max_1rm: 0 }
 			});
 		});
-		await getVolumeStats(exerciseType, volumeFetcher as unknown as typeof fetch);
+		await getVolumeStats(
+			exerciseType,
+			{ excludeWorkoutId: 42 },
+			volumeFetcher as unknown as typeof fetch
+		);
 		expect(seenUrls[1]).toContain(`exercise_type=${encoded}`);
+		expect(seenUrls[1]).toContain('exclude_workout_id=42');
 
 		const progressFetcher = vi.fn(async (input: URL | RequestInfo) => {
 			seenUrls.push(String(input));

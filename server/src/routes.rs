@@ -14,6 +14,8 @@ pub mod mcp_tokens;
 #[derive(Debug, Deserialize)]
 pub struct ExerciseTypeQuery {
     pub exercise_type: String,
+    #[serde(default)]
+    pub exclude_workout_id: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -591,7 +593,13 @@ pub async fn get_volume_stats(
     let decoded_type = urlencoding::decode(&query.exercise_type)
         .map_err(|e| AppError::BadRequest(format!("Invalid exercise type: {}", e)))?
         .into_owned();
-    let stats = progress::get_volume_stats(db.get_ref(), user.0.id, &decoded_type).await?;
+    let stats = progress::get_volume_stats(
+        db.get_ref(),
+        user.0.id,
+        &decoded_type,
+        query.exclude_workout_id,
+    )
+    .await?;
     Ok(HttpResponse::Ok().json(stats))
 }
 

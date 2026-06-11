@@ -17,7 +17,14 @@ export function createExercisePrActions(args: { state: TodayState }): ExercisePr
 		if (Object.hasOwn(current, exerciseName)) return;
 
 		try {
-			const stats = await getVolumeStats(exerciseName);
+			// Exclude the active workout so the baseline reflects prior sessions only;
+			// otherwise the current session's own sets would be compared against a
+			// baseline that already contains them and the PR marker would vanish on reload.
+			const activeSessionId = get(state.currentSession)?.id;
+			const stats = await getVolumeStats(exerciseName, {
+				excludeWorkoutId:
+					activeSessionId != null && activeSessionId > 0 ? activeSessionId : undefined
+			});
 			state.estimated1RmBaselines.update((baselines) => ({
 				...baselines,
 				[exerciseName]: stats.personal_records.estimated_max_1rm

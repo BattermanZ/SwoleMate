@@ -1025,6 +1025,7 @@ impl Database {
         &self,
         user_id: i64,
         exercise_type: &str,
+        exclude_workout_id: Option<i64>,
     ) -> Result<serde_json::Value, AppError> {
         debug!(target: "database", "Calculating volume statistics for {}", exercise_type);
 
@@ -1076,6 +1077,7 @@ impl Database {
                 JOIN sets s ON e.id = s.exercise_id
                 WHERE e.user_id = ?
                   AND LOWER(e.exercise_type) = LOWER(?)
+                  AND (?3 IS NULL OR e.workout_id != ?3)
             ),
             weekly_stats AS (
                 SELECT 
@@ -1101,7 +1103,8 @@ impl Database {
             ORDER BY week ASC
             "#,
             user_id,
-            exercise_type
+            exercise_type,
+            exclude_workout_id
         )
         .fetch_all(&pool)
         .await
@@ -1144,11 +1147,13 @@ impl Database {
             JOIN sets s ON e.id = s.exercise_id
             WHERE e.user_id = ?
               AND LOWER(e.exercise_type) = LOWER(?)
+              AND (?3 IS NULL OR e.workout_id != ?3)
             GROUP BY strftime('%Y-%m', e.start_time)
             ORDER BY month ASC
             "#,
             user_id,
-            exercise_type
+            exercise_type,
+            exclude_workout_id
         )
         .fetch_all(&pool)
         .await
@@ -1203,6 +1208,7 @@ impl Database {
                 JOIN sets s ON e.id = s.exercise_id
                 WHERE e.user_id = ?
                   AND LOWER(e.exercise_type) = LOWER(?)
+                  AND (?3 IS NULL OR e.workout_id != ?3)
             )
             SELECT
                 COALESCE(MAX(weight), 0.0) as "all_time_max_weight!: f64",
@@ -1212,7 +1218,8 @@ impl Database {
             FROM exercise_stats
             "#,
             user_id,
-            exercise_type
+            exercise_type,
+            exclude_workout_id
         )
         .fetch_one(&pool)
         .await
@@ -1232,6 +1239,7 @@ impl Database {
                 WHERE e.user_id = ?
                   AND s.user_id = ?
                   AND LOWER(e.exercise_type) = LOWER(?)
+                  AND (? IS NULL OR e.workout_id != ?)
                   AND s.duration_seconds IS NOT NULL
                   AND s.duration_seconds > 0
             ),
@@ -1252,6 +1260,8 @@ impl Database {
         .bind(user_id)
         .bind(user_id)
         .bind(exercise_type)
+        .bind(exclude_workout_id)
+        .bind(exclude_workout_id)
         .fetch_one(&pool)
         .await
         .map_err(|e| {

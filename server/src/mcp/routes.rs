@@ -1053,7 +1053,7 @@ async fn call_tool(
                 .get("exercise_type")
                 .and_then(Value::as_str)
                 .ok_or_else(|| invalid_params("exercise_type is required and must be a string"))?;
-            let data = progress::get_volume_stats(db, principal.user_id, exercise_type)
+            let data = progress::get_volume_stats(db, principal.user_id, exercise_type, None)
                 .await
                 .map_err(rpc_error_from_app_error)?;
             Ok(tool_success(data))

@@ -50,6 +50,8 @@ pub async fn get_volume_stats(
     db: &Database,
     user_id: i64,
     exercise_type: &str,
+    exclude_workout_id: Option<i64>,
 ) -> Result<serde_json::Value, AppError> {
-    db.get_volume_stats(user_id, exercise_type).await
+    db.get_volume_stats(user_id, exercise_type, exclude_workout_id)
+        .await
 }

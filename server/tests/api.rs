@@ -2498,6 +2498,79 @@ async fn volume_estimated_1rm_ignores_high_rep_sets() {
 }
 
 #[actix_web::test]
+async fn volume_stats_can_exclude_the_active_workout() {
+    // The Today PR baseline must exclude the in-progress workout, otherwise a
+    // current-session PR set would be compared against a baseline already
+    // containing it and the marker would vanish on reload.
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "volume-exclude", "passwordpassword").await;
+    let cookie = login_cookie_active(&app, "volume-exclude", "passwordpassword").await;
+
+    let prev_start = chrono::Utc::now() - chrono::Duration::days(7);
+    let prev_workout = create_workout_with_times(
+        &app,
+        &cookie,
+        prev_start,
+        prev_start + chrono::Duration::minutes(30),
+    )
+    .await;
+    let prev_exercise = create_exercise_for_workout(
+        &app,
+        &cookie,
+        prev_workout,
+        "Deadlift",
+        prev_start,
+        prev_start + chrono::Duration::minutes(20),
+    )
+    .await;
+    // 5 reps @ 100kg -> estimated 1RM 112.5
+    create_set_for_exercise(&app, &cookie, prev_exercise, 5, 100.0, None).await;
+
+    let now = chrono::Utc::now();
+    let current_workout =
+        create_workout_with_times(&app, &cookie, now, now + chrono::Duration::minutes(30)).await;
+    let current_exercise = create_exercise_for_workout(
+        &app,
+        &cookie,
+        current_workout,
+        "Deadlift",
+        now,
+        now + chrono::Duration::minutes(20),
+    )
+    .await;
+    // 5 reps @ 120kg -> estimated 1RM 135.0 (a fresh PR in the active session)
+    create_set_for_exercise(&app, &cookie, current_exercise, 5, 120.0, None).await;
+
+    // Default: baseline includes the current PR set.
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri("/api/progress/volume?exercise_type=Deadlift")
+        .to_request();
+    let volume = json_body(test::call_service(&app, req).await).await;
+    assert_eq!(
+        volume["personal_records"]["estimated_max_1rm"].as_f64(),
+        Some(135.0)
+    );
+
+    // Excluding the active workout yields the prior-session baseline only.
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri(&format!(
+            "/api/progress/volume?exercise_type=Deadlift&exclude_workout_id={current_workout}"
+        ))
+        .to_request();
+    let volume = json_body(test::call_service(&app, req).await).await;
+    assert_eq!(
+        volume["personal_records"]["estimated_max_1rm"].as_f64(),
+        Some(112.5)
+    );
+    assert_eq!(
+        volume["personal_records"]["all_time_max_weight"].as_f64(),
+        Some(100.0)
+    );
+}
+
+#[actix_web::test]
 async fn progress_overview_empty_and_invalid_timezone_are_handled() {
     let _env = TestEnv::new();
     let (_db, admin_cookie, app) = setup_test_app().await;
