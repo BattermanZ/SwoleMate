@@ -1102,18 +1102,26 @@ async fn can_create_template_from_workout_and_start_without_sets() {
     assert_eq!(template["template"]["name"], "Push A");
     assert_eq!(template["exercises"].as_array().unwrap().len(), 1);
     assert_eq!(template["exercises"][0]["exercise_type"], "Bench Press");
-    assert_eq!(template["exercises"][0]["notes"], "Touch lower chest");
+    assert!(template["exercises"][0]["notes"].is_null());
     assert_eq!(template["exercises"][0]["per_side_weight"], true);
     assert_eq!(template["exercises"][0]["split_weight"], true);
     assert_eq!(template["exercises"][0]["settings"][0]["key"], "Bench");
     assert_eq!(template["exercises"][0]["settings"][0]["value"], "Flat");
 
     let later = now + chrono::Duration::minutes(5);
+    let req = with_cookie(test::TestRequest::put(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}/end"))
+        .set_json(json!({ "end_time": later }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 200);
+
+    let template_start = later + chrono::Duration::minutes(5);
     let req = with_cookie(test::TestRequest::post(), &cookie)
         .uri(&format!("/api/templates/{template_id}/start"))
         .set_json(json!({
-            "date": later,
-            "start_time": later,
+            "date": template_start,
+            "start_time": template_start,
             "timezone_offset_minutes": -60
         }))
         .to_request();
@@ -1131,10 +1139,7 @@ async fn can_create_template_from_workout_and_start_without_sets() {
         started["exercises"][0]["exercise"]["exercise_type"],
         "Bench Press"
     );
-    assert_eq!(
-        started["exercises"][0]["exercise"]["notes"],
-        "Touch lower chest"
-    );
+    assert!(started["exercises"][0]["exercise"]["notes"].is_null());
     assert_eq!(started["exercises"][0]["exercise"]["per_side_weight"], true);
     assert_eq!(started["exercises"][0]["exercise"]["split_weight"], true);
     assert_eq!(
@@ -1172,6 +1177,7 @@ async fn can_duplicate_template_with_same_exercise_metadata() {
         .to_request();
     let original = json_body(test::call_service(&app, req).await).await;
     let original_id = original["template"]["id"].as_i64().unwrap();
+    assert!(original["exercises"][0]["notes"].is_null());
 
     let req = with_cookie(test::TestRequest::post(), &cookie)
         .uri(&format!("/api/templates/{original_id}/duplicate"))
@@ -1186,7 +1192,7 @@ async fn can_duplicate_template_with_same_exercise_metadata() {
     assert_eq!(duplicate["template"]["name"], "Leg Day Copy");
     assert_eq!(duplicate["exercises"].as_array().unwrap().len(), 1);
     assert_eq!(duplicate["exercises"][0]["exercise_type"], "Hack Squat");
-    assert_eq!(duplicate["exercises"][0]["notes"], "Feet slightly forward");
+    assert!(duplicate["exercises"][0]["notes"].is_null());
     assert_eq!(duplicate["exercises"][0]["settings"][0]["key"], "Stance");
     assert_eq!(duplicate["exercises"][0]["settings"][0]["value"], "Medium");
 
@@ -2381,6 +2387,187 @@ async fn progress_overview_reports_periods_timed_stats_and_pr_feed() {
     );
     assert_eq!(volume["timed_records"]["lifetime_duration_seconds"], 120);
     assert_eq!(volume["timed_records"]["average_set_duration_seconds"], 60);
+}
+
+#[actix_web::test]
+async fn last_exercise_data_can_exclude_the_active_workout() {
+    // "Last time" should mean a prior session, never the in-progress one.
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "last-exclude", "passwordpassword").await;
+    let cookie = login_cookie_active(&app, "last-exclude", "passwordpassword").await;
+
+    let prev_start = chrono::Utc::now() - chrono::Duration::days(7);
+    let prev_workout = create_workout_with_times(
+        &app,
+        &cookie,
+        prev_start,
+        prev_start + chrono::Duration::minutes(30),
+    )
+    .await;
+    let prev_exercise = create_exercise_for_workout(
+        &app,
+        &cookie,
+        prev_workout,
+        "Lat pulldown",
+        prev_start,
+        prev_start + chrono::Duration::minutes(20),
+    )
+    .await;
+    create_set_for_exercise(&app, &cookie, prev_exercise, 10, 40.0, None).await;
+
+    // A current, in-progress occurrence of the same exercise.
+    let now = chrono::Utc::now();
+    let current_workout =
+        create_workout_with_times(&app, &cookie, now, now + chrono::Duration::minutes(30)).await;
+    let _current_exercise = create_exercise_for_workout(
+        &app,
+        &cookie,
+        current_workout,
+        "Lat pulldown",
+        now,
+        now + chrono::Duration::minutes(20),
+    )
+    .await;
+
+    // Without exclusion, the latest occurrence is the current one.
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri("/api/exercises/last/Lat%20pulldown")
+        .to_request();
+    let last = json_body(test::call_service(&app, req).await).await;
+    assert_eq!(last["exercise"]["workout_id"], current_workout);
+
+    // Excluding the active workout returns the prior session instead.
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri(&format!(
+            "/api/exercises/last/Lat%20pulldown?exclude_workout_id={current_workout}"
+        ))
+        .to_request();
+    let last = json_body(test::call_service(&app, req).await).await;
+    assert_eq!(last["exercise"]["id"], prev_exercise);
+    assert_eq!(last["exercise"]["workout_id"], prev_workout);
+    assert_eq!(last["sets"].as_array().unwrap().len(), 1);
+}
+
+#[actix_web::test]
+async fn volume_estimated_1rm_ignores_high_rep_sets() {
+    // The Brzycki estimate is only valid for 1–12 reps. A high-rep set must not
+    // inflate the estimated 1RM baseline used by the Today PR markers.
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "est-1rm-cap", "passwordpassword").await;
+    let cookie = login_cookie_active(&app, "est-1rm-cap", "passwordpassword").await;
+
+    let now = chrono::Utc::now();
+    let workout =
+        create_workout_with_times(&app, &cookie, now, now + chrono::Duration::minutes(30)).await;
+    let exercise = create_exercise_for_workout(
+        &app,
+        &cookie,
+        workout,
+        "Abs crunches",
+        now,
+        now + chrono::Duration::minutes(20),
+    )
+    .await;
+
+    // 20 reps @ 12kg would give an inflated 25.41 if uncapped; 10 reps @ 15kg
+    // gives a valid 20.0. The capped estimate must be 20.0, not 25.41.
+    create_set_for_exercise(&app, &cookie, exercise, 20, 12.0, None).await;
+    create_set_for_exercise(&app, &cookie, exercise, 10, 15.0, None).await;
+
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri("/api/progress/volume?exercise_type=Abs%20crunches")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+    let volume = json_body(resp).await;
+
+    assert_eq!(
+        volume["personal_records"]["estimated_max_1rm"].as_f64(),
+        Some(20.0)
+    );
+    let weekly = volume["weekly_volume"].as_array().expect("weekly volume");
+    let max_weekly = weekly
+        .iter()
+        .filter_map(|w| w["max_estimated_1rm"].as_f64())
+        .fold(0.0_f64, f64::max);
+    assert_eq!(max_weekly, 20.0);
+}
+
+#[actix_web::test]
+async fn volume_stats_can_exclude_the_active_workout() {
+    // The Today PR baseline must exclude the in-progress workout, otherwise a
+    // current-session PR set would be compared against a baseline already
+    // containing it and the marker would vanish on reload.
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "volume-exclude", "passwordpassword").await;
+    let cookie = login_cookie_active(&app, "volume-exclude", "passwordpassword").await;
+
+    let prev_start = chrono::Utc::now() - chrono::Duration::days(7);
+    let prev_workout = create_workout_with_times(
+        &app,
+        &cookie,
+        prev_start,
+        prev_start + chrono::Duration::minutes(30),
+    )
+    .await;
+    let prev_exercise = create_exercise_for_workout(
+        &app,
+        &cookie,
+        prev_workout,
+        "Deadlift",
+        prev_start,
+        prev_start + chrono::Duration::minutes(20),
+    )
+    .await;
+    // 5 reps @ 100kg -> estimated 1RM 112.5
+    create_set_for_exercise(&app, &cookie, prev_exercise, 5, 100.0, None).await;
+
+    let now = chrono::Utc::now();
+    let current_workout =
+        create_workout_with_times(&app, &cookie, now, now + chrono::Duration::minutes(30)).await;
+    let current_exercise = create_exercise_for_workout(
+        &app,
+        &cookie,
+        current_workout,
+        "Deadlift",
+        now,
+        now + chrono::Duration::minutes(20),
+    )
+    .await;
+    // 5 reps @ 120kg -> estimated 1RM 135.0 (a fresh PR in the active session)
+    create_set_for_exercise(&app, &cookie, current_exercise, 5, 120.0, None).await;
+
+    // Default: baseline includes the current PR set.
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri("/api/progress/volume?exercise_type=Deadlift")
+        .to_request();
+    let volume = json_body(test::call_service(&app, req).await).await;
+    assert_eq!(
+        volume["personal_records"]["estimated_max_1rm"].as_f64(),
+        Some(135.0)
+    );
+
+    // Excluding the active workout yields the prior-session baseline only.
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri(&format!(
+            "/api/progress/volume?exercise_type=Deadlift&exclude_workout_id={current_workout}"
+        ))
+        .to_request();
+    let volume = json_body(test::call_service(&app, req).await).await;
+    assert_eq!(
+        volume["personal_records"]["estimated_max_1rm"].as_f64(),
+        Some(112.5)
+    );
+    assert_eq!(
+        volume["personal_records"]["all_time_max_weight"].as_f64(),
+        Some(100.0)
+    );
 }
 
 #[actix_web::test]

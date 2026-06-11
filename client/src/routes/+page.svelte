@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { getWorkoutTemplates } from '$lib/api';
 	import { readDemoModePreference } from '$lib/preferences/demoMode';
 	import { createTodayController } from '$lib/today/controller';
@@ -46,6 +46,8 @@
 	const suggestions = c.suggestions;
 	const quickPicks = c.quickPicks;
 	const plannedTemplateExercises = c.plannedTemplateExercises;
+	const estimated1RmBaselines = c.estimated1RmBaselines;
+	const lastTimeByExercise = c.lastTimeByExercise;
 	const recentSessions = c.recentSessions;
 	const openExerciseIds = c.openExerciseIds;
 
@@ -60,6 +62,15 @@
 	onMount(() => {
 		showDemoAction = readDemoModePreference();
 		return c.start();
+	});
+
+	$effect(() => {
+		for (const ex of $currentSession?.exercises ?? []) {
+			if (ex.status === 'active') {
+				void c.loadEstimated1RmBaseline(ex.name);
+				void c.loadLastTimeForExercise(ex.name);
+			}
+		}
 	});
 
 	async function openTemplatePicker() {
@@ -81,8 +92,9 @@
 		templatePickerOpen = false;
 	}
 
-	function markDoneAndScroll(exerciseId: number) {
-		c.markExerciseDone(exerciseId);
+	async function markDoneAndScroll(exerciseId: number) {
+		await c.markExerciseDone(exerciseId);
+		await tick();
 		composerEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 		setTimeout(() => {
 			composerPulsing = true;
@@ -213,7 +225,10 @@
 						exercise={ex}
 						isOpen={$openExerciseIds.includes(ex.id)}
 						disabled={$loading}
-						lastTime={c.getLastTimeForExercise(ex.name)}
+						lastTime={c.getLastTimeForExercise(ex.name) ??
+							$lastTimeByExercise[ex.name] ??
+							undefined}
+						estimated1RmBaseline={$estimated1RmBaselines[ex.name]}
 						onToggle={() => c.toggleExercise(ex.id)}
 						onDelete={() => c.removeExercise(ex.id)}
 						onMarkDone={() => markDoneAndScroll(ex.id)}

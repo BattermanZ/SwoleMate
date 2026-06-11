@@ -63,8 +63,11 @@ pub async fn get_last_exercise_data(
     db: &Database,
     user_id: i64,
     exercise_type: &str,
+    exclude_workout_id: Option<i64>,
 ) -> Result<Option<LastExerciseData>, AppError> {
-    let data = db.get_last_exercise_data(user_id, exercise_type).await?;
+    let data = db
+        .get_last_exercise_data(user_id, exercise_type, exclude_workout_id)
+        .await?;
     Ok(data.map(|(exercise, sets)| LastExerciseData { exercise, sets }))
 }
 

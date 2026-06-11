@@ -3,6 +3,7 @@
 	import LastTime from './LastTime.svelte';
 	import type { UiExercise } from '$lib/today/types';
 	import type { SetLike } from '$lib/today/setPills';
+	import { estimatedOneRepMaxPrGroupIndex } from '$lib/today/setPills';
 
 	type LastTimeData = {
 		startedAt: string;
@@ -25,6 +26,7 @@
 		isOpen?: boolean;
 		disabled?: boolean;
 		lastTime?: LastTimeData | undefined;
+		estimated1RmBaseline?: number | null;
 		onToggle?: () => void;
 		onDelete?: () => void;
 		onMarkDone?: () => void;
@@ -45,6 +47,7 @@
 		isOpen = false,
 		disabled = false,
 		lastTime,
+		estimated1RmBaseline,
 		onToggle,
 		onDelete,
 		onMarkDone,
@@ -80,6 +83,7 @@
 	let editing = $state(false);
 	let editingSetId = $state<number | null>(null);
 	let settingsOpen = $state(false);
+	let lastTimePrefillKey = $state('');
 
 	// Timer overlay state (countdown for timed sets)
 	let timerRunning = $state(false);
@@ -131,14 +135,26 @@
 		return `last ${last.weight}kg × ${last.reps}`;
 	});
 
-	function setFormFromSet(set: SetLike & { id?: number }) {
-		if (typeof set.id === 'number') editingSetId = set.id;
+	function setDraftFromSet(set: SetLike) {
 		setReps = set.reps;
 		setWeight = set.weight;
 		setWeightLeft = set.weightLeft ?? 0;
 		setWeightRight = set.weightRight ?? 0;
 		setDurationFromSeconds(set.durationSeconds ?? 60);
 	}
+
+	function setFormFromSet(set: SetLike & { id?: number }) {
+		if (typeof set.id === 'number') editingSetId = set.id;
+		setDraftFromSet(set);
+	}
+
+	$effect(() => {
+		const firstLastSet = lastTime?.sets[0];
+		const prefillKey = `${exercise.id}:${lastTime?.startedAt ?? ''}`;
+		if (!firstLastSet || exercise.sets.length > 0 || lastTimePrefillKey === prefillKey) return;
+		setDraftFromSet(firstLastSet);
+		lastTimePrefillKey = prefillKey;
+	});
 
 	function resetSetForm() {
 		editingSetId = null;
@@ -266,20 +282,12 @@
 		resetTimer();
 	}
 
-	let prGroupIndex = $derived.by(() => {
-		// crude heuristic — highlight the heaviest set as PR for visual demo
-		if (exercise.sets.length === 0) return null;
-		let maxIdx = 0;
-		let max = -Infinity;
-		exercise.sets.forEach((s, i) => {
-			const w = s.weight + (s.weightLeft ?? 0) + (s.weightRight ?? 0);
-			if (w > max) {
-				max = w;
-				maxIdx = i;
-			}
-		});
-		return maxIdx;
-	});
+	let prGroupIndex = $derived(
+		estimatedOneRepMaxPrGroupIndex(exercise.sets, estimated1RmBaseline, {
+			perSideWeight: exercise.perSideWeight,
+			splitWeight: exercise.splitWeight
+		})
+	);
 </script>
 
 <article class="ex" class:live={exercise.status === 'active'}>
@@ -412,7 +420,6 @@
 					<div class="sub-head"><h4>Last time</h4></div>
 					<LastTime
 						startedAt={lastTime.startedAt}
-						notes={lastTime.notes}
 						sets={lastTime.sets}
 						perSideWeight={lastTime.perSideWeight}
 						splitWeight={lastTime.splitWeight}
@@ -525,21 +532,21 @@
 						{#if tracksWeight && !exercise.perSideWeight}
 							<div class="field">
 								<span class="field-lbl">Weight</span>
-								<StepperPill bind:value={setWeight} label="Weight" step={2.5} min={0} unit="kg" />
+								<StepperPill bind:value={setWeight} label="Weight" step={1} min={0} unit="kg" />
 							</div>
 						{:else if tracksWeight && !exercise.splitWeight}
 							<div class="field">
 								<span class="field-lbl">Per side · kg</span>
-								<StepperPill bind:value={setWeight} label="Per side" step={2.5} min={0} />
+								<StepperPill bind:value={setWeight} label="Per side" step={1} min={0} />
 							</div>
 						{:else if tracksWeight}
 							<div class="field">
 								<span class="field-lbl">Left · kg</span>
-								<StepperPill bind:value={setWeightLeft} label="Left" step={2.5} min={0} />
+								<StepperPill bind:value={setWeightLeft} label="Left" step={1} min={0} />
 							</div>
 							<div class="field">
 								<span class="field-lbl">Right · kg</span>
-								<StepperPill bind:value={setWeightRight} label="Right" step={2.5} min={0} />
+								<StepperPill bind:value={setWeightRight} label="Right" step={1} min={0} />
 							</div>
 						{/if}
 						{#if editingSetId !== null}
@@ -571,6 +578,12 @@
 			<!-- Notes -->
 			<section class="sub">
 				<div class="sub-head"><h4>Notes</h4></div>
+				{#if lastTime?.notes}
+					<div class="previous-notes" aria-label="Last session notes">
+						<div class="previous-notes__label">Last session notes</div>
+						<p>{lastTime.notes}</p>
+					</div>
+				{/if}
 				<textarea
 					class="notes"
 					rows="2"
@@ -1098,6 +1111,31 @@
 	}
 	.notes:focus {
 		border-color: var(--clay);
+	}
+
+	.previous-notes {
+		margin-bottom: 8px;
+		padding: 10px 12px;
+		border-radius: 10px;
+		background: var(--card-3);
+		border: 1px solid var(--line);
+	}
+	.previous-notes__label {
+		margin-bottom: 5px;
+		font:
+			800 10px/1 'Onest',
+			system-ui,
+			sans-serif;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--ink-soft);
+	}
+	.previous-notes p {
+		margin: 0;
+		font:
+			italic 400 13px/1.45 'Instrument Serif',
+			serif;
+		color: var(--ink-2);
 	}
 
 	footer {

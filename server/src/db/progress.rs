@@ -1025,6 +1025,7 @@ impl Database {
         &self,
         user_id: i64,
         exercise_type: &str,
+        exclude_workout_id: Option<i64>,
     ) -> Result<serde_json::Value, AppError> {
         debug!(target: "database", "Calculating volume statistics for {}", exercise_type);
 
@@ -1055,24 +1056,28 @@ impl Database {
                             ELSE s.weight
                         END
                     ) as volume,
-                    ROUND(
-                        (
-                            CASE
-                                WHEN e.per_side_weight = 1 THEN
-                                    CASE
-                                        WHEN e.split_weight = 1 AND s.weight_left IS NOT NULL AND s.weight_right IS NOT NULL
-                                            THEN (s.weight_left + s.weight_right)
-                                        ELSE (s.weight * 2)
-                                    END
-                                ELSE s.weight
-                            END
-                        ) * (36.0 / (37.0 - CAST(s.reps AS FLOAT))),
-                        2
-                    ) as estimated_1rm
+                    CASE
+                        WHEN s.reps BETWEEN 1 AND 12 THEN ROUND(
+                            (
+                                CASE
+                                    WHEN e.per_side_weight = 1 THEN
+                                        CASE
+                                            WHEN e.split_weight = 1 AND s.weight_left IS NOT NULL AND s.weight_right IS NOT NULL
+                                                THEN (s.weight_left + s.weight_right)
+                                            ELSE (s.weight * 2)
+                                        END
+                                    ELSE s.weight
+                                END
+                            ) * (36.0 / (37.0 - CAST(s.reps AS FLOAT))),
+                            2
+                        )
+                        ELSE NULL
+                    END as estimated_1rm
                 FROM exercises e
                 JOIN sets s ON e.id = s.exercise_id
                 WHERE e.user_id = ?
                   AND LOWER(e.exercise_type) = LOWER(?)
+                  AND (?3 IS NULL OR e.workout_id != ?3)
             ),
             weekly_stats AS (
                 SELECT 
@@ -1098,7 +1103,8 @@ impl Database {
             ORDER BY week ASC
             "#,
             user_id,
-            exercise_type
+            exercise_type,
+            exclude_workout_id
         )
         .fetch_all(&pool)
         .await
@@ -1141,11 +1147,13 @@ impl Database {
             JOIN sets s ON e.id = s.exercise_id
             WHERE e.user_id = ?
               AND LOWER(e.exercise_type) = LOWER(?)
+              AND (?3 IS NULL OR e.workout_id != ?3)
             GROUP BY strftime('%Y-%m', e.start_time)
             ORDER BY month ASC
             "#,
             user_id,
-            exercise_type
+            exercise_type,
+            exclude_workout_id
         )
         .fetch_all(&pool)
         .await
@@ -1179,26 +1187,30 @@ impl Database {
                             ELSE s.weight
                         END
                     ) as volume,
-                    ROUND(
-                        (
-                            CASE
-                                WHEN e.per_side_weight = 1 THEN
-                                    CASE
-                                        WHEN e.split_weight = 1 AND s.weight_left IS NOT NULL AND s.weight_right IS NOT NULL
-                                            THEN (s.weight_left + s.weight_right)
-                                        ELSE (s.weight * 2)
-                                    END
-                                ELSE s.weight
-                            END
-                        ) * (36.0 / (37.0 - CAST(s.reps AS FLOAT))),
-                        2
-                    ) as estimated_1rm
+                    CASE
+                        WHEN s.reps BETWEEN 1 AND 12 THEN ROUND(
+                            (
+                                CASE
+                                    WHEN e.per_side_weight = 1 THEN
+                                        CASE
+                                            WHEN e.split_weight = 1 AND s.weight_left IS NOT NULL AND s.weight_right IS NOT NULL
+                                                THEN (s.weight_left + s.weight_right)
+                                            ELSE (s.weight * 2)
+                                        END
+                                    ELSE s.weight
+                                END
+                            ) * (36.0 / (37.0 - CAST(s.reps AS FLOAT))),
+                            2
+                        )
+                        ELSE NULL
+                    END as estimated_1rm
                 FROM exercises e
                 JOIN sets s ON e.id = s.exercise_id
                 WHERE e.user_id = ?
                   AND LOWER(e.exercise_type) = LOWER(?)
+                  AND (?3 IS NULL OR e.workout_id != ?3)
             )
-            SELECT 
+            SELECT
                 COALESCE(MAX(weight), 0.0) as "all_time_max_weight!: f64",
                 COALESCE(MAX(volume), 0.0) as "max_volume!: f64",
                 COALESCE(MAX(estimated_1rm), 0.0) as "estimated_max_1rm!: f64",
@@ -1206,7 +1218,8 @@ impl Database {
             FROM exercise_stats
             "#,
             user_id,
-            exercise_type
+            exercise_type,
+            exclude_workout_id
         )
         .fetch_one(&pool)
         .await
@@ -1226,6 +1239,7 @@ impl Database {
                 WHERE e.user_id = ?
                   AND s.user_id = ?
                   AND LOWER(e.exercise_type) = LOWER(?)
+                  AND (? IS NULL OR e.workout_id != ?)
                   AND s.duration_seconds IS NOT NULL
                   AND s.duration_seconds > 0
             ),
@@ -1246,6 +1260,8 @@ impl Database {
         .bind(user_id)
         .bind(user_id)
         .bind(exercise_type)
+        .bind(exclude_workout_id)
+        .bind(exclude_workout_id)
         .fetch_one(&pool)
         .await
         .map_err(|e| {

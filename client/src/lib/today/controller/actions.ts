@@ -8,6 +8,7 @@ import { createExerciseCoreActions } from './actions/exercise/core';
 import { createExerciseSetActions } from './actions/exercise/sets';
 import { createExerciseSettingsActions } from './actions/exercise/settings';
 import { createExerciseWeightModeActions } from './actions/exercise/weightModes';
+import { createExercisePrActions } from './actions/exercise/prs';
 import { persistPlannedTemplate } from './actions/plannedTemplate';
 import { get } from 'svelte/store';
 
@@ -26,6 +27,7 @@ export function createTodayActions(state: TodayState) {
 	});
 	const settingsActions = createExerciseSettingsActions({ state, schedulePersist });
 	const weightModeActions = createExerciseWeightModeActions({ state, refreshFromBackend: refresh });
+	const prActions = createExercisePrActions({ state });
 
 	const sessionActions = createSessionActions({
 		state,
@@ -40,7 +42,6 @@ export function createTodayActions(state: TodayState) {
 		if (!planned) return;
 
 		await coreActions.addExercise(planned.name, {
-			notes: planned.notes,
 			perSideWeight: planned.perSideWeight,
 			splitWeight: planned.splitWeight,
 			tracksReps: planned.tracksReps,
@@ -72,6 +73,7 @@ export function createTodayActions(state: TodayState) {
 		...setActions,
 		...settingsActions,
 		...weightModeActions,
+		...prActions,
 		...sessionActions,
 		startPlannedTemplateExercise,
 		...syncActions,

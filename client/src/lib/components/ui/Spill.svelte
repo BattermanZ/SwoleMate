@@ -96,9 +96,18 @@
 		box-shadow: 0 6px 14px -4px color-mix(in oklab, var(--gold) 55%, transparent);
 	}
 	.spill.pr .weight::after {
-		content: ' ★';
+		content: '★';
+		display: inline-grid;
+		place-items: center;
+		width: 14px;
+		height: 14px;
+		border-radius: 999px;
+		background: var(--surface-deep);
 		color: var(--gold);
-		margin-left: 3px;
+		font-size: 9px;
+		line-height: 1;
+		margin-left: 5px;
+		box-shadow: 0 0 0 1px color-mix(in oklab, var(--gold) 38%, transparent);
 	}
 
 	.s-xs {

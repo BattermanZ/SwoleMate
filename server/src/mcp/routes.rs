@@ -1009,9 +1009,10 @@ async fn call_tool(
                 .get("exercise_type")
                 .and_then(Value::as_str)
                 .ok_or_else(|| invalid_params("exercise_type is required and must be a string"))?;
-            let data = exercises::get_last_exercise_data(db, principal.user_id, exercise_type)
-                .await
-                .map_err(rpc_error_from_app_error)?;
+            let data =
+                exercises::get_last_exercise_data(db, principal.user_id, exercise_type, None)
+                    .await
+                    .map_err(rpc_error_from_app_error)?;
             Ok(tool_success(json!(data)))
         }
         "get_exercise_progress" => {
@@ -1040,9 +1041,10 @@ async fn call_tool(
                     .as_i64()
                     .ok_or_else(|| invalid_params("timezone_offset_minutes must be an integer"))?,
             };
-            let data = progress::get_progress_overview(db, principal.user_id, timezone_offset_minutes)
-                .await
-                .map_err(rpc_error_from_app_error)?;
+            let data =
+                progress::get_progress_overview(db, principal.user_id, timezone_offset_minutes)
+                    .await
+                    .map_err(rpc_error_from_app_error)?;
             Ok(tool_success(data))
         }
         "get_volume_stats" => {
@@ -1051,7 +1053,7 @@ async fn call_tool(
                 .get("exercise_type")
                 .and_then(Value::as_str)
                 .ok_or_else(|| invalid_params("exercise_type is required and must be a string"))?;
-            let data = progress::get_volume_stats(db, principal.user_id, exercise_type)
+            let data = progress::get_volume_stats(db, principal.user_id, exercise_type, None)
                 .await
                 .map_err(rpc_error_from_app_error)?;
             Ok(tool_success(data))

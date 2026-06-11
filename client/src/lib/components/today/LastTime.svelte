@@ -5,12 +5,11 @@
 
 	interface Props {
 		startedAt: string;
-		notes?: string;
 		sets: SetLike[];
 		perSideWeight?: boolean;
 		splitWeight?: boolean;
 	}
-	let { startedAt, notes, sets, perSideWeight = false, splitWeight = false }: Props = $props();
+	let { startedAt, sets, perSideWeight = false, splitWeight = false }: Props = $props();
 </script>
 
 <div class="last-time">
@@ -22,7 +21,6 @@
 	<div class="pills">
 		<SetPillList {sets} {perSideWeight} {splitWeight} size="xs" />
 	</div>
-	{#if notes}<p class="notes">Notes: {notes}</p>{/if}
 </div>
 
 <style>
@@ -54,10 +52,5 @@
 	}
 	.pills {
 		margin-top: 8px;
-	}
-	.notes {
-		margin: 6px 0 0;
-		font: italic 400 13px/1.4 'Instrument Serif';
-		color: var(--ink-2);
 	}
 </style>
