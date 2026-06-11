@@ -47,6 +47,7 @@
 	const quickPicks = c.quickPicks;
 	const plannedTemplateExercises = c.plannedTemplateExercises;
 	const estimated1RmBaselines = c.estimated1RmBaselines;
+	const lastTimeByExercise = c.lastTimeByExercise;
 	const recentSessions = c.recentSessions;
 	const openExerciseIds = c.openExerciseIds;
 
@@ -65,7 +66,10 @@
 
 	$effect(() => {
 		for (const ex of $currentSession?.exercises ?? []) {
-			if (ex.status === 'active') void c.loadEstimated1RmBaseline(ex.name);
+			if (ex.status === 'active') {
+				void c.loadEstimated1RmBaseline(ex.name);
+				void c.loadLastTimeForExercise(ex.name);
+			}
 		}
 	});
 
@@ -221,7 +225,9 @@
 						exercise={ex}
 						isOpen={$openExerciseIds.includes(ex.id)}
 						disabled={$loading}
-						lastTime={c.getLastTimeForExercise(ex.name)}
+						lastTime={c.getLastTimeForExercise(ex.name) ??
+							$lastTimeByExercise[ex.name] ??
+							undefined}
 						estimated1RmBaseline={$estimated1RmBaselines[ex.name]}
 						onToggle={() => c.toggleExercise(ex.id)}
 						onDelete={() => c.removeExercise(ex.id)}

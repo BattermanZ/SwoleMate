@@ -1,5 +1,6 @@
-import { cancelExercise, createExercise } from '$lib/api';
+import { cancelExercise, createExercise, getLastExerciseData } from '$lib/api';
 import { loadOfflineSession, sessionKeyForId } from '$lib/offline/todaySessions';
+import { toUiExercise } from '$lib/today/backend';
 import { createId } from '$lib/utils/id';
 import { get } from 'svelte/store';
 import { hydrateOfflineState, persistInProgressSession, setOffline } from '../../offline';
@@ -7,10 +8,27 @@ import type { TodayState } from '../../state';
 import { getErrorMessage, isNetworkFailure, makeLocalNumericId } from '../../utils';
 import type { ExerciseSeedOptions, LastTime, SeedSet } from '../types';
 import { trackingFieldsSetting } from '$lib/today/tracking';
+import type { Exercise, Set } from '$lib/types';
+
+function lastTimeFromExercise(exercise: Exercise, sets: Set[]): LastTime {
+	const ui = toUiExercise(exercise, sets);
+	return {
+		startedAt: ui.startedAt,
+		notes: ui.notes,
+		sets: ui.sets,
+		settings: ui.settings,
+		tracksReps: ui.tracksReps,
+		tracksTime: ui.tracksTime,
+		tracksWeight: ui.tracksWeight,
+		perSideWeight: ui.perSideWeight,
+		splitWeight: ui.splitWeight
+	};
+}
 
 export type ExerciseCoreActions = {
 	toggleExercise: (exerciseId: number) => void;
 	getLastTimeForExercise: (name: string) => LastTime | undefined;
+	loadLastTimeForExercise: (name: string) => Promise<void>;
 	addExercise: (name: string, options?: ExerciseSeedOptions, seedSets?: SeedSet[]) => Promise<void>;
 	removeExercise: (exerciseId: number) => Promise<void>;
 };
@@ -54,7 +72,34 @@ export function createExerciseCoreActions(args: {
 				splitWeight: match.splitWeight
 			};
 		}
-		return undefined;
+		// Fall back to the most recent session ever logged for this exercise,
+		// fetched on demand for exercises that are not in the recent-sessions cache.
+		return get(state.lastTimeByExercise)[name] ?? undefined;
+	}
+
+	async function loadLastTimeForExercise(name: string) {
+		const trimmed = name.trim();
+		if (!trimmed || get(state.offlineMode)) return;
+
+		// Already covered by the recent-sessions cache, or already fetched.
+		const inRecent = get(state.recentSessions).some((session) =>
+			session.exercises.some((e) => e.name === trimmed)
+		);
+		if (inRecent || Object.hasOwn(get(state.lastTimeByExercise), trimmed)) return;
+
+		try {
+			// Exclude the active workout so "last time" always means a prior session,
+			// never the in-progress exercise the user is currently logging.
+			const activeSessionId = get(state.currentSession)?.id;
+			const data = await getLastExerciseData(trimmed, {
+				excludeWorkoutId:
+					activeSessionId != null && activeSessionId > 0 ? activeSessionId : undefined
+			});
+			const last = data ? lastTimeFromExercise(data.exercise, data.sets) : null;
+			state.lastTimeByExercise.update((current) => ({ ...current, [trimmed]: last }));
+		} catch {
+			state.lastTimeByExercise.update((current) => ({ ...current, [trimmed]: null }));
+		}
 	}
 
 	async function addExercise(name: string, options?: ExerciseSeedOptions, seedSets?: SeedSet[]) {
@@ -66,6 +111,12 @@ export function createExerciseCoreActions(args: {
 		state.error.set(null);
 
 		try {
+			// Pull in the most recent prior session (any time it was done) so
+			// settings, weight modes, and tracking carry over even for exercises
+			// that are not in the recent-sessions cache.
+			if (!getLastTimeForExercise(trimmed)) {
+				await loadLastTimeForExercise(trimmed);
+			}
 			const last = getLastTimeForExercise(trimmed);
 			const startIso = new Date().toISOString();
 			const perSideWeight = options?.perSideWeight ?? last?.perSideWeight ?? false;
@@ -236,5 +287,11 @@ export function createExerciseCoreActions(args: {
 		}
 	}
 
-	return { toggleExercise, getLastTimeForExercise, addExercise, removeExercise };
+	return {
+		toggleExercise,
+		getLastTimeForExercise,
+		loadLastTimeForExercise,
+		addExercise,
+		removeExercise
+	};
 }

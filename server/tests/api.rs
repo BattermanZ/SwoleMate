@@ -2390,6 +2390,114 @@ async fn progress_overview_reports_periods_timed_stats_and_pr_feed() {
 }
 
 #[actix_web::test]
+async fn last_exercise_data_can_exclude_the_active_workout() {
+    // "Last time" should mean a prior session, never the in-progress one.
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "last-exclude", "passwordpassword").await;
+    let cookie = login_cookie_active(&app, "last-exclude", "passwordpassword").await;
+
+    let prev_start = chrono::Utc::now() - chrono::Duration::days(7);
+    let prev_workout = create_workout_with_times(
+        &app,
+        &cookie,
+        prev_start,
+        prev_start + chrono::Duration::minutes(30),
+    )
+    .await;
+    let prev_exercise = create_exercise_for_workout(
+        &app,
+        &cookie,
+        prev_workout,
+        "Lat pulldown",
+        prev_start,
+        prev_start + chrono::Duration::minutes(20),
+    )
+    .await;
+    create_set_for_exercise(&app, &cookie, prev_exercise, 10, 40.0, None).await;
+
+    // A current, in-progress occurrence of the same exercise.
+    let now = chrono::Utc::now();
+    let current_workout =
+        create_workout_with_times(&app, &cookie, now, now + chrono::Duration::minutes(30)).await;
+    let _current_exercise = create_exercise_for_workout(
+        &app,
+        &cookie,
+        current_workout,
+        "Lat pulldown",
+        now,
+        now + chrono::Duration::minutes(20),
+    )
+    .await;
+
+    // Without exclusion, the latest occurrence is the current one.
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri("/api/exercises/last/Lat%20pulldown")
+        .to_request();
+    let last = json_body(test::call_service(&app, req).await).await;
+    assert_eq!(last["exercise"]["workout_id"], current_workout);
+
+    // Excluding the active workout returns the prior session instead.
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri(&format!(
+            "/api/exercises/last/Lat%20pulldown?exclude_workout_id={current_workout}"
+        ))
+        .to_request();
+    let last = json_body(test::call_service(&app, req).await).await;
+    assert_eq!(last["exercise"]["id"], prev_exercise);
+    assert_eq!(last["exercise"]["workout_id"], prev_workout);
+    assert_eq!(last["sets"].as_array().unwrap().len(), 1);
+}
+
+#[actix_web::test]
+async fn volume_estimated_1rm_ignores_high_rep_sets() {
+    // The Brzycki estimate is only valid for 1–12 reps. A high-rep set must not
+    // inflate the estimated 1RM baseline used by the Today PR markers.
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "est-1rm-cap", "passwordpassword").await;
+    let cookie = login_cookie_active(&app, "est-1rm-cap", "passwordpassword").await;
+
+    let now = chrono::Utc::now();
+    let workout =
+        create_workout_with_times(&app, &cookie, now, now + chrono::Duration::minutes(30)).await;
+    let exercise = create_exercise_for_workout(
+        &app,
+        &cookie,
+        workout,
+        "Abs crunches",
+        now,
+        now + chrono::Duration::minutes(20),
+    )
+    .await;
+
+    // 20 reps @ 12kg would give an inflated 25.41 if uncapped; 10 reps @ 15kg
+    // gives a valid 20.0. The capped estimate must be 20.0, not 25.41.
+    create_set_for_exercise(&app, &cookie, exercise, 20, 12.0, None).await;
+    create_set_for_exercise(&app, &cookie, exercise, 10, 15.0, None).await;
+
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri("/api/progress/volume?exercise_type=Abs%20crunches")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success());
+    let volume = json_body(resp).await;
+
+    assert_eq!(
+        volume["personal_records"]["estimated_max_1rm"].as_f64(),
+        Some(20.0)
+    );
+    let weekly = volume["weekly_volume"].as_array().expect("weekly volume");
+    let max_weekly = weekly
+        .iter()
+        .filter_map(|w| w["max_estimated_1rm"].as_f64())
+        .fold(0.0_f64, f64::max);
+    assert_eq!(max_weekly, 20.0);
+}
+
+#[actix_web::test]
 async fn progress_overview_empty_and_invalid_timezone_are_handled() {
     let _env = TestEnv::new();
     let (_db, admin_cookie, app) = setup_test_app().await;

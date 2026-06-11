@@ -1055,20 +1055,23 @@ impl Database {
                             ELSE s.weight
                         END
                     ) as volume,
-                    ROUND(
-                        (
-                            CASE
-                                WHEN e.per_side_weight = 1 THEN
-                                    CASE
-                                        WHEN e.split_weight = 1 AND s.weight_left IS NOT NULL AND s.weight_right IS NOT NULL
-                                            THEN (s.weight_left + s.weight_right)
-                                        ELSE (s.weight * 2)
-                                    END
-                                ELSE s.weight
-                            END
-                        ) * (36.0 / (37.0 - CAST(s.reps AS FLOAT))),
-                        2
-                    ) as estimated_1rm
+                    CASE
+                        WHEN s.reps BETWEEN 1 AND 12 THEN ROUND(
+                            (
+                                CASE
+                                    WHEN e.per_side_weight = 1 THEN
+                                        CASE
+                                            WHEN e.split_weight = 1 AND s.weight_left IS NOT NULL AND s.weight_right IS NOT NULL
+                                                THEN (s.weight_left + s.weight_right)
+                                            ELSE (s.weight * 2)
+                                        END
+                                    ELSE s.weight
+                                END
+                            ) * (36.0 / (37.0 - CAST(s.reps AS FLOAT))),
+                            2
+                        )
+                        ELSE NULL
+                    END as estimated_1rm
                 FROM exercises e
                 JOIN sets s ON e.id = s.exercise_id
                 WHERE e.user_id = ?
@@ -1179,26 +1182,29 @@ impl Database {
                             ELSE s.weight
                         END
                     ) as volume,
-                    ROUND(
-                        (
-                            CASE
-                                WHEN e.per_side_weight = 1 THEN
-                                    CASE
-                                        WHEN e.split_weight = 1 AND s.weight_left IS NOT NULL AND s.weight_right IS NOT NULL
-                                            THEN (s.weight_left + s.weight_right)
-                                        ELSE (s.weight * 2)
-                                    END
-                                ELSE s.weight
-                            END
-                        ) * (36.0 / (37.0 - CAST(s.reps AS FLOAT))),
-                        2
-                    ) as estimated_1rm
+                    CASE
+                        WHEN s.reps BETWEEN 1 AND 12 THEN ROUND(
+                            (
+                                CASE
+                                    WHEN e.per_side_weight = 1 THEN
+                                        CASE
+                                            WHEN e.split_weight = 1 AND s.weight_left IS NOT NULL AND s.weight_right IS NOT NULL
+                                                THEN (s.weight_left + s.weight_right)
+                                            ELSE (s.weight * 2)
+                                        END
+                                    ELSE s.weight
+                                END
+                            ) * (36.0 / (37.0 - CAST(s.reps AS FLOAT))),
+                            2
+                        )
+                        ELSE NULL
+                    END as estimated_1rm
                 FROM exercises e
                 JOIN sets s ON e.id = s.exercise_id
                 WHERE e.user_id = ?
                   AND LOWER(e.exercise_type) = LOWER(?)
             )
-            SELECT 
+            SELECT
                 COALESCE(MAX(weight), 0.0) as "all_time_max_weight!: f64",
                 COALESCE(MAX(volume), 0.0) as "max_volume!: f64",
                 COALESCE(MAX(estimated_1rm), 0.0) as "estimated_max_1rm!: f64",

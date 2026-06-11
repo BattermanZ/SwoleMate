@@ -350,16 +350,18 @@ export async function getExerciseTypes(fetcher: Fetcher = fetch): Promise<string
 
 export async function getLastExerciseData(
 	exerciseType: string,
+	options: { excludeWorkoutId?: number } = {},
 	fetcher: Fetcher = fetch
 ): Promise<{ exercise: Exercise; sets: Set[] } | null> {
+	const query =
+		options.excludeWorkoutId != null ? `?exclude_workout_id=${options.excludeWorkoutId}` : '';
 	const response = await fetcher(
-		`${API_BASE}/api/exercises/last/${encodeURIComponent(exerciseType)}`,
+		`${API_BASE}/api/exercises/last/${encodeURIComponent(exerciseType)}${query}`,
 		withCredentials(undefined)
 	);
-	const data = await handleResponse<[Exercise, Set[]]>(response);
+	const data = await handleResponse<{ exercise: Exercise; sets: Set[] }>(response);
 	if (!data) return null;
-	const [exercise, sets] = data;
-	return { exercise, sets };
+	return { exercise: data.exercise, sets: data.sets };
 }
 
 export async function cancelExercise(id: number, fetcher: Fetcher = fetch): Promise<void> {

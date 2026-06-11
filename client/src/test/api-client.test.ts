@@ -72,32 +72,37 @@ describe('api client behavior', () => {
 		await expect(authLogout(emptyJsonFetcher as unknown as typeof fetch)).resolves.toBeUndefined();
 	});
 
-	it('encodes exercise type params and maps tuple response for getLastExerciseData', async () => {
+	it('encodes exercise type params and maps the response for getLastExerciseData', async () => {
 		const { getLastExerciseData, getVolumeStats, getExerciseProgress, getProgressOverview } =
 			await import('$lib/api');
 		const seenUrls: string[] = [];
 
 		const fetcher = vi.fn(async (input: URL | RequestInfo) => {
 			seenUrls.push(String(input));
-			return jsonResponse([
-				{
+			return jsonResponse({
+				exercise: {
 					id: 4,
 					workout_id: 1,
 					exercise_type: 'Bench & Press/5',
 					start_time: '2026-01-01T10:00:00.000Z',
 					end_time: '2026-01-01T10:20:00.000Z'
 				},
-				[{ id: 7, exercise_id: 4, reps: 5, weight: 80 }]
-			]);
+				sets: [{ id: 7, exercise_id: 4, reps: 5, weight: 80 }]
+			});
 		});
 
 		const exerciseType = 'Bench & Press/5';
-		const result = await getLastExerciseData(exerciseType, fetcher as unknown as typeof fetch);
+		const result = await getLastExerciseData(
+			exerciseType,
+			{ excludeWorkoutId: 99 },
+			fetcher as unknown as typeof fetch
+		);
 		expect(result?.exercise.exercise_type).toBe(exerciseType);
 		expect(result?.sets).toHaveLength(1);
 
 		const encoded = encodeURIComponent(exerciseType);
 		expect(seenUrls[0]).toContain(`/api/exercises/last/${encoded}`);
+		expect(seenUrls[0]).toContain('exclude_workout_id=99');
 
 		const volumeFetcher = vi.fn(async (input: URL | RequestInfo) => {
 			seenUrls.push(String(input));

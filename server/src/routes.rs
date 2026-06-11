@@ -341,16 +341,28 @@ pub async fn get_exercise_types(
     Ok(HttpResponse::Ok().json(types))
 }
 
+#[derive(serde::Deserialize)]
+pub struct LastExerciseQuery {
+    exclude_workout_id: Option<i64>,
+}
+
 #[get("/api/exercises/last/{exercise_type}")]
 pub async fn get_last_exercise_data(
     user: CurrentUser,
     db: web::Data<Database>,
     exercise_type: web::Path<String>,
+    query: web::Query<LastExerciseQuery>,
 ) -> Result<HttpResponse, AppError> {
     let decoded_type = urlencoding::decode(&exercise_type)
         .map_err(|e| AppError::BadRequest(format!("Invalid exercise type: {}", e)))?
         .into_owned();
-    let data = exercises::get_last_exercise_data(db.get_ref(), user.0.id, &decoded_type).await?;
+    let data = exercises::get_last_exercise_data(
+        db.get_ref(),
+        user.0.id,
+        &decoded_type,
+        query.exclude_workout_id,
+    )
+    .await?;
     Ok(HttpResponse::Ok().json(data))
 }
 

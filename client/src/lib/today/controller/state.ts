@@ -1,6 +1,7 @@
 import { EXERCISE_LIBRARY } from '$lib/mocks/today';
 import type { PlannedTemplateExercise, UiMood, UiSession } from '$lib/today/types';
 import { derived, writable } from 'svelte/store';
+import type { LastTime } from './actions/types';
 import {
 	calculateElapsedLabel,
 	calculateTotalDurationSeconds,
@@ -17,6 +18,9 @@ export function createTodayState() {
 	const openExerciseIds = writable<number[]>([]);
 	const plannedTemplateExercises = writable<PlannedTemplateExercise[]>([]);
 	const estimated1RmBaselines = writable<Record<string, number | null>>({});
+	// Last-session context for exercises that are not in the recent-sessions cache.
+	// `null` means "fetched, no prior history".
+	const lastTimeByExercise = writable<Record<string, LastTime | null>>({});
 
 	const exerciseQuery = writable('');
 	const sessionNotes = writable('');
@@ -65,6 +69,7 @@ export function createTodayState() {
 		openExerciseIds,
 		plannedTemplateExercises,
 		estimated1RmBaselines,
+		lastTimeByExercise,
 		exerciseQuery,
 		sessionNotes,
 		endMood,

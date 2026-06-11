@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n            SELECT \n                id as \"id?\",\n                workout_id,\n                exercise_type,\n                start_time as \"start_time: DateTime<Utc>\",\n                end_time as \"end_time: DateTime<Utc>\",\n                notes,\n                per_side_weight as \"per_side_weight: bool\",\n                split_weight as \"split_weight: bool\"\n            FROM exercises\n            WHERE user_id = ?\n              AND LOWER(exercise_type) = LOWER(?)\n            ORDER BY start_time DESC\n            LIMIT 1\n            ",
+  "query": "\n            SELECT\n                id as \"id?\",\n                workout_id,\n                exercise_type,\n                start_time as \"start_time: DateTime<Utc>\",\n                end_time as \"end_time: DateTime<Utc>\",\n                notes,\n                per_side_weight as \"per_side_weight: bool\",\n                split_weight as \"split_weight: bool\"\n            FROM exercises\n            WHERE user_id = ?\n              AND LOWER(exercise_type) = LOWER(?)\n              AND (?3 IS NULL OR workout_id != ?3)\n            ORDER BY start_time DESC\n            LIMIT 1\n            ",
   "describe": {
     "columns": [
       {
@@ -45,7 +45,7 @@
       }
     ],
     "parameters": {
-      "Right": 2
+      "Right": 3
     },
     "nullable": [
       false,
@@ -58,5 +58,5 @@
       false
     ]
   },
-  "hash": "ebfe63efb728acb27fe5e8ffcdc6ccec1b9e63d0cc7b84cf4f4b9ad5ca17316b"
+  "hash": "745cbdb8b8fe1d3822d5e44e0973b1342aa3f832b7bb5a47f72f1bbc65777e97"
 }

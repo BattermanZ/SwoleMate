@@ -503,13 +503,14 @@ impl Database {
         &self,
         user_id: i64,
         exercise_type: &str,
+        exclude_workout_id: Option<i64>,
     ) -> Result<Option<(Exercise, Vec<Set>)>, AppError> {
         debug!(target: "database", "Fetching last data for exercise type: {}", exercise_type);
 
         let pool = self.pool().await;
         let row = sqlx::query!(
             r#"
-            SELECT 
+            SELECT
                 id as "id?",
                 workout_id,
                 exercise_type,
@@ -521,11 +522,13 @@ impl Database {
             FROM exercises
             WHERE user_id = ?
               AND LOWER(exercise_type) = LOWER(?)
+              AND (?3 IS NULL OR workout_id != ?3)
             ORDER BY start_time DESC
             LIMIT 1
             "#,
             user_id,
-            exercise_type
+            exercise_type,
+            exclude_workout_id
         )
         .fetch_optional(&pool)
         .await
