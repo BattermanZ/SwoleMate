@@ -51,7 +51,13 @@ export async function refreshPendingSyncCount(
 		(r) =>
 			r.cancel_workout ||
 			r.status === 'pending_sync' ||
-			(r.status === 'in_progress' && r.session.id < 0 && !r.server_workout_id)
+			// Never-synced, fully-offline session.
+			(r.status === 'in_progress' && r.session.id < 0 && !r.server_workout_id) ||
+			// Server-started session edited while offline. Its record only exists
+			// when there are unsynced local edits (it is deleted by syncOne once
+			// pushed), so counting it ensures reconnect triggers a sync instead of
+			// silently dropping the edits on the next refresh.
+			(r.status === 'in_progress' && r.session.id > 0 && Boolean(r.server_workout_id))
 	).length;
 	access.pendingSyncCount.set(count);
 	return count;
@@ -266,6 +272,15 @@ export async function syncOne(record: OfflineSessionRecord, api: SyncApi) {
 			notes: record.end_notes?.trim() || undefined,
 			feedback: record.end_mood
 		});
+		await deleteOfflineSession(record.key);
+		return;
+	}
+
+	// A server-started session (positive id) lives on the server while online; its
+	// offline record exists only to carry unsynced edits. Once those are pushed,
+	// drop it so it is not re-counted/re-synced on every reconnect. Fully-offline
+	// sessions (negative id) stay offline-first, so keep their record.
+	if (record.session.id > 0) {
 		await deleteOfflineSession(record.key);
 		return;
 	}
