@@ -166,6 +166,18 @@ export async function syncOne(record: OfflineSessionRecord, api: SyncApi) {
 		record.server_workout_id ?? (record.session.id > 0 ? record.session.id : undefined);
 	const exerciseMap = record.server_exercise_ids_by_local ?? {};
 
+	// Persist mapping progress so that a failure mid-replay (likely, since we just
+	// regained connectivity) resumes from where it stopped rather than restarting
+	// — restarting would re-run createWorkout/createExercise and duplicate data.
+	const checkpoint = async () => {
+		await saveOfflineSession({
+			...record,
+			server_workout_id: workoutId,
+			server_exercise_ids_by_local: exerciseMap,
+			updated_at: new Date().toISOString()
+		});
+	};
+
 	if (!workoutId) {
 		const created = await api.createWorkout({
 			date: record.session.startedAt,
@@ -174,6 +186,7 @@ export async function syncOne(record: OfflineSessionRecord, api: SyncApi) {
 			timezone_offset_minutes: record.session.timezoneOffsetMinutes
 		});
 		workoutId = created.id;
+		await checkpoint();
 	}
 
 	for (const ex of record.session.exercises) {
@@ -204,6 +217,7 @@ export async function syncOne(record: OfflineSessionRecord, api: SyncApi) {
 			});
 			exerciseId = created.id;
 			exerciseMap[ex.id] = created.id;
+			await checkpoint();
 		}
 
 		await api.replaceSets(
