@@ -5,7 +5,12 @@ export function getErrorMessage(e: unknown): string {
 
 export function isNetworkFailure(e: unknown): boolean {
 	if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
-	if (e instanceof TypeError) return true;
+	// A failed fetch throws a TypeError, but so do plenty of genuine bugs
+	// ("x is not a function", undefined access). Matching every TypeError flips
+	// the app into offline mode on real errors and strands data as "pending".
+	// Match the fetch-specific failure messages instead — they cover every
+	// browser's wording (Chrome "Failed to fetch", Firefox "NetworkError…",
+	// Safari "Load failed") — and let other errors propagate.
 	const message = e instanceof Error ? e.message : String(e);
 	return /failed to fetch|networkerror|load failed|connection/i.test(message);
 }
