@@ -4,6 +4,7 @@
 	import type { UiExercise } from '$lib/today/types';
 	import type { SetLike } from '$lib/today/setPills';
 	import { estimatedOneRepMaxPrGroupIndex } from '$lib/today/setPills';
+	import { playTimerChime, unlockTimerChime } from '$lib/audio/timerChime';
 
 	type LastTimeData = {
 		startedAt: string;
@@ -234,10 +235,14 @@
 		timerRunning = false;
 		stopTimerInterval();
 		setDurationFromSeconds(timerTargetSeconds);
+		playTimerChime();
 	}
 
 	function startTimer() {
 		if (locked || !tracksTime || timerRunning || typeof window === 'undefined') return;
+		// Unlock audio inside this user gesture so the completion chime is allowed
+		// to play later (and bypasses the iOS mute switch via the playback session).
+		void unlockTimerChime();
 		const target = timerTargetSeconds || Math.max(1, Math.round(setDurationSeconds));
 		const remaining = timerRemainingSeconds > 0 ? timerRemainingSeconds : target;
 		timerTargetSeconds = target;

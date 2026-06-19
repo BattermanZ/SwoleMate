@@ -9,6 +9,7 @@
 	} from '$lib/api';
 	import { auth } from '$lib/auth';
 	import { readDemoModePreference, writeDemoModePreference } from '$lib/preferences/demoMode';
+	import { readTimerSoundPreference, writeTimerSoundPreference } from '$lib/preferences/timerSound';
 	import { Btn, Card, Chk, Badge, PageHero, Notice } from '$lib/components/ui';
 	import SettingsDesktop from '$lib/components/settings/SettingsDesktop.svelte';
 	import { isDesktop, isDesktopView } from '$lib/stores/viewport';
@@ -45,6 +46,7 @@
 	} | null>(null);
 
 	let demoModeEnabled = $state(false);
+	let timerSoundEnabled = $state(true);
 	let mcpTokensLoaded = $state(false);
 
 	let activeMcpTokens = $derived(mcpTokens.filter((t) => !t.revoked_at));
@@ -211,8 +213,14 @@
 		writeDemoModePreference(enabled);
 	}
 
+	function handleTimerSoundToggle(enabled: boolean) {
+		timerSoundEnabled = enabled;
+		writeTimerSoundPreference(enabled);
+	}
+
 	onMount(async () => {
 		demoModeEnabled = readDemoModePreference();
+		timerSoundEnabled = readTimerSoundPreference();
 	});
 
 	$effect(() => {
@@ -306,7 +314,19 @@
 {#snippet toolsCard()}
 	<Card>
 		{#snippet title()}Workout tools{/snippet}
-		{#snippet lede()}Hide demo session tools unless you want quick access for testing.{/snippet}
+		{#snippet lede()}Tune session helpers like the rest-timer sound and demo tools.{/snippet}
+
+		<div class="toggle-row">
+			<div>
+				<div class="t">Timer sound</div>
+				<p>Play a chime when a timed-set countdown finishes (foreground only).</p>
+			</div>
+			<Chk
+				label={timerSoundEnabled ? 'On' : 'Off'}
+				checked={timerSoundEnabled}
+				onchange={handleTimerSoundToggle}
+			/>
+		</div>
 
 		<div class="toggle-row">
 			<div>

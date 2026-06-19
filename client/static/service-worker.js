@@ -1,5 +1,5 @@
 // Cache name (bump to invalidate old cached bundles)
-const CACHE_NAME = 'swolemate-cache-v4';
+const CACHE_NAME = 'swolemate-cache-v5';
 
 // Assets to cache
 const ASSETS_TO_CACHE = [
@@ -9,7 +9,8 @@ const ASSETS_TO_CACHE = [
 	'/logo.svg',
 	'/favicon.png',
 	'/pwa-192.png',
-	'/pwa-512.png'
+	'/pwa-512.png',
+	'/timer-done.wav'
 ];
 
 async function precacheAppShell(cache) {
