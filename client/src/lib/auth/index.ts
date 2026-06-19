@@ -27,12 +27,6 @@ async function clearClientSensitiveData(): Promise<void> {
 	if (!browser) return;
 
 	try {
-		localStorage.removeItem('offline.today.recentSessions');
-	} catch {
-		// ignore
-	}
-
-	try {
 		for (let i = localStorage.length - 1; i >= 0; i--) {
 			const k = localStorage.key(i);
 			if (!k) continue;
