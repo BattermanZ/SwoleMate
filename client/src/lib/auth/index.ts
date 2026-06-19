@@ -43,7 +43,11 @@ async function clearClientSensitiveData(): Promise<void> {
 				localStorage.removeItem(k);
 				continue;
 			}
-			if (k.includes('offline.today.session.') || k.includes('offline.today.recentSessions')) {
+			if (
+				k.includes('offline.today.session.') ||
+				k.includes('offline.today.recentSessions') ||
+				k.includes('today.plannedTemplate')
+			) {
 				localStorage.removeItem(k);
 				continue;
 			}
@@ -61,6 +65,7 @@ async function clearClientSensitiveData(): Promise<void> {
 			(key) =>
 				key.includes('offline.today.session.') ||
 				key.includes('offline.today.recentSessions') ||
+				key.includes('today.plannedTemplate') ||
 				key.includes('currentWorkoutId') ||
 				key.includes('swolemate:currentWorkoutState')
 		);
