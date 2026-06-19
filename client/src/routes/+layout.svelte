@@ -5,6 +5,7 @@
 	import { goto } from '$app/navigation';
 	import { auth } from '$lib/auth';
 	import { logger } from '$lib/logger';
+	import { requestPersistentStorage } from '$lib/pwa/persistentStorage';
 	import { BottomNav, type NavItem } from '$lib/components/ui';
 	import ConfirmHost from '$lib/components/ui/ConfirmHost.svelte';
 	import AppBar from '$lib/components/shell/AppBar.svelte';
@@ -53,6 +54,10 @@
 				.register('/service-worker.js', { scope: '/' })
 				.then((reg) => logger.debug('pwa', 'sw registered', { scope: reg.scope }))
 				.catch((err) => logger.error('pwa', 'sw registration failed', { err }));
+
+			// Move offline data off the best-effort tier so it survives storage
+			// pressure and iOS Safari's 7-day eviction window.
+			void requestPersistentStorage();
 		}
 	});
 
