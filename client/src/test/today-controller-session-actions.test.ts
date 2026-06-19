@@ -226,7 +226,7 @@ describe('today controller session actions', () => {
 		expect(refreshFromBackend).toHaveBeenCalledTimes(1);
 	});
 
-	it('starts an empty session from a template and queues planned exercises without legacy notes', async () => {
+	it('starts an empty session from a template and queues planned exercises with their notes', async () => {
 		apiMocks.getWorkoutTemplate.mockResolvedValueOnce({
 			template: {
 				id: 12,
@@ -286,6 +286,7 @@ describe('today controller session actions', () => {
 			expect.objectContaining({
 				id: 30,
 				name: 'Bench Press',
+				notes: 'pause reps',
 				perSideWeight: true,
 				splitWeight: true,
 				tracksReps: true,
@@ -295,7 +296,9 @@ describe('today controller session actions', () => {
 			}),
 			expect.objectContaining({ id: 31, name: 'Overhead Press' })
 		]);
-		expect(get(state.plannedTemplateExercises).some((exercise) => exercise.notes)).toBe(false);
+		expect(get(state.plannedTemplateExercises).find((exercise) => exercise.id === 30)?.notes).toBe(
+			'pause reps'
+		);
 		expect(refreshFromBackend).toHaveBeenCalledTimes(1);
 		expect(offlineActionMocks.setOffline).not.toHaveBeenCalled();
 	});

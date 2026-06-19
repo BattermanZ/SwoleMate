@@ -1102,7 +1102,7 @@ async fn can_create_template_from_workout_and_start_without_sets() {
     assert_eq!(template["template"]["name"], "Push A");
     assert_eq!(template["exercises"].as_array().unwrap().len(), 1);
     assert_eq!(template["exercises"][0]["exercise_type"], "Bench Press");
-    assert!(template["exercises"][0]["notes"].is_null());
+    assert_eq!(template["exercises"][0]["notes"], "Touch lower chest");
     assert_eq!(template["exercises"][0]["per_side_weight"], true);
     assert_eq!(template["exercises"][0]["split_weight"], true);
     assert_eq!(template["exercises"][0]["settings"][0]["key"], "Bench");
@@ -1139,7 +1139,10 @@ async fn can_create_template_from_workout_and_start_without_sets() {
         started["exercises"][0]["exercise"]["exercise_type"],
         "Bench Press"
     );
-    assert!(started["exercises"][0]["exercise"]["notes"].is_null());
+    assert_eq!(
+        started["exercises"][0]["exercise"]["notes"],
+        "Touch lower chest"
+    );
     assert_eq!(started["exercises"][0]["exercise"]["per_side_weight"], true);
     assert_eq!(started["exercises"][0]["exercise"]["split_weight"], true);
     assert_eq!(
@@ -1177,7 +1180,7 @@ async fn can_duplicate_template_with_same_exercise_metadata() {
         .to_request();
     let original = json_body(test::call_service(&app, req).await).await;
     let original_id = original["template"]["id"].as_i64().unwrap();
-    assert!(original["exercises"][0]["notes"].is_null());
+    assert_eq!(original["exercises"][0]["notes"], "Feet slightly forward");
 
     let req = with_cookie(test::TestRequest::post(), &cookie)
         .uri(&format!("/api/templates/{original_id}/duplicate"))
@@ -1192,7 +1195,7 @@ async fn can_duplicate_template_with_same_exercise_metadata() {
     assert_eq!(duplicate["template"]["name"], "Leg Day Copy");
     assert_eq!(duplicate["exercises"].as_array().unwrap().len(), 1);
     assert_eq!(duplicate["exercises"][0]["exercise_type"], "Hack Squat");
-    assert!(duplicate["exercises"][0]["notes"].is_null());
+    assert_eq!(duplicate["exercises"][0]["notes"], "Feet slightly forward");
     assert_eq!(duplicate["exercises"][0]["settings"][0]["key"], "Stance");
     assert_eq!(duplicate["exercises"][0]["settings"][0]["value"], "Medium");
 

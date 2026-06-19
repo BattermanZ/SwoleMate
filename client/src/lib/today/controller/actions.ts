@@ -42,6 +42,7 @@ export function createTodayActions(state: TodayState) {
 		if (!planned) return;
 
 		await coreActions.addExercise(planned.name, {
+			notes: planned.notes,
 			perSideWeight: planned.perSideWeight,
 			splitWeight: planned.splitWeight,
 			tracksReps: planned.tracksReps,
