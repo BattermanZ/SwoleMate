@@ -9,7 +9,6 @@ import {
 	type PublicUser
 } from '$lib/api';
 import { kvDelete, kvListKeys } from '$lib/offline/storage';
-import { clearWorkoutState } from '$lib/workoutState';
 import { getActiveUserId, setActiveUserId } from './scope';
 import { writable } from 'svelte/store';
 
@@ -26,8 +25,6 @@ const CACHE_STORAGE_PREFIX = 'swolemate-cache';
 
 async function clearClientSensitiveData(): Promise<void> {
 	if (!browser) return;
-
-	clearWorkoutState();
 
 	try {
 		localStorage.removeItem('offline.today.recentSessions');

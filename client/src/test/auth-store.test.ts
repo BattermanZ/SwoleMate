@@ -61,21 +61,11 @@ describe('auth store', () => {
 		vi.resetModules();
 		vi.doMock('$app/environment', () => ({ browser: true }));
 		await import('$lib/auth');
-		const { getActiveUserId } = await import('$lib/auth/scope');
-		const { saveWorkoutState } = await import('$lib/workoutState');
+		const { getActiveUserId, scopedKey } = await import('$lib/auth/scope');
 
 		expect(getActiveUserId()).toBe('7');
-
-		saveWorkoutState({
-			workout: null,
-			exercises: [],
-			activeExerciseId: null,
-			sessionNotes: '',
-			sessionFeedback: null
-		});
-
-		expect(localStorage.getItem('u7:swolemate:currentWorkoutState')).toBeTruthy();
-		expect(localStorage.getItem('swolemate:currentWorkoutState')).toBeNull();
+		// Scope is initialised from the stored user, so scoped keys are prefixed.
+		expect(scopedKey('today.plannedTemplate')).toBe('u7:today.plannedTemplate');
 		vi.doUnmock('$app/environment');
 	});
 });
