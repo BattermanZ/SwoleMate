@@ -195,6 +195,77 @@ no app-shell assets are precached and the PWA won't boot offline — with only a
 
 ---
 
+## 🟠 Long-term offline availability ("opens weeks later")
+
+Separate concern from sync correctness: ensuring the app still cold-launches
+offline after long periods of disuse. Two independent risks.
+
+### 10. Cache/IndexedDB can be evicted → blank app weeks later
+
+By default, Cache Storage and IndexedDB are **best-effort** storage and may be
+evicted under pressure. Critically, **iOS Safari** caps script-writable storage
+at **7 days of no use** for sites that are *not* installed to the Home Screen
+(ITP). Open the app in a tab, ignore it for a week, and the cache is wiped — the
+most likely "it was blank when I came back" scenario. Installed PWAs are exempt
+from the 7-day rule on iOS 16.4+, but can still be evicted under disk pressure on
+any platform.
+
+The app currently never requests persistent storage
+(`src/routes/+layout.svelte:44-56` registers the SW but calls no
+`navigator.storage.persist()`), so it is always in the best-effort tier.
+
+**Fix sketch:** request persistent storage once after SW registration, and nudge
+users to install to the Home Screen on iOS (required for any of this to survive a
+week).
+
+```ts
+if (navigator.storage?.persist && !(await navigator.storage.persisted())) {
+	const granted = await navigator.storage.persist();
+	logger.debug('pwa', 'persistent storage', { granted });
+}
+```
+
+### 11. Precache holds only what was visited → routes blank offline
+
+`client/static/service-worker.js:16-26` (`precacheAppShell`) regex-scrapes `/`'s
+HTML for `/_app/immutable/...` URLs at install. Two gaps:
+
+1. If install runs while connectivity is flaky (or `/` returns an unexpected
+   body), it silently caches nothing and the PWA cannot boot offline (same root
+   cause as #9).
+2. The cache-first handler for `/_app/immutable/` only stores chunks **actually
+   requested during a session** (`service-worker.js:68-79`). Lazy route chunks
+   for pages the user never opened (e.g. Progress, when they only used Today) are
+   never cached, so those routes are blank offline weeks later.
+
+**Fix sketch:** precache the full build manifest deterministically instead of
+scraping HTML. SvelteKit's `$service-worker` virtual module exposes the complete
+list — but that requires moving the worker from `static/service-worker.js` to
+`src/service-worker.ts` so Vite processes it:
+
+```ts
+import { build, files, version } from '$service-worker';
+const CACHE = `swolemate-${version}`;
+const PRECACHE = [...build, ...files]; // every chunk + static asset, all routes
+self.addEventListener('install', (e) => {
+	e.waitUntil(
+		caches.open(CACHE).then((c) => c.addAll(PRECACHE)).then(() => self.skipWaiting())
+	);
+});
+```
+
+`build` covers every hashed JS/CSS chunk for **all** routes, `files` covers
+`static/`, and `version` cache-busts on deploy automatically. The existing fetch
+strategy (network-first navigations, cache-first immutable, skip `/api/`) can be
+kept as-is.
+
+**Verification:** DevTools → Application → Storage should report **Persistent**
+(not best-effort), and Cache Storage should contain every `_app/immutable/*`
+chunk *before* visiting those routes. Hard test: install to Home Screen →
+airplane mode → cold-launch; then repeat after a week.
+
+---
+
 ## Suggested priority
 
 The data-integrity trio (**#1, #2, #3**) should come first — they cause silent
@@ -208,7 +279,10 @@ logger.
   (rather than overwriting) on refresh.
 
 **#4–#6** are correctness/privacy follow-ups. **#7–#9** are cleanup that will
-make the next audit of this layer much faster.
+make the next audit of this layer much faster. **#10–#11** govern long-term
+offline availability — **#10** (`navigator.storage.persist()`) is the single
+biggest lever for surviving weeks of disuse and is ~10 lines; **#11** is the
+proper fix for #9 and guarantees every route is cached, not just visited ones.
 
 ### Test-coverage gaps observed
 
