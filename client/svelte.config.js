@@ -17,6 +17,11 @@ const config = {
 		}),
 		prerender: {
 			handleMissingId: 'ignore'
+		},
+		// We register the worker manually in +layout.svelte (it has dev-unregister
+		// and persistent-storage logic), so disable SvelteKit's auto-registration.
+		serviceWorker: {
+			register: false
 		}
 	}
 };

@@ -51,7 +51,13 @@ export async function refreshPendingSyncCount(
 		(r) =>
 			r.cancel_workout ||
 			r.status === 'pending_sync' ||
-			(r.status === 'in_progress' && r.session.id < 0 && !r.server_workout_id)
+			// Never-synced, fully-offline session.
+			(r.status === 'in_progress' && r.session.id < 0 && !r.server_workout_id) ||
+			// Server-started session edited while offline. Its record only exists
+			// when there are unsynced local edits (it is deleted by syncOne once
+			// pushed), so counting it ensures reconnect triggers a sync instead of
+			// silently dropping the edits on the next refresh.
+			(r.status === 'in_progress' && r.session.id > 0 && Boolean(r.server_workout_id))
 	).length;
 	access.pendingSyncCount.set(count);
 	return count;
@@ -166,6 +172,18 @@ export async function syncOne(record: OfflineSessionRecord, api: SyncApi) {
 		record.server_workout_id ?? (record.session.id > 0 ? record.session.id : undefined);
 	const exerciseMap = record.server_exercise_ids_by_local ?? {};
 
+	// Persist mapping progress so that a failure mid-replay (likely, since we just
+	// regained connectivity) resumes from where it stopped rather than restarting
+	// — restarting would re-run createWorkout/createExercise and duplicate data.
+	const checkpoint = async () => {
+		await saveOfflineSession({
+			...record,
+			server_workout_id: workoutId,
+			server_exercise_ids_by_local: exerciseMap,
+			updated_at: new Date().toISOString()
+		});
+	};
+
 	if (!workoutId) {
 		const created = await api.createWorkout({
 			date: record.session.startedAt,
@@ -174,6 +192,7 @@ export async function syncOne(record: OfflineSessionRecord, api: SyncApi) {
 			timezone_offset_minutes: record.session.timezoneOffsetMinutes
 		});
 		workoutId = created.id;
+		await checkpoint();
 	}
 
 	for (const ex of record.session.exercises) {
@@ -204,6 +223,7 @@ export async function syncOne(record: OfflineSessionRecord, api: SyncApi) {
 			});
 			exerciseId = created.id;
 			exerciseMap[ex.id] = created.id;
+			await checkpoint();
 		}
 
 		await api.replaceSets(
@@ -252,6 +272,15 @@ export async function syncOne(record: OfflineSessionRecord, api: SyncApi) {
 			notes: record.end_notes?.trim() || undefined,
 			feedback: record.end_mood
 		});
+		await deleteOfflineSession(record.key);
+		return;
+	}
+
+	// A server-started session (positive id) lives on the server while online; its
+	// offline record exists only to carry unsynced edits. Once those are pushed,
+	// drop it so it is not re-counted/re-synced on every reconnect. Fully-offline
+	// sessions (negative id) stay offline-first, so keep their record.
+	if (record.session.id > 0) {
 		await deleteOfflineSession(record.key);
 		return;
 	}

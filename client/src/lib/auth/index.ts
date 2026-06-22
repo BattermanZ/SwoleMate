@@ -9,7 +9,6 @@ import {
 	type PublicUser
 } from '$lib/api';
 import { kvDelete, kvListKeys } from '$lib/offline/storage';
-import { clearWorkoutState } from '$lib/workoutState';
 import { getActiveUserId, setActiveUserId } from './scope';
 import { writable } from 'svelte/store';
 
@@ -27,14 +26,6 @@ const CACHE_STORAGE_PREFIX = 'swolemate-cache';
 async function clearClientSensitiveData(): Promise<void> {
 	if (!browser) return;
 
-	clearWorkoutState();
-
-	try {
-		localStorage.removeItem('offline.today.recentSessions');
-	} catch {
-		// ignore
-	}
-
 	try {
 		for (let i = localStorage.length - 1; i >= 0; i--) {
 			const k = localStorage.key(i);
@@ -43,7 +34,11 @@ async function clearClientSensitiveData(): Promise<void> {
 				localStorage.removeItem(k);
 				continue;
 			}
-			if (k.includes('offline.today.session.') || k.includes('offline.today.recentSessions')) {
+			if (
+				k.includes('offline.today.session.') ||
+				k.includes('offline.today.recentSessions') ||
+				k.includes('today.plannedTemplate')
+			) {
 				localStorage.removeItem(k);
 				continue;
 			}
@@ -61,6 +56,7 @@ async function clearClientSensitiveData(): Promise<void> {
 			(key) =>
 				key.includes('offline.today.session.') ||
 				key.includes('offline.today.recentSessions') ||
+				key.includes('today.plannedTemplate') ||
 				key.includes('currentWorkoutId') ||
 				key.includes('swolemate:currentWorkoutState')
 		);

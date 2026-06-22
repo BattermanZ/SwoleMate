@@ -73,7 +73,7 @@ impl Database {
                 template_id: row.get("template_id"),
                 position: row.get("position"),
                 exercise_type: row.get("exercise_type"),
-                notes: None,
+                notes: row.get("notes"),
                 per_side_weight: row.get::<i64, _>("per_side_weight") != 0,
                 split_weight: row.get::<i64, _>("split_weight") != 0,
                 settings,
@@ -113,7 +113,7 @@ impl Database {
             .bind(template_id)
             .bind(index as i64)
             .bind(&exercise.exercise_type)
-            .bind(Option::<String>::None)
+            .bind(&exercise.notes)
             .bind(per_side_weight)
             .bind(split_weight)
             .fetch_one(&mut **tx)
@@ -462,7 +462,7 @@ impl Database {
             let exercise_req = CreateExerciseRequest {
                 exercise_type: exercise.exercise_type,
                 start_time: req.start_time,
-                notes: None,
+                notes: exercise.notes,
                 per_side_weight: Some(exercise.per_side_weight),
                 split_weight: Some(exercise.split_weight),
                 settings: Some(

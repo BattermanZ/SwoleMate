@@ -102,7 +102,7 @@ describe('today controller carry-over', () => {
 		expect(get(controller.openExerciseIds)).toEqual([20]);
 	});
 
-	it('starts a planned template exercise without carrying over legacy template notes', async () => {
+	it('starts a planned template exercise carrying over its template notes', async () => {
 		const controller = createTodayController();
 
 		controller.currentSession.set({
@@ -139,10 +139,10 @@ describe('today controller carry-over', () => {
 		);
 		expect(createExercise).toHaveBeenCalledWith(
 			99,
-			expect.not.objectContaining({ notes: 'controlled eccentric' })
+			expect.objectContaining({ notes: 'controlled eccentric' })
 		);
 		expect(get(controller.currentSession)?.exercises[0]?.name).toBe('Incline Press');
-		expect(get(controller.currentSession)?.exercises[0]?.notes).toBe('');
+		expect(get(controller.currentSession)?.exercises[0]?.notes).toBe('controlled eccentric');
 		expect(get(controller.plannedTemplateExercises)).toEqual([]);
 	});
 });

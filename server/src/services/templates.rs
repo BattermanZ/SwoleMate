@@ -65,7 +65,7 @@ pub async fn duplicate_template(
             .into_iter()
             .map(|exercise| WorkoutTemplateExerciseRequest {
                 exercise_type: exercise.exercise_type,
-                notes: None,
+                notes: exercise.notes,
                 per_side_weight: Some(exercise.per_side_weight),
                 split_weight: Some(exercise.split_weight),
                 settings: Some(
@@ -100,7 +100,7 @@ pub async fn create_template_from_workout(
             .into_iter()
             .map(|exercise| WorkoutTemplateExerciseRequest {
                 exercise_type: exercise.exercise_type,
-                notes: None,
+                notes: exercise.notes,
                 per_side_weight: Some(exercise.per_side_weight),
                 split_weight: Some(exercise.split_weight),
                 settings: Some(

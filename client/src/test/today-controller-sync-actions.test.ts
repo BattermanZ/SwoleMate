@@ -109,6 +109,34 @@ describe('today controller sync actions', () => {
 		expect(refreshFromBackend).toHaveBeenCalledTimes(1);
 	});
 
+	it('concurrent syncPendingSessions calls do not double-submit', async () => {
+		let release: () => void = () => {};
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		sessionMocks.listOfflineSessions.mockImplementation(async () => {
+			await gate;
+			return [{ key: 'a', status: 'in_progress' }];
+		});
+		const state = createTodayState();
+		offlineMocks.refreshPendingSyncCount.mockResolvedValue(0);
+
+		const actions = createSyncActions({
+			state,
+			refreshFromBackend: vi.fn(async () => undefined),
+			hydrateExerciseLibrary: vi.fn(async () => undefined)
+		});
+
+		// Fire two runs back to back, as flaky connectivity would.
+		const first = actions.syncPendingSessions();
+		const second = actions.syncPendingSessions();
+		release();
+		await Promise.all([first, second]);
+
+		// The record must be synced exactly once, not once per concurrent run.
+		expect(offlineMocks.syncOne).toHaveBeenCalledTimes(1);
+	});
+
 	it('syncPendingSessions sets offline message on network failure', async () => {
 		sessionMocks.listOfflineSessions.mockRejectedValueOnce(new TypeError('Failed to fetch'));
 		const state = createTodayState();

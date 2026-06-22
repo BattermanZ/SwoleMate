@@ -25,7 +25,20 @@ export async function refreshFromBackend(state: TodayState) {
 
 		if (active?.id != null) {
 			const data = await getWorkout(active.id);
-			const next = toUiSession(data.workout, data.exercises);
+			let next = toUiSession(data.workout, data.exercises);
+			// If there are unsynced offline edits to this server-started session,
+			// prefer them: the offline copy is the server session plus local edits,
+			// so a refresh (e.g. a tab remount) must not overwrite it and silently
+			// discard the edits. syncOne deletes the offline record once pushed, so
+			// this only fires while edits are genuinely pending.
+			const offlineEdited = await findInProgressOffline();
+			if (
+				offlineEdited?.session &&
+				(offlineEdited.server_workout_id ?? offlineEdited.session.id) === active.id
+			) {
+				next = offlineEdited.session;
+				state.notice.set('Local changes pending sync.');
+			}
 			state.currentSession.set(next);
 			state.sessionNotes.set(next.notes);
 			state.openExerciseIds.set(

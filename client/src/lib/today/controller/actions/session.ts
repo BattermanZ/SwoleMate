@@ -78,6 +78,7 @@ export function createSessionActions(args: {
 				return {
 					id: exercise.id,
 					name: exercise.exercise_type,
+					notes: exercise.notes ?? undefined,
 					perSideWeight: exercise.per_side_weight ?? false,
 					splitWeight: exercise.split_weight ?? false,
 					tracksReps: tracking.reps,

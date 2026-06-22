@@ -14,14 +14,14 @@ vi.mock('$lib/offline/storage', () => ({
 }));
 
 describe('planned template storage', () => {
-	it('drops legacy exercise notes when restoring a planned template', async () => {
+	it('preserves exercise notes when restoring a planned template', async () => {
 		storageMocks.kvGet.mockResolvedValueOnce({
 			sessionId: 42,
 			exercises: [
 				{
 					id: 7,
 					name: 'Bench Press',
-					notes: 'legacy cue',
+					notes: 'controlled eccentric',
 					perSideWeight: false,
 					splitWeight: false,
 					settings: []
@@ -33,6 +33,7 @@ describe('planned template storage', () => {
 			{
 				id: 7,
 				name: 'Bench Press',
+				notes: 'controlled eccentric',
 				perSideWeight: false,
 				splitWeight: false,
 				settings: []

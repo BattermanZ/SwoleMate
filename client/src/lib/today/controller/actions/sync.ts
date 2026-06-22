@@ -24,6 +24,12 @@ export type SyncActions = {
 	start: () => () => void;
 };
 
+// Module-level guard: flaky connectivity fires online/offline/online in quick
+// succession, and each `online` invokes syncPendingSessions. Two concurrent runs
+// would both list and re-create the same offline records, duplicating workouts on
+// the server. A single in-flight run short-circuits the rest.
+let isSyncing = false;
+
 export function createSyncActions(args: {
 	state: TodayState;
 	refreshFromBackend: () => Promise<void>;
@@ -32,6 +38,8 @@ export function createSyncActions(args: {
 	const { state, refreshFromBackend, hydrateExerciseLibrary } = args;
 
 	async function syncPendingSessions() {
+		if (isSyncing) return;
+		isSyncing = true;
 		state.error.set(null);
 		state.notice.set('Syncing offline changes…');
 
@@ -66,6 +74,7 @@ export function createSyncActions(args: {
 			}
 		} finally {
 			state.loading.set(false);
+			isSyncing = false;
 		}
 	}
 
