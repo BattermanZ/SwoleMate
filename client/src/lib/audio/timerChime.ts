@@ -35,8 +35,8 @@ function setAudioSessionType(type: 'ambient' | 'transient-solo'): void {
  */
 export async function unlockTimerChime(): Promise<void> {
 	// Claim an "ambient" session for priming so we mix with — and never interrupt —
-	// the user's music/podcast while the timer is running. We only switch to an
-	// exclusive session at the moment the chime actually rings (see playTimerChime).
+	// the user's music/podcast while the timer runs. We only switch to an exclusive
+	// session at the moment the chime actually rings (see playTimerChime).
 	setAudioSessionType('ambient');
 
 	const el = resolveElement();
