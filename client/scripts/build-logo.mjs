@@ -3,7 +3,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as fontkit from 'fontkit';
 import { Resvg } from '@resvg/resvg-js';
-import toIco from 'to-ico';
+import { pngToIco } from './pngToIco.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..');
@@ -80,6 +80,6 @@ const icoSizes = [16, 32, 48];
 const icoPngs = icoSizes.map((size) =>
 	Buffer.from(new Resvg(svg, { fitTo: { mode: 'width', value: size } }).render().asPng())
 );
-const ico = await toIco(icoPngs);
+const ico = pngToIco(icoPngs);
 writeFileSync(resolve(root, 'static/favicon.ico'), ico);
 console.log(`wrote favicon.ico (${icoSizes.join('/')}px, ${ico.length} bytes)`);
