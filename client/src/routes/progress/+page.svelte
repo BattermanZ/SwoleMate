@@ -19,6 +19,7 @@
 	import RecentExerciseSessions from '$lib/components/progress/RecentExerciseSessions.svelte';
 	import OverallCharts from '$lib/components/progress/OverallCharts.svelte';
 	import ProgressDesktop from '$lib/components/progress/ProgressDesktop.svelte';
+	import SessionHeatmap from '$lib/components/progress/SessionHeatmap.svelte';
 
 	type ProgressTab = 'overview' | 'exercise' | 'trends';
 
@@ -162,6 +163,7 @@
 	// Consistency: days trained in last 30. We don't have that directly so approximate
 	// as last_30_days.workouts (assumes one session = one day, close enough).
 	let consistencyDone = $derived(last30Workouts);
+	let sessionSamples = $derived(workoutStats?.session_start_samples ?? []);
 </script>
 
 {#if desktop}
@@ -214,6 +216,9 @@
 		/>
 
 		{#if selectedTab === 'overview'}
+			{#if sessionSamples.length > 0}
+				<SessionHeatmap samples={sessionSamples} />
+			{/if}
 			{#if errorOverall}
 				<Card><div class="err">{errorOverall}</div></Card>
 			{:else if loadingOverall && !progressOverview}

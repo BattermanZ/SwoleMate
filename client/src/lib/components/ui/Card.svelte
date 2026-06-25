@@ -79,4 +79,17 @@
 		gap: 6px;
 		flex: none;
 	}
+
+	/* On narrow screens the title and actions can't share a row — the actions
+	   would otherwise crush the title to zero width and overlap it. Stack them. */
+	@media (max-width: 640px) {
+		.card-head {
+			flex-direction: column;
+			align-items: stretch;
+			gap: 8px;
+		}
+		.card-actions {
+			flex-wrap: wrap;
+		}
+	}
 </style>

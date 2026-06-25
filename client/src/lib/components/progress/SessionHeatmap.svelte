@@ -140,6 +140,29 @@
 		};
 	});
 
+	// On mobile the grid scrolls horizontally; start at the most recent weeks
+	// (right edge) so the latest training is what you see first. Edge fades hint
+	// that there's more history to swipe to, and hide once you reach an end.
+	let scrollEl: HTMLDivElement | undefined = $state();
+	let atStart = $state(true);
+	let atEnd = $state(true);
+
+	function updateEdges() {
+		if (!scrollEl) return;
+		const max = scrollEl.scrollWidth - scrollEl.clientWidth;
+		atStart = scrollEl.scrollLeft <= 1;
+		atEnd = scrollEl.scrollLeft >= max - 1;
+	}
+
+	$effect(() => {
+		void model.columns; // re-run when the data rebuilds
+		if (!scrollEl) return;
+		if (scrollEl.scrollWidth > scrollEl.clientWidth) {
+			scrollEl.scrollLeft = scrollEl.scrollWidth;
+		}
+		updateEdges();
+	});
+
 	function tip(c: Cell): string {
 		const label = c.date.toLocaleDateString(undefined, {
 			weekday: 'short',
@@ -166,30 +189,37 @@
 	{/snippet}
 
 	<div class="heatmap" style="--cols: {model.columns.length}">
-		<div class="months">
-			{#each model.monthLabels as m (m.col)}
-				<span class="month" style="grid-column: {m.col + 1}">{m.label}</span>
-			{/each}
-		</div>
 		<div class="body">
 			<div class="dow">
+				<span class="spacer"></span>
 				{#each DOW_LABELS as d, i (i)}
 					<span>{d}</span>
 				{/each}
 			</div>
-			<div class="grid">
-				{#each model.columns as col, ci (ci)}
-					<div class="col">
-						{#each col as cell (cell.key)}
-							<span
-								class="cell"
-								class:future={cell.future}
-								data-level={cell.level}
-								title={tip(cell)}
-							></span>
+			<div class="scroll-wrap">
+				<div class="scroll" bind:this={scrollEl} onscroll={updateEdges}>
+					<div class="months">
+						{#each model.monthLabels as m (m.col)}
+							<span class="month" style="grid-column: {m.col + 1}">{m.label}</span>
 						{/each}
 					</div>
-				{/each}
+					<div class="grid">
+						{#each model.columns as col, ci (ci)}
+							<div class="col">
+								{#each col as cell (cell.key)}
+									<span
+										class="cell"
+										class:future={cell.future}
+										data-level={cell.level}
+										title={tip(cell)}
+									></span>
+								{/each}
+							</div>
+						{/each}
+					</div>
+				</div>
+				<div class="fade fade-l" class:show={!atStart} aria-hidden="true"></div>
+				<div class="fade fade-r" class:show={!atEnd} aria-hidden="true"></div>
 			</div>
 		</div>
 	</div>
@@ -226,15 +256,16 @@
 		--dow-w: 28px;
 		--body-gap: 8px;
 		--gap: 4px;
+		--month-h: 18px; /* months height (12px) + its margin-bottom (6px) */
 		width: 100%;
 	}
 
-	/* Month header divides the same width as the day grid into equal columns,
-	   offset by the day-of-week gutter so labels sit above their week. */
+	/* Month header divides the same width as the day grid into equal columns.
+	   It lives inside the scroll track so labels stay aligned with their week
+	   even when the grid scrolls horizontally on mobile. */
 	.months {
 		display: grid;
 		grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
-		margin-left: calc(var(--dow-w) + var(--body-gap));
 		margin-bottom: 6px;
 		height: 12px;
 	}
@@ -260,7 +291,12 @@
 		flex-direction: column;
 		gap: var(--gap);
 	}
-	.dow span {
+	/* Pushes the weekday labels below the month row so they line up with the grid. */
+	.dow .spacer {
+		height: var(--month-h);
+		flex: none;
+	}
+	.dow span:not(.spacer) {
 		flex: 1;
 		display: flex;
 		align-items: center;
@@ -271,10 +307,52 @@
 		color: var(--ink-dim);
 	}
 
+	.scroll-wrap {
+		position: relative;
+		flex: 1;
+		min-width: 0;
+	}
+	.scroll {
+		min-width: 0;
+	}
+
+	/* Edge fades signal that the calendar scrolls horizontally on mobile. Each
+	   fades to the card background and shows only when there's more that way. */
+	.fade {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		width: 34px;
+		pointer-events: none;
+		opacity: 0;
+		transition: opacity 160ms ease;
+		z-index: 1;
+	}
+	.fade.show {
+		opacity: 1;
+	}
+	/* A soft inward shadow (not a fade-to-background, which is invisible over the
+	   pale empty cells) reads as "the calendar continues under this edge". */
+	.fade-l {
+		left: 0;
+		background: linear-gradient(
+			to right,
+			color-mix(in oklab, var(--ink) 22%, transparent),
+			transparent 70%
+		);
+	}
+	.fade-r {
+		right: 0;
+		background: linear-gradient(
+			to left,
+			color-mix(in oklab, var(--ink) 22%, transparent),
+			transparent 70%
+		);
+	}
+
 	/* Columns share the remaining width equally; cells stay square via aspect-ratio,
 	   so the grid grows to fill whatever the card offers. */
 	.grid {
-		flex: 1;
 		min-width: 0;
 		display: flex;
 		gap: var(--gap);
@@ -341,5 +419,36 @@
 		text-transform: uppercase;
 		color: var(--ink-soft);
 		margin: 0 4px;
+	}
+
+	/* Mobile: 53 fill-width columns would collapse to slivers, so switch to
+	   fixed-size cells in a horizontal scroller. The weekday gutter stays put
+	   while the months + grid scroll together, pre-scrolled to the latest week. */
+	@media (max-width: 1023px) {
+		.heatmap {
+			--gap: 3px;
+			--cell: 13px;
+		}
+		.scroll {
+			overflow-x: auto;
+			overflow-y: hidden;
+			scrollbar-width: none;
+			-webkit-overflow-scrolling: touch;
+			overscroll-behavior-x: contain;
+		}
+		.scroll::-webkit-scrollbar {
+			display: none;
+		}
+		.months {
+			grid-template-columns: repeat(var(--cols), var(--cell));
+			column-gap: var(--gap);
+			width: max-content;
+		}
+		.grid {
+			width: max-content;
+		}
+		.col {
+			flex: 0 0 var(--cell);
+		}
 	}
 </style>

@@ -8,6 +8,8 @@
 	import { requestPersistentStorage } from '$lib/pwa/persistentStorage';
 	import { BottomNav, type NavItem } from '$lib/components/ui';
 	import ConfirmHost from '$lib/components/ui/ConfirmHost.svelte';
+	import WhatsNewHost from '$lib/components/ui/WhatsNewHost.svelte';
+	import { maybeShowWhatsNew } from '$lib/stores/whatsNew';
 	import AppBar from '$lib/components/shell/AppBar.svelte';
 	import SideNav from '$lib/components/shell/SideNav.svelte';
 	import type { Snippet } from 'svelte';
@@ -27,6 +29,16 @@
 		}
 		if ($authState.status === 'authenticated' && isLogin) {
 			void goto('/');
+		}
+	});
+
+	// Once the user is authenticated, show the changelog if the app has updated
+	// since they last opened it. Runs a single time per session.
+	let whatsNewChecked = false;
+	$effect(() => {
+		if (!whatsNewChecked && $authState.status === 'authenticated') {
+			whatsNewChecked = true;
+			maybeShowWhatsNew();
 		}
 	});
 
@@ -176,6 +188,7 @@
 {/if}
 
 <ConfirmHost />
+<WhatsNewHost />
 
 <style>
 	.shell {

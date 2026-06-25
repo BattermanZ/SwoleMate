@@ -19,14 +19,12 @@ function resolveElement(): HTMLAudioElement | null {
 	return element;
 }
 
-function declarePlaybackSession(): void {
+function setAudioSessionType(type: 'ambient' | 'transient-solo'): void {
 	try {
-		// On iOS Safari (16.4+) this routes audio into the "playback" category,
-		// which plays through the hardware mute switch.
 		const session = (navigator as unknown as { audioSession?: { type: string } }).audioSession;
-		if (session) session.type = 'playback';
+		if (session) session.type = type;
 	} catch {
-		// not supported — the <audio> element path still bypasses mute on iOS
+		// not supported — best effort only
 	}
 }
 
@@ -36,7 +34,10 @@ function declarePlaybackSession(): void {
  * repeatedly and on every platform.
  */
 export async function unlockTimerChime(): Promise<void> {
-	declarePlaybackSession();
+	// Claim an "ambient" session for priming so we mix with — and never interrupt —
+	// the user's music/podcast while the timer runs. We only switch to an exclusive
+	// session at the moment the chime actually rings (see playTimerChime).
+	setAudioSessionType('ambient');
 
 	const el = resolveElement();
 	if (!el || primed) return;
@@ -60,6 +61,11 @@ export function playTimerChime(): void {
 
 	const el = resolveElement();
 	if (!el) return;
+
+	// "transient-solo" briefly pauses other audio (like a navigation prompt),
+	// plays the chime exclusively — through the hardware mute switch on iOS —
+	// and lets the system resume the user's music/podcast when it finishes.
+	setAudioSessionType('transient-solo');
 
 	try {
 		el.currentTime = 0;
