@@ -66,7 +66,7 @@ describe('timer chime', () => {
 		expect(el.currentTime).toBe(0);
 	});
 
-	it('declares a playback audio session on unlock when supported', async () => {
+	it('claims an ambient audio session on unlock so other audio keeps playing', async () => {
 		const session = { type: 'auto' };
 		(navigator as unknown as { audioSession: typeof session }).audioSession = session;
 		const el = fakeAudio();
@@ -74,7 +74,19 @@ describe('timer chime', () => {
 
 		await unlockTimerChime();
 
-		expect(session.type).toBe('playback');
+		expect(session.type).toBe('ambient');
+	});
+
+	it('claims a transient-solo session when the chime rings so music resumes after', () => {
+		const session = { type: 'ambient' };
+		(navigator as unknown as { audioSession: typeof session }).audioSession = session;
+		const el = fakeAudio();
+		__setTimerChimeElementForTesting(el as unknown as HTMLAudioElement);
+
+		playTimerChime();
+
+		expect(session.type).toBe('transient-solo');
+		expect(el.play).toHaveBeenCalledTimes(1);
 	});
 
 	it('does not throw on unlock when the audio session API is absent', async () => {
