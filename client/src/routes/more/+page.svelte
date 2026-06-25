@@ -3,6 +3,8 @@
 	import { Card, PageHero } from '$lib/components/ui';
 	import MoreDesktop from '$lib/components/more/MoreDesktop.svelte';
 	import { isDesktop, isDesktopView } from '$lib/stores/viewport';
+	import { openWhatsNew } from '$lib/stores/whatsNew';
+	import { APP_VERSION } from '$lib/version';
 
 	const authState = auth.state;
 	let isAdmin = $derived($authState.user?.role === 'admin');
@@ -44,6 +46,14 @@
 				</div>
 				<span class="arr" aria-hidden="true">→</span>
 			</a>
+			<button type="button" class="row" onclick={() => openWhatsNew()}>
+				<div class="icn">✨</div>
+				<div class="text">
+					<div class="t">What's New</div>
+					<div class="m">Release notes — you're on v{APP_VERSION}.</div>
+				</div>
+				<span class="arr" aria-hidden="true">→</span>
+			</button>
 			{#if isAdmin}
 				<a href="/admin">
 					<div class="icn">🛡</div>
@@ -86,7 +96,8 @@
 			align-items: start;
 		}
 	}
-	a {
+	a,
+	.row {
 		display: grid;
 		grid-template-columns: 42px 1fr auto;
 		gap: 12px;
@@ -98,7 +109,16 @@
 		text-decoration: none;
 		color: inherit;
 	}
-	a:hover {
+	/* The What's New entry opens a modal rather than navigating, so it's a button
+	   styled to match the link rows. */
+	.row {
+		width: 100%;
+		text-align: left;
+		font: inherit;
+		cursor: pointer;
+	}
+	a:hover,
+	.row:hover {
 		border-color: color-mix(in oklab, var(--clay) 40%, var(--line));
 	}
 	.icn {

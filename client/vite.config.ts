@@ -2,6 +2,13 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
+
+// Surface the app's semver version to the running frontend (it otherwise only
+// has the service-worker build hash). Read from package.json at build time.
+const pkg = JSON.parse(
+	readFileSync(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf-8')
+) as { version: string };
 
 const proxyTarget = process.env.VITE_API_PROXY_TARGET ?? 'http://127.0.0.1:2469';
 const backendProxy = {
@@ -27,6 +34,9 @@ const securityHeaders = {
 };
 
 export default defineConfig({
+	define: {
+		__APP_VERSION__: JSON.stringify(pkg.version)
+	},
 	plugins: [tailwindcss(), sveltekit()],
 	resolve: process.env.VITEST
 		? {
