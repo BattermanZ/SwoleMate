@@ -1,5 +1,35 @@
 import type { ChangelogEntry } from '$lib/changelog';
 
+const MONTHS = [
+	'Jan',
+	'Feb',
+	'Mar',
+	'Apr',
+	'May',
+	'Jun',
+	'Jul',
+	'Aug',
+	'Sep',
+	'Oct',
+	'Nov',
+	'Dec'
+];
+
+/**
+ * Format a date-only ISO string (YYYY-MM-DD) as "D Mon YYYY". Parses the parts
+ * directly rather than via `new Date(iso)` — that parses as UTC midnight and
+ * formats to the previous day for users west of UTC. Returns the input
+ * unchanged if it isn't a plain date.
+ */
+export function formatReleaseDate(iso: string): string {
+	const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+	if (!m) return iso;
+	const [, year, month, day] = m;
+	const name = MONTHS[Number(month) - 1];
+	if (!name) return iso;
+	return `${Number(day)} ${name} ${year}`;
+}
+
 /**
  * Compare two semver strings numerically. Missing or non-numeric parts count as
  * 0. Returns >0 if a>b, 0 if equal, <0 if a<b.

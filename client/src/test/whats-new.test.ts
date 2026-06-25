@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { compareVersions, entriesToShow } from '$lib/whatsNew';
+import { compareVersions, entriesToShow, formatReleaseDate } from '$lib/whatsNew';
 import type { ChangelogEntry } from '$lib/changelog';
 
 const log: ChangelogEntry[] = [
@@ -56,5 +56,20 @@ describe('entriesToShow', () => {
 
 	it('shows nothing for an empty changelog', () => {
 		expect(entriesToShow('1.0.0', [])).toEqual([]);
+	});
+});
+
+describe('formatReleaseDate', () => {
+	it('formats a date-only ISO string as day month year', () => {
+		expect(formatReleaseDate('2026-06-25')).toBe('25 Jun 2026');
+	});
+
+	it('never shifts the day (no UTC parsing), at either end of the year', () => {
+		expect(formatReleaseDate('2026-01-01')).toBe('1 Jan 2026');
+		expect(formatReleaseDate('2026-12-31')).toBe('31 Dec 2026');
+	});
+
+	it('returns the input unchanged when it is not a plain date', () => {
+		expect(formatReleaseDate('not-a-date')).toBe('not-a-date');
 	});
 });

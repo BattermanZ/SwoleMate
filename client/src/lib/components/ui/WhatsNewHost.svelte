@@ -1,13 +1,7 @@
 <script lang="ts">
 	import { Btn } from '$lib/components/ui';
 	import { whatsNewEntries, closeWhatsNew } from '$lib/stores/whatsNew';
-
-	function fmtDate(iso: string): string {
-		const d = new Date(iso);
-		return Number.isNaN(d.getTime())
-			? iso
-			: d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
-	}
+	import { formatReleaseDate } from '$lib/whatsNew';
 </script>
 
 {#if $whatsNewEntries}
@@ -23,7 +17,7 @@
 			<div class="entries">
 				{#each $whatsNewEntries as entry (entry.version)}
 					<section class="entry">
-						<div class="ver">v{entry.version} · {fmtDate(entry.date)}</div>
+						<div class="ver">v{entry.version} · {formatReleaseDate(entry.date)}</div>
 						<h4>{entry.title}</h4>
 						{#if entry.features?.length}
 							<div class="group">
