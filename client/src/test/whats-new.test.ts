@@ -3,9 +3,9 @@ import { compareVersions, entriesToShow } from '$lib/whatsNew';
 import type { ChangelogEntry } from '$lib/changelog';
 
 const log: ChangelogEntry[] = [
-	{ version: '3.2.0', date: '2026-06-25', title: 'C', items: ['c'] },
-	{ version: '3.1.2', date: '2026-05-01', title: 'B', items: ['b'] },
-	{ version: '3.1.0', date: '2026-04-01', title: 'A', items: ['a'] }
+	{ version: '3.2.0', date: '2026-06-25', title: 'C', features: ['c'] },
+	{ version: '3.1.2', date: '2026-05-01', title: 'B', fixes: ['b'] },
+	{ version: '3.1.0', date: '2026-04-01', title: 'A', features: ['a'], fixes: ['a2'] }
 ];
 
 describe('compareVersions', () => {

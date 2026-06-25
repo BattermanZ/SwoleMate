@@ -25,11 +25,26 @@
 					<section class="entry">
 						<div class="ver">v{entry.version} · {fmtDate(entry.date)}</div>
 						<h4>{entry.title}</h4>
-						<ul>
-							{#each entry.items as item (item)}
-								<li>{item}</li>
-							{/each}
-						</ul>
+						{#if entry.features?.length}
+							<div class="group">
+								<span class="tag tag-new">New</span>
+								<ul>
+									{#each entry.features as item (item)}
+										<li>{item}</li>
+									{/each}
+								</ul>
+							</div>
+						{/if}
+						{#if entry.fixes?.length}
+							<div class="group">
+								<span class="tag tag-fix">Fixed</span>
+								<ul>
+									{#each entry.fixes as item (item)}
+										<li>{item}</li>
+									{/each}
+								</ul>
+							</div>
+						{/if}
 					</section>
 				{/each}
 			</div>
@@ -108,6 +123,30 @@
 			sans-serif;
 		letter-spacing: -0.01em;
 		color: var(--ink);
+	}
+	.group {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+	.tag {
+		align-self: flex-start;
+		padding: 3px 8px;
+		border-radius: 999px;
+		font:
+			800 9px/1 'Onest',
+			system-ui,
+			sans-serif;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+	}
+	.tag-new {
+		color: var(--clay);
+		background: color-mix(in oklab, var(--clay) 16%, transparent);
+	}
+	.tag-fix {
+		color: var(--ink-soft);
+		background: color-mix(in oklab, var(--ink-soft) 16%, transparent);
 	}
 	ul {
 		margin: 0;

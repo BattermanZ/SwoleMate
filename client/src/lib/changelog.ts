@@ -9,8 +9,10 @@ export interface ChangelogEntry {
 	date: string;
 	/** short headline */
 	title: string;
-	/** plain-language bullet points */
-	items: string[];
+	/** new features, in plain language. Omit if there are none. */
+	features?: string[];
+	/** bug fixes, in plain language. Omit if there are none. */
+	fixes?: string[];
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
@@ -18,9 +20,9 @@ export const CHANGELOG: ChangelogEntry[] = [
 		version: '3.2.0',
 		date: '2026-06-25',
 		title: 'Your training calendar, now on mobile',
-		items: [
-			'See your whole year on your phone — the training calendar is now in the Progress tab on mobile. Swipe across it to look back through earlier months.',
-			'The rest-timer chime no longer interrupts your music or podcasts.'
-		]
+		features: [
+			'See your whole year on your phone — the training calendar is now in the Progress tab on mobile. Swipe across it to look back through earlier months.'
+		],
+		fixes: ['The rest-timer chime no longer interrupts your music or podcasts.']
 	}
 ];
