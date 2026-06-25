@@ -18,13 +18,12 @@ export function compareVersions(a: string, b: string): number {
 
 /**
  * Given the last-seen version (or null for a first-ever visit) and the
- * changelog, return the entries the user has not seen yet — those strictly newer
- * than lastSeen, newest first. A first-ever visit shows nothing.
+ * changelog, return the entries the user has not seen yet, newest first. A
+ * first-ever visit (null) has seen nothing, so every entry counts as unseen.
  */
 export function entriesToShow(
 	lastSeen: string | null,
 	changelog: ChangelogEntry[]
 ): ChangelogEntry[] {
-	if (lastSeen === null) return [];
-	return changelog.filter((e) => compareVersions(e.version, lastSeen) > 0);
+	return changelog.filter((e) => lastSeen === null || compareVersions(e.version, lastSeen) > 0);
 }

@@ -18,9 +18,9 @@ function writeLastSeen(version: string): void {
 
 /**
  * Run once after the user is authenticated. Decides whether to auto-show the
- * changelog based on the per-device last-seen version, and marks the current
- * version as seen so it won't show again. First-ever visitors are seeded
- * silently (no notes shown).
+ * changelog based on the per-device last-seen version, then marks the current
+ * version as seen so it won't show again. First-ever visitors (no stored
+ * version) see the full changelog once.
  */
 export function maybeShowWhatsNew(): void {
 	let lastSeen: string | null;
@@ -30,16 +30,11 @@ export function maybeShowWhatsNew(): void {
 		return; // Storage unavailable — behave as "already seen".
 	}
 
-	if (lastSeen === null) {
-		writeLastSeen(APP_VERSION); // First run: seed baseline, show nothing.
-		return;
-	}
-
 	const unseen = entriesToShow(lastSeen, CHANGELOG);
 	if (unseen.length > 0) {
 		whatsNewEntries.set(unseen);
-		writeLastSeen(APP_VERSION); // Mark as shown so it won't reappear.
 	}
+	writeLastSeen(APP_VERSION); // Mark current as seen (covers first-run seeding too).
 }
 
 /** Open the modal on demand (e.g. from the menu). Does not change last-seen. */

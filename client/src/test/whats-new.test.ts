@@ -30,8 +30,12 @@ describe('compareVersions', () => {
 });
 
 describe('entriesToShow', () => {
-	it('shows nothing on first-ever visit (lastSeen null)', () => {
-		expect(entriesToShow(null, log)).toEqual([]);
+	it('shows every entry on first-ever visit (lastSeen null)', () => {
+		expect(entriesToShow(null, log)).toEqual(log);
+	});
+
+	it('shows nothing on first-ever visit when the changelog is empty', () => {
+		expect(entriesToShow(null, [])).toEqual([]);
 	});
 
 	it('shows only entries newer than lastSeen, newest first', () => {
