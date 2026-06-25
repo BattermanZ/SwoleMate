@@ -141,13 +141,26 @@
 	});
 
 	// On mobile the grid scrolls horizontally; start at the most recent weeks
-	// (right edge) so the latest training is what you see first.
+	// (right edge) so the latest training is what you see first. Edge fades hint
+	// that there's more history to swipe to, and hide once you reach an end.
 	let scrollEl: HTMLDivElement | undefined = $state();
+	let atStart = $state(true);
+	let atEnd = $state(true);
+
+	function updateEdges() {
+		if (!scrollEl) return;
+		const max = scrollEl.scrollWidth - scrollEl.clientWidth;
+		atStart = scrollEl.scrollLeft <= 1;
+		atEnd = scrollEl.scrollLeft >= max - 1;
+	}
+
 	$effect(() => {
 		void model.columns; // re-run when the data rebuilds
-		if (scrollEl && scrollEl.scrollWidth > scrollEl.clientWidth) {
+		if (!scrollEl) return;
+		if (scrollEl.scrollWidth > scrollEl.clientWidth) {
 			scrollEl.scrollLeft = scrollEl.scrollWidth;
 		}
+		updateEdges();
 	});
 
 	function tip(c: Cell): string {
@@ -183,26 +196,30 @@
 					<span>{d}</span>
 				{/each}
 			</div>
-			<div class="scroll" bind:this={scrollEl}>
-				<div class="months">
-					{#each model.monthLabels as m (m.col)}
-						<span class="month" style="grid-column: {m.col + 1}">{m.label}</span>
-					{/each}
+			<div class="scroll-wrap">
+				<div class="scroll" bind:this={scrollEl} onscroll={updateEdges}>
+					<div class="months">
+						{#each model.monthLabels as m (m.col)}
+							<span class="month" style="grid-column: {m.col + 1}">{m.label}</span>
+						{/each}
+					</div>
+					<div class="grid">
+						{#each model.columns as col, ci (ci)}
+							<div class="col">
+								{#each col as cell (cell.key)}
+									<span
+										class="cell"
+										class:future={cell.future}
+										data-level={cell.level}
+										title={tip(cell)}
+									></span>
+								{/each}
+							</div>
+						{/each}
+					</div>
 				</div>
-				<div class="grid">
-					{#each model.columns as col, ci (ci)}
-						<div class="col">
-							{#each col as cell (cell.key)}
-								<span
-									class="cell"
-									class:future={cell.future}
-									data-level={cell.level}
-									title={tip(cell)}
-								></span>
-							{/each}
-						</div>
-					{/each}
-				</div>
+				<div class="fade fade-l" class:show={!atStart} aria-hidden="true"></div>
+				<div class="fade fade-r" class:show={!atEnd} aria-hidden="true"></div>
 			</div>
 		</div>
 	</div>
@@ -290,9 +307,47 @@
 		color: var(--ink-dim);
 	}
 
-	.scroll {
+	.scroll-wrap {
+		position: relative;
 		flex: 1;
 		min-width: 0;
+	}
+	.scroll {
+		min-width: 0;
+	}
+
+	/* Edge fades signal that the calendar scrolls horizontally on mobile. Each
+	   fades to the card background and shows only when there's more that way. */
+	.fade {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		width: 34px;
+		pointer-events: none;
+		opacity: 0;
+		transition: opacity 160ms ease;
+		z-index: 1;
+	}
+	.fade.show {
+		opacity: 1;
+	}
+	/* A soft inward shadow (not a fade-to-background, which is invisible over the
+	   pale empty cells) reads as "the calendar continues under this edge". */
+	.fade-l {
+		left: 0;
+		background: linear-gradient(
+			to right,
+			color-mix(in oklab, var(--ink) 22%, transparent),
+			transparent 70%
+		);
+	}
+	.fade-r {
+		right: 0;
+		background: linear-gradient(
+			to left,
+			color-mix(in oklab, var(--ink) 22%, transparent),
+			transparent 70%
+		);
 	}
 
 	/* Columns share the remaining width equally; cells stay square via aspect-ratio,
