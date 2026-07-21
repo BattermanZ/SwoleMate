@@ -51,19 +51,40 @@ export function createSyncActions(args: {
 			}
 
 			state.loading.set(true);
+			let skipped = 0;
 			for (const record of records) {
-				await syncOne(record, {
-					cancelExercise,
-					cancelWorkout,
-					createExercise,
-					createWorkout,
-					endExercise,
-					endWorkout,
-					replaceSets
-				});
+				try {
+					await syncOne(record, {
+						cancelExercise,
+						cancelWorkout,
+						// Adapt to thread the Idempotency-Key through the fetcher arg (F-HIGH-3).
+						createExercise: (workoutId, exercise, idempotencyKey) =>
+							createExercise(workoutId, exercise, fetch, idempotencyKey),
+						createWorkout: (workout, idempotencyKey) =>
+							createWorkout(workout, fetch, idempotencyKey),
+						endExercise,
+						endWorkout,
+						replaceSets
+					});
+				} catch (e) {
+					// A network failure means we've gone offline again — stop the whole
+					// run and let the outer catch flip to offline mode.
+					if (isNetworkFailure(e)) throw e;
+					// Otherwise this is a corrupt / version-skewed record. Skip it so it
+					// does not permanently block every OTHER queued session (F-MED-2).
+					skipped += 1;
+					console.error('Skipping unsyncable offline record', record.key, e);
+				}
 			}
 			await refreshPendingSyncCount(state);
 			state.offlineMode.set(false);
+			if (skipped > 0) {
+				state.error.set(
+					`${skipped} offline ${skipped === 1 ? 'session' : 'sessions'} could not be synced and ${
+						skipped === 1 ? 'was' : 'were'
+					} skipped.`
+				);
+			}
 			state.notice.set(get(state.pendingSyncCount) ? 'Some changes are still pending sync.' : null);
 			await refreshFromBackend();
 		} catch (e) {

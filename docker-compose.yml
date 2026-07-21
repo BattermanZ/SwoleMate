@@ -1,26 +1,30 @@
 services:
   client:
-    image: 192.168.31.233:5000/swolemate-client:latest
+    build: ./client
     container_name: swolemate-client
     ports:
-      - "2470:2470"  # Frontend port
+      - "2470:2470" # Frontend port
     restart: unless-stopped
     depends_on:
       - server
 
   server:
-    image: 192.168.31.233:5000/swolemate-server:latest
+    build: ./server
     container_name: swolemate-server
     expose:
       - "2469" # Backend port (internal)
     working_dir: /data
-    user: "1000:1000"
+    user: "1000:1000" # match your host UID/GID so SQLite can write
     volumes:
       - ./database:/data/database
       - ./backups:/data/backups
       - ./server.env:/data/server.env:ro
     environment:
-      - TZ=Europe/Amsterdam
+      - TZ=Etc/UTC # set to your local timezone; used for weekly backup scheduling
+      # The server is reachable only through the nginx client container, which sets
+      # X-Real-IP from the real peer. Trust that header for per-IP rate limiting
+      # (B-LOW-4). Overridden by server.env if the key is set there.
+      - TRUST_PROXY_HEADERS=true
     restart: unless-stopped
     networks:
       default:

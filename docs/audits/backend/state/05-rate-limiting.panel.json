@@ -1,0 +1,12 @@
+[
+  {
+    "idx": 1,
+    "verdicts": [
+      {
+        "title": "MCP rate limiter keyed per-token/per-client, not per-user — a user multiplies their budget by minting extra MCP tokens",
+        "refuted": false,
+        "reason": "Code-truth confirmed: server/src/mcp/routes.rs:825 reads `let rate_limit_key = format!(\"{}:{}\", principal.client_id, principal.user_id);` exactly as cited, and this key is passed to rate_limit::admit_request. Since client_id varies per personal MCP token (per mcp_auth.rs) or per OAuth client, distinct tokens for the same user_id produce distinct rate_limit_key strings and thus distinct buckets. No per-user-only guard or aggregation exists in this function to collapse multiple client_ids under one user's budget. The mechanism as described is real and reachable in this source."
+      }
+    ]
+  }
+]

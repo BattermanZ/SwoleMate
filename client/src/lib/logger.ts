@@ -46,10 +46,12 @@ class Logger {
 				void this.processLogQueue();
 			});
 
-			// Log application startup
+			// Log application startup. Record only the pathname (no query/hash) and
+			// omit the user agent, so this line can never carry a sensitive URL
+			// parameter or fingerprintable UA off-device if the remote-send gate is
+			// ever loosened (F-LOW-5).
 			this.info('app', 'Frontend application started', {
-				url: window.location.href,
-				userAgent: navigator.userAgent
+				path: window.location.pathname
 			});
 		}
 	}
@@ -110,7 +112,11 @@ class Logger {
 
 			if (!response.ok) {
 				if (response.status === 401 || response.status === 403) {
-					// Don't retry until explicitly enabled again.
+					// Auth lapsed (e.g. mid token-refresh). Preserve this batch by
+					// putting it back on the queue and pause remote sending until it's
+					// explicitly re-enabled at the next auth bootstrap, instead of
+					// silently dropping the diagnostics (F-LOW-3).
+					this.logQueue.unshift(...logs);
 					this.remoteEnabled = false;
 					return;
 				}

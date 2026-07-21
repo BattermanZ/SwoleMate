@@ -1,6 +1,7 @@
 import type { UiMood, UiSession } from '$lib/today/types';
 import { kvDelete, kvGet, kvListKeys, kvSet } from '$lib/offline/storage';
-import { scopedKey } from '$lib/auth/scope';
+import { hasActiveUserScope, scopedKey } from '$lib/auth/scope';
+import { logger } from '$lib/logger';
 
 export type OfflineSessionStatus = 'in_progress' | 'pending_sync';
 
@@ -28,6 +29,15 @@ export function sessionKeyForId(sessionId: number): string {
 }
 
 export async function saveOfflineSession(record: OfflineSessionRecord): Promise<void> {
+	// Never persist an offline session while the active user is unknown: it would
+	// land in the unscoped `anon:` bucket, be orphaned once the id resolves (scoped
+	// reads use `u<id>:`), and be momentarily visible to another account on a shared
+	// device (F-LOW-2). The in-memory session survives; a later persist (after the
+	// scope resolves) writes it under the correct key.
+	if (!hasActiveUserScope()) {
+		logger.warn('offline', 'skipping offline session persist: no active user scope');
+		return;
+	}
 	await kvSet(record.key, record);
 }
 

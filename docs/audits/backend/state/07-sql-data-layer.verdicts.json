@@ -1,0 +1,62 @@
+[
+  {
+    "title": "Unbounded N+1 query fan-out in progress/exercise reads",
+    "severity": "medium",
+    "category": "correctness",
+    "file": "server/src/db/progress.rs",
+    "line": "376-399",
+    "description": "get_exercise_progress() fetches all exercises of a given type for a user (no LIMIT) and then, in a Rust for-loop, issues TWO additional round-trip queries per row: get_sets_for_exercise() (exercises.rs:446) and get_settings_for_exercise() (exercises.rs:565). get_exercises_for_workout() (exercises.rs:391-440) has the same per-exercise get_settings_for_exercise() N+1. A user can create an effectively unlimited number of exercises of one type, so queries per single read call grow linearly and unboundedly with stored data.",
+    "attackOrTrigger": "An authenticated session user OR an MCP-token agent (routes.rs:559 -> services/progress.rs:16 -> db::get_exercise_progress; and mcp/routes.rs:1018 get_exercise_progress tool) bulk-creates thousands of exercises of one exercise_type, then requests progress for that type. The backend then executes ~2*N sequential SQLite queries on one pooled connection while holding it, blocking the pool.",
+    "why": "Read is scoped to the caller's own user_id (no IDOR), but query count is proportional to attacker-controlled row count with no pagination/LIMIT, giving a self-service latency/connection-exhaustion vector amplified by MCP agents generating data volumes a human UI never would.",
+    "fixSketch": "Replace per-row lookups with a single JOINed query (or batched IN (...) queries keyed by fetched exercise ids); add server-side LIMIT/pagination to get_exercise_progress and get_exercises_for_workout.",
+    "survives": true,
+    "status": "verified",
+    "refutes": 0,
+    "votes": 1,
+    "verdicts": [
+      {
+        "title": "Unbounded N+1 query fan-out in progress/exercise reads",
+        "refuted": false,
+        "reason": "Code confirms the claim exactly: get_exercise_progress (progress.rs:359-374) issues an unbounded `SELECT ... FROM exercises WHERE user_id = ?` with no LIMIT, then at lines 377-399 loops over every row calling self.get_sets_for_exercise(...).await? and self.get_settings_for_exercise(...).await? per exercise — two sequential round-trip queries per row, count proportional to attacker/agent-controlled row volume. No pagination, LIMIT, batching, or JOIN collapses this into fewer queries. The mechanism is real as described."
+      }
+    ]
+  },
+  {
+    "title": "Progress overview loads entire user set history into memory and recomputes PRs in Rust on every call",
+    "severity": "medium",
+    "category": "correctness",
+    "file": "server/src/db/progress.rs",
+    "line": "968-1022",
+    "description": "get_progress_set_facts() selects EVERY set the user ever logged (JOIN sets/exercises/workouts, no LIMIT, no time window) into a Vec<SetFact>, and get_progress_overview() (line 771-773) runs detect_pr_events()/detect_recent_best_events() building HashMaps and Vecs over the full set on each request. Memory and CPU cost are O(total sets), unbounded, uncached.",
+    "attackOrTrigger": "An MCP-token agent or session user creates a very large number of sets (each create_set is a cheap authenticated write), then calls get_progress_overview (routes.rs:578 / mcp/routes.rs:1036). Each call re-materializes the entire history in memory and re-sorts/re-hashes it; repeated concurrent calls multiply the RSS spike and CPU burn.",
+    "why": "Scoped to own data (not IDOR), but fully unbounded in-memory materialization plus per-request recomputation is a real resource-exhaustion path for a public launch, reachable by automated MCP clients that inflate dataset size quickly.",
+    "fixSketch": "Bound the fact query with a rolling time window and/or compute aggregates in SQL; cache computed PR events; avoid pulling complete lifetime set history on every overview request.",
+    "survives": true,
+    "status": "verified",
+    "refutes": 0,
+    "votes": 1,
+    "verdicts": [
+      {
+        "title": "Progress overview loads entire user set history into memory and recomputes PRs in Rust on every call",
+        "refuted": false,
+        "reason": "Confirmed. get_progress_set_facts() (progress.rs:968-1022) runs a single SELECT joining sets/exercises/workouts scoped by user_id with no LIMIT and no time-window predicate, fetch_all-ing every set the user has ever logged into a Vec<SetFact>. get_progress_overview() (line 771-773) calls this on every invocation and then runs detect_pr_events()/detect_recent_best_events() over the full in-memory Vec before doing further period-scoped queries. There is no caching between calls and no bound on set count, so the claimed O(total sets) memory/CPU cost per request is accurate as written."
+      }
+    ]
+  },
+  {
+    "title": "TOCTOU on single-active-session check in start_workout_from_template",
+    "severity": "low",
+    "category": "correctness",
+    "file": "server/src/db/templates.rs",
+    "line": "396-447",
+    "description": "The 'you already have an active session' guard runs as a standalone COUNT query on the pool (lines 396-405) BEFORE the transaction that inserts the workout is begun (tx = pool.begin() at line 415). The uniqueness invariant (at most one workout with end_time <= start_time per user) is checked outside the write transaction, so two concurrent requests can both observe active_count == 0 and both insert an active workout.",
+    "attackOrTrigger": "A user or MCP agent fires two start_workout_from_template requests (routes.rs:173 / mcp/routes.rs:1126) nearly simultaneously. Both pass the active_count==0 check before either commits, producing two simultaneously-active sessions, violating the invariant and confusing downstream auto-close/active-session logic.",
+    "why": "Own-data only, not corrupting other users, so low severity, but it defeats a stated business invariant and the non-atomic check-then-act pattern lets clients create inconsistent state under normal double-submit conditions.",
+    "fixSketch": "Perform the active-session COUNT inside the same transaction that inserts the new workout, or enforce a partial unique index on user_id WHERE end_time <= start_time so concurrent inserts fail atomically.",
+    "survives": true,
+    "status": "unverified",
+    "refutes": 0,
+    "votes": 0,
+    "verdicts": []
+  }
+]

@@ -50,6 +50,7 @@ pub struct OAuthRefreshToken {
     pub user_disabled_at: Option<DateTime<Utc>>,
     pub user_must_change_password: bool,
     pub client_disabled_at: Option<DateTime<Utc>>,
+    pub family_id: Option<String>,
 }
 
 fn parse_scopes(raw: &str) -> Result<Vec<String>, AppError> {
@@ -226,6 +227,36 @@ impl Database {
         Ok(result.rows_affected() == 1)
     }
 
+    /// Revoke every live OAuth access and refresh token for a user. Used when a
+    /// password changes so leaked bearer tokens cannot outlive the rotation (B-MED-4).
+    pub async fn revoke_all_oauth_tokens_for_user(&self, user_id: i64) -> Result<(), AppError> {
+        let pool = self.pool().await;
+        sqlx::query(
+            r#"
+            UPDATE oauth_access_tokens
+            SET revoked_at = CURRENT_TIMESTAMP
+            WHERE user_id = ? AND revoked_at IS NULL
+            "#,
+        )
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .map_err(AppError::DatabaseError)?;
+
+        sqlx::query(
+            r#"
+            UPDATE oauth_refresh_tokens
+            SET revoked_at = CURRENT_TIMESTAMP
+            WHERE user_id = ? AND revoked_at IS NULL
+            "#,
+        )
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .map_err(AppError::DatabaseError)?;
+        Ok(())
+    }
+
     pub async fn create_oauth_access_token(
         &self,
         token_hash: &str,
@@ -233,12 +264,13 @@ impl Database {
         user_id: i64,
         scopes_json: &str,
         expires_at: DateTime<Utc>,
+        family_id: &str,
     ) -> Result<(), AppError> {
         let pool = self.pool().await;
         sqlx::query(
             r#"
-            INSERT INTO oauth_access_tokens (token_hash, client_id, user_id, scopes_json, expires_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO oauth_access_tokens (token_hash, client_id, user_id, scopes_json, expires_at, family_id)
+            VALUES (?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(token_hash)
@@ -246,6 +278,7 @@ impl Database {
         .bind(user_id)
         .bind(scopes_json)
         .bind(expires_at)
+        .bind(family_id)
         .execute(&pool)
         .await
         .map_err(AppError::DatabaseError)?;
@@ -259,12 +292,13 @@ impl Database {
         user_id: i64,
         scopes_json: &str,
         expires_at: DateTime<Utc>,
+        family_id: &str,
     ) -> Result<(), AppError> {
         let pool = self.pool().await;
         sqlx::query(
             r#"
-            INSERT INTO oauth_refresh_tokens (token_hash, client_id, user_id, scopes_json, expires_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO oauth_refresh_tokens (token_hash, client_id, user_id, scopes_json, expires_at, family_id)
+            VALUES (?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(token_hash)
@@ -272,6 +306,36 @@ impl Database {
         .bind(user_id)
         .bind(scopes_json)
         .bind(expires_at)
+        .bind(family_id)
+        .execute(&pool)
+        .await
+        .map_err(AppError::DatabaseError)?;
+        Ok(())
+    }
+
+    /// Revoke every live access and refresh token in a rotation family. Used on
+    /// refresh-token reuse detection (B-MED-2).
+    pub async fn revoke_oauth_token_family(&self, family_id: &str) -> Result<(), AppError> {
+        let pool = self.pool().await;
+        sqlx::query(
+            r#"
+            UPDATE oauth_access_tokens
+            SET revoked_at = CURRENT_TIMESTAMP
+            WHERE family_id = ? AND revoked_at IS NULL
+            "#,
+        )
+        .bind(family_id)
+        .execute(&pool)
+        .await
+        .map_err(AppError::DatabaseError)?;
+        sqlx::query(
+            r#"
+            UPDATE oauth_refresh_tokens
+            SET revoked_at = CURRENT_TIMESTAMP
+            WHERE family_id = ? AND revoked_at IS NULL
+            "#,
+        )
+        .bind(family_id)
         .execute(&pool)
         .await
         .map_err(AppError::DatabaseError)?;
@@ -364,6 +428,7 @@ impl Database {
                 ort.scopes_json,
                 ort.expires_at,
                 ort.revoked_at,
+                ort.family_id,
                 u.disabled_at as user_disabled_at,
                 u.must_change_password,
                 oc.disabled_at as client_disabled_at
@@ -403,6 +468,7 @@ impl Database {
             client_disabled_at: row
                 .try_get("client_disabled_at")
                 .map_err(AppError::DatabaseError)?,
+            family_id: row.try_get("family_id").map_err(AppError::DatabaseError)?,
         }))
     }
 
@@ -432,6 +498,7 @@ impl Database {
         scopes_json: &str,
         access_expires_at: DateTime<Utc>,
         refresh_expires_at: DateTime<Utc>,
+        family_id: &str,
     ) -> Result<bool, AppError> {
         let pool = self.pool().await;
         let mut tx = pool.begin().await.map_err(AppError::DatabaseError)?;
@@ -457,8 +524,8 @@ impl Database {
 
         sqlx::query(
             r#"
-            INSERT INTO oauth_access_tokens (token_hash, client_id, user_id, scopes_json, expires_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO oauth_access_tokens (token_hash, client_id, user_id, scopes_json, expires_at, family_id)
+            VALUES (?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(next_access_token_hash)
@@ -466,14 +533,15 @@ impl Database {
         .bind(user_id)
         .bind(scopes_json)
         .bind(access_expires_at)
+        .bind(family_id)
         .execute(&mut *tx)
         .await
         .map_err(AppError::DatabaseError)?;
 
         sqlx::query(
             r#"
-            INSERT INTO oauth_refresh_tokens (token_hash, client_id, user_id, scopes_json, expires_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO oauth_refresh_tokens (token_hash, client_id, user_id, scopes_json, expires_at, family_id)
+            VALUES (?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(next_refresh_token_hash)
@@ -481,6 +549,7 @@ impl Database {
         .bind(user_id)
         .bind(scopes_json)
         .bind(refresh_expires_at)
+        .bind(family_id)
         .execute(&mut *tx)
         .await
         .map_err(AppError::DatabaseError)?;
@@ -645,7 +714,14 @@ impl Database {
         let hash = hash_session_token(raw_token);
         let scopes_json = serde_json::to_string(scopes)
             .map_err(|e| AppError::InternalError(format!("failed to encode scopes: {e}")))?;
-        self.create_oauth_access_token(&hash, client_id, user_id, &scopes_json, expires_at)
-            .await
+        self.create_oauth_access_token(
+            &hash,
+            client_id,
+            user_id,
+            &scopes_json,
+            expires_at,
+            "test-family",
+        )
+        .await
     }
 }

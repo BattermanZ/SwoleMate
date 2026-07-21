@@ -14,11 +14,19 @@ vi.mock('$lib/offline/storage', () => storageMocks);
 describe('offline today sessions', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		localStorage.clear();
 	});
 
-	it('builds stable prefixed keys', async () => {
+	it('builds user-scoped keys, and an explicit anon namespace when no user (F-LOW-2)', async () => {
 		const { sessionKeyForId } = await import('$lib/offline/todaySessions');
-		expect(sessionKeyForId(42)).toBe('offline.today.session.42');
+
+		// No active user: keys are namespaced under `anon:` (never the bare base
+		// key), so they can't collide with a real user's `u<id>:` scoped reads.
+		expect(sessionKeyForId(42)).toBe('anon:offline.today.session.42');
+
+		// With an active user, keys are scoped to that user.
+		localStorage.setItem('auth.activeUserId', '7');
+		expect(sessionKeyForId(42)).toBe('u7:offline.today.session.42');
 	});
 
 	it('filters null entries and sorts records by updated_at descending', async () => {

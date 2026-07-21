@@ -132,11 +132,16 @@ export function createExerciseSetActions(args: { state: TodayState }) {
 				]
 			});
 
-			state.currentSession.set({
-				...session,
-				exercises: session.exercises.map((e) =>
-					e.id === exerciseId ? { ...e, status: 'done' as const, endedAt } : e
-				)
+			// Merge into the live store rather than overwriting a pre-await snapshot,
+			// so concurrent edits (sets/notes on other exercises) survive (F-HIGH-1).
+			state.currentSession.update((current) => {
+				if (!current) return current;
+				return {
+					...current,
+					exercises: current.exercises.map((e) =>
+						e.id === exerciseId ? { ...e, status: 'done' as const, endedAt } : e
+					)
+				};
 			});
 			state.openExerciseIds.update((current) => current.filter((id) => id !== exerciseId));
 		} catch (e) {
@@ -201,25 +206,30 @@ export function createExerciseSetActions(args: { state: TodayState }) {
 				notes: undefined
 			});
 
-			state.currentSession.set({
-				...session,
-				exercises: session.exercises.map((e) => {
-					if (e.id !== exerciseId) return e;
-					return {
-						...e,
-						sets: [
-							...e.sets,
-							{
-								id: created.id ?? 0,
-								reps,
-								weight,
-								weightLeft,
-								weightRight,
-								durationSeconds
-							}
-						]
-					};
-				})
+			// Merge into the live store rather than overwriting a pre-await snapshot,
+			// so a set logged on another exercise during the await survives (F-HIGH-1).
+			state.currentSession.update((current) => {
+				if (!current) return current;
+				return {
+					...current,
+					exercises: current.exercises.map((e) => {
+						if (e.id !== exerciseId) return e;
+						return {
+							...e,
+							sets: [
+								...e.sets,
+								{
+									id: created.id ?? 0,
+									reps,
+									weight,
+									weightLeft,
+									weightRight,
+									durationSeconds
+								}
+							]
+						};
+					})
+				};
 			});
 		} catch (e) {
 			if (isNetworkFailure(e)) {

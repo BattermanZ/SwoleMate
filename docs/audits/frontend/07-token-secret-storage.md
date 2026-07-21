@@ -1,0 +1,25 @@
+# Token / secret storage & leakage
+
+2 confirmed (both low/unverified), 0 refuted.
+
+## Confirmed findings
+
+### LOW [security]: Stale auth.lastUser in localStorage lets a shared-device holder briefly see the previous user's identity and cached offline workouts (unverified)
+
+- **Trigger:** Shared/kiosk device: user A uses the PWA and closes the tab without logging out. User B opens the app; while offline (or before the online authMe refresh resolves) B sees A's username/role and A's cached offline workout sessions. Online, the 401 path clears it, so the window is brief.
+- **Location:** `client/src/lib/auth/index.ts:102-127`
+- **What happens:** persistUser() writes the PublicUser (id, username, role, must_change_password) to localStorage under 'auth.lastUser', and createAuthStore() boots optimistically from it (readStoredUser → setActiveUserId → state.user = initialUser) BEFORE any network refresh. auth.lastUser is only cleared on an explicit logout()/401 (handleUnauthorized → persistUser(null)); if the user simply closes the tab it persists indefinitely. On next open the app renders as that user (settings shows their username/role Badge at settings/+page.svelte:254-259) and getActiveUserId() returns their id, so scoped offline session data (u{id}:offline.today.session.*) is loaded and shown until refresh() returns 401.
+- **Why:** Real client-side identity/data leak on a shared device, but bounded: personal-use PWA, the httpOnly cookie remains the real auth gate, and a network refresh clears both the stored user and scoped offline data. Recoverable and short-lived, hence low.
+- **Fix sketch:** Do not treat auth.lastUser as authenticated at boot (start in 'unknown', trust it only after authMe succeeds), or clear auth.lastUser + activeUserId inside clearClientSensitiveData so a cross-user boot cannot surface the prior user's scoped data before the network check resolves.
+
+### LOW [security]: Startup log captures full window.location.href and navigator.userAgent (unverified)
+
+- **Trigger:** No current exfiltration path. Becomes a leak only if a future change lets info-level logs reach /api/logs or production console while a sensitive value is present in the URL query string.
+- **Location:** `client/src/lib/logger.ts:50-53`
+- **What happens:** The Logger constructor emits an 'info' entry containing url: window.location.href and userAgent: navigator.userAgent. Today this is defense-in-depth only: info-level entries are filtered by shouldSendRemotely() (warn/error only) so are never POSTed to /api/logs, and console output for info is gated to DEV. The concern is fragility: if the remote-send threshold or console gating is ever loosened, this line would ship the full URL (query string included) and UA off-device.
+- **Why:** Not an active leak in this build; purely a hardening/robustness gap. Rated low.
+- **Fix sketch:** Log only location.pathname (drop query/hash) and omit or coarsen userAgent; keep the shouldSendRemotely() warn/error gate as the single source of truth for what leaves the device.
+
+## Refuted (not real / already handled)
+
+None.

@@ -1,0 +1,45 @@
+# Sync-on-reconnect / offline mutation queue
+
+**Summary:** 3 confirmed (1 high, 2 medium), 0 refuted.
+
+## Confirmed findings
+
+### HIGH [data-integrity]: No idempotency key on createWorkout/createExercise: a lost HTTP response duplicates the workout/exercise (and its sets) on reconnect replay
+
+**Trigger:** Fully-offline session (negative id) with pending edits. Connectivity flaps back, window 'online' fires syncPendingSessions → syncOne → createWorkout POST commits server-side but the connection drops before the 201 returns. isNetworkFailure() true → record stays, server_workout_id still undefined. Next reconnect re-runs createWorkout → duplicate workout. Same path for createExercise mid-loop → duplicate exercise carrying a duplicated replaceSets set list.
+
+**Location:** `client/src/lib/today/controller/offline.ts:187-227`
+
+**What happens:** syncOne creates server-side records with non-idempotent POSTs and only writes its checkpoint (server_workout_id / server_exercise_ids_by_local) AFTER the await resolves. createWorkout (line 188-195) and createExercise (line 201-226) send plain POSTs via api.ts (createWorkout api.ts:93-108, createExercise api.ts:154-170) with no Idempotency-Key / client-id header anywhere in the codebase. If the request reaches the Rust backend and the row is committed, but the response is lost before it arrives (TCP drop the instant connectivity flaps back — exactly when the online handler fires syncPendingSessions), the await rejects with a fetch TypeError, isNetworkFailure() catches it in syncPendingSessions (actions/sync.ts:69-74) and setOffline() is called with the checkpoint never written. On the next 'online' event syncOne re-runs createWorkout/createExercise from scratch and creates a SECOND workout (or second exercise with a fresh replaceSets), so the user's logged session is silently duplicated on the server.
+
+**Why:** Replay is at-least-once with no server-side dedup handle from the client, so any lost response on the two non-idempotent creates duplicates a user's logged workout data. replaceSets (PUT, full replace) and endExercise/endWorkout are naturally idempotent, so the gap is specifically the two POST creates.
+
+**Fix sketch:** Generate a stable client-side idempotency token per offline entity (e.g. derived from the negative local id) and send it as an Idempotency-Key header on createWorkout/createExercise so the backend can dedup a retried create; or have the backend return the existing row for a duplicate token. Persist the token in the offline record so it stays stable across retries.
+
+### MEDIUM [data-integrity]: refreshFromBackend deletes an offline record with unsynced edits when the server session was completed elsewhere, silently dropping the local edits
+
+**Trigger:** Start a workout on device A (server session id 5, active). Device A goes offline and logs more sets → offline in_progress record for session 5 with server_workout_id=5. The same session is ended on device B. Device A reconnects: refreshFromBackend finds no active workout, offlineSessionId=5 is present in workouts (now completed) → isAlreadyCompleted → deleteOfflineSession → the offline sets are discarded, never synced.
+
+**Location:** `client/src/lib/today/controller/actions/backend.ts:56-68`
+
+**What happens:** In the no-active-server-workout branch, when an offline in_progress record maps to a server workout id (server_workout_id, positive), refreshFromBackend checks isAlreadyCompleted = offlineSessionId > 0 && workouts.some(w => w.id === offlineSessionId) and, if true, calls deleteOfflineSession(offlineInProgress.key) and clears currentSession. That offline record only exists because it carries unsynced local edits. If the server-started session was ENDED on another device, it now appears in the workouts list as a completed (non-active) workout, so isAlreadyCompleted is true and the record — including sets/edits logged offline that were never pushed — is deleted without ever calling syncOne. The offline edits are lost with no notice.
+
+**Why:** The heuristic 'server workout id is in the list ⇒ already synced/completed' conflates 'completed on server' with 'local edits already pushed'. The record can be present precisely because edits are still pending, so deletion is silent data loss under a multi-device end sequence.
+
+**Fix sketch:** Before deleting, push the pending edits (run syncOne / replaceSets against the completed workout) or surface a conflict notice instead of unconditionally deleting; only delete when the record has no unsynced deltas beyond what the server already holds.
+
+### MEDIUM [data-integrity]: submitEndSession online path: a mid-flight network failure in the endExercise Promise.all loses the selected mood/feedback and leaves the workout un-ended
+
+**Trigger:** Online, tap End Workout, pick a mood + notes. Connection drops during the parallel endExercise calls. isNetworkFailure → persistInProgressSession saves in_progress WITHOUT end_mood. Reconnect syncs exercises, skips endWorkout, deletes record. refreshFromBackend re-shows the still-active session; the chosen mood/feedback is gone and the user must re-end.
+
+**Location:** `client/src/lib/today/controller/actions/session.ts:308-349`
+
+**What happens:** When ending a session while online, submitEndSession fires endExercise for every not-done exercise via Promise.all (line 309-328), then endWorkout (line 330-334). On a network failure partway through the Promise.all, some exercises are ended server-side, endWorkout is never called, and the catch (line 345-349) treats it as offline: it calls persistInProgressSession(state), which saves the record with status 'in_progress' and does NOT carry end_mood or end_notes (offline.ts:89-110). The user-selected mood/feedback and end notes captured in the end modal are dropped. On reconnect syncOne re-ends the exercises but, because the record is in_progress with no end_mood, it never calls endWorkout (offline.ts:269) and then deletes the positive-id record (offline.ts:283-285). The workout is left active on the server with the mood/feedback lost.
+
+**Why:** The end-of-session mutation is not treated as a single queued 'pending_sync' unit on the online failure path (unlike the offline branch at line 291-301 which correctly stores end_mood/end_notes), so the completion intent and feedback are silently lost. Recoverable only because the session reappears active, but the logged mood/notes are gone.
+
+**Fix sketch:** In the online submitEndSession catch, persist a pending_sync record carrying end_mood/end_notes (mirror the offline branch) instead of calling persistInProgressSession, so syncOne finishes the endWorkout with the captured feedback on reconnect.
+
+## Refuted (not real / already handled)
+
+(No refuted findings.)

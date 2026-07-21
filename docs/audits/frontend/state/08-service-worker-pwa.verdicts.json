@@ -1,0 +1,40 @@
+[
+  {
+    "title": "skipWaiting + activate cache-purge forces a mid-session full reload / broken route navigation after a deploy",
+    "severity": "medium",
+    "category": "data-integrity",
+    "file": "client/src/service-worker.ts",
+    "line": "33, 38-47, 66-69",
+    "description": "The install handler calls sw.skipWaiting() (line 33) and the activate handler deletes every cache whose key is not the new swolemate-cache-<version> (line 42) then clients.claim() (line 44). The moment a new build finishes precaching, the new SW activates and purges the OLD version cache holding all old hashed /_app/immutable/ chunks — while a client still running the OLD build (e.g. a user mid-workout on the Today live logger) is now controlled by the new SW. Any subsequent lazy chunk import from the old page (SvelteKit navigation to /workouts, /progress, a lazily-imported component) requests an OLD hashed URL; the new SW's cacheFirst (line 49) misses (new cache only has new hashes) and falls through to network; on adapter-static the old-hash file has been overwritten by the deploy, so it 404s, the dynamic import rejects, and SvelteKit falls back to a full-page reload. There is no 'update available' prompt and no controllerchange gating — the reload happens mid-session.",
+    "attackOrTrigger": "User on '/' (Today) with an in-progress session; a new version deploys while the tab is open. New SW installs, skipWaiting+claim, deletes old cache. User taps History (or any route needing a not-yet-loaded chunk) → old-hash chunk 404 → SvelteKit forces a full page reload mid-session.",
+    "why": "Committed sets are persisted to IndexedDB after each action (persistInProgressSession in client/src/lib/today/controller/offline.ts, called from sets.ts/core.ts/settings.ts) and rehydrated on boot, so logged sets survive — hence medium not critical. But any not-yet-submitted input in the live logger (a typed-but-unsaved set, an in-progress note) is lost, and the view reloads mid-set. This is exactly the 'update flow that forces a reload mid-session' hazard, the classic reason SPAs avoid unconditional skipWaiting.",
+    "fixSketch": "Do not skipWaiting/clients.claim unconditionally. Let the new SW wait, detect registration.waiting from the page, and surface a user-triggered 'Update ready — reload' affordance (suppressed while a live session is in progress). At minimum keep the previous version's immutable chunks reachable so an old client can finish its session without a hard-404 reload.",
+    "survives": true,
+    "status": "verified",
+    "refutes": 0,
+    "votes": 1,
+    "verdicts": [
+      {
+        "title": "skipWaiting + activate cache-purge forces a mid-session full reload / broken route navigation after a deploy",
+        "refuted": false,
+        "reason": "Code-truth confirms the mechanism exactly as cited: install() calls sw.skipWaiting() unconditionally (line 33) with no gating; activate() deletes every cache key not equal to the current CACHE (lines 41-42) then calls clients.claim() (line 44) — also unconditional, no controllerchange messaging or update-prompt logic exists anywhere in this file. The fetch handler's cacheFirst path for /_app/immutable/ (lines 66-69) only checks the current-version cache via caches.open(CACHE), so a stale client requesting an old-hash chunk after purge falls through to network as claimed. No guard/early-return anywhere in this file prevents the described sequence."
+      }
+    ]
+  },
+  {
+    "title": "SW cache-exclusion only covers /api/; same-origin GET to /oauth, /mcp, /.well-known falls through to the shared cache",
+    "severity": "low",
+    "category": "security",
+    "file": "client/src/service-worker.ts",
+    "line": "96-100",
+    "description": "The comment at line 96 states 'Never cache API responses (avoids leaking authenticated data across users)', but the guard at line 97 only matches url.pathname.startsWith('/api/'). The proxy seam also exposes /oauth, /mcp and /.well-known as same-origin paths (vite.config.ts proxy; settings/+page.svelte builds `${origin}/mcp`). Any same-origin GET to one of those paths returning a 200 basic response falls through to the catch-all cacheFirst at line 100 and is stored in the single shared swolemate-cache-<version> bucket keyed only by URL with no per-user scoping; cacheFirst then serves it before the network on a later request (including a different user on a shared device). Navigations to /oauth* are additionally captured by the navigate branch and written under the '/' key (line 80), which could poison the offline shell.",
+    "attackOrTrigger": "A GET to /oauth/... or /.well-known/... returns 200; cacheFirst stores it. On the same device the next user's identical GET is served the cached copy instead of a fresh per-identity response.",
+    "why": "In practice the SPA drives all data through /api/ (client/src/lib/api.ts), the /mcp and /oauth surfaces target external MCP clients, and logout sweeps swolemate-cache-* (client/src/lib/auth/index.ts), so real exposure is narrow — hence low. But the exclusion list not matching its stated intent is a defense-in-depth gap on exactly the paths the comment is meant to protect.",
+    "fixSketch": "Broaden the non-cache guard to all backend-proxied prefixes (/api/, /mcp, /oauth, /.well-known) and exclude those paths from the navigate-branch cache.put('/') as well, so no identity-scoped response can enter the shared cache.",
+    "survives": true,
+    "status": "unverified",
+    "refutes": 0,
+    "votes": 0,
+    "verdicts": []
+  }
+]

@@ -2,7 +2,7 @@ use crate::backup::{self, BackupType};
 use crate::middleware::{AdminUser, CurrentUser};
 use crate::services::{exercises, progress, templates, workouts};
 use crate::{db::Database, errors::AppError, models::*};
-use actix_web::{delete, get, post, put, web, HttpResponse};
+use actix_web::{delete, get, post, put, web, HttpRequest, HttpResponse};
 use log::{debug, error, info, warn};
 use serde::Deserialize;
 use serde_json::json;
@@ -32,8 +32,20 @@ pub async fn health_check() -> HttpResponse {
     }))
 }
 
+/// Read an optional client-supplied `Idempotency-Key` header, trimmed and length-
+/// bounded so a hostile client cannot bloat the dedup table (F-HIGH-3).
+fn idempotency_key(req: &HttpRequest) -> Option<String> {
+    req.headers()
+        .get("Idempotency-Key")
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && s.len() <= 200)
+        .map(str::to_owned)
+}
+
 #[post("/api/workouts")]
 pub async fn create_workout(
+    http_req: HttpRequest,
     user: CurrentUser,
     db: web::Data<Database>,
     workout_req: web::Json<CreateWorkoutRequest>,
@@ -41,7 +53,9 @@ pub async fn create_workout(
     workout_req
         .validate()
         .map_err(|e| AppError::BadRequest(e))?;
-    let workout_id = workouts::create_workout(db.get_ref(), user.0.id, &workout_req.0).await?;
+    let key = idempotency_key(&http_req);
+    let workout_id =
+        workouts::create_workout(db.get_ref(), user.0.id, &workout_req.0, key.as_deref()).await?;
     Ok(HttpResponse::Created().json(json!({
         "id": workout_id,
         "message": "Workout created successfully"
@@ -179,6 +193,7 @@ pub async fn start_workout_from_template(
 
 #[post("/api/workouts/{workout_id}/exercises")]
 pub async fn create_exercise(
+    http_req: HttpRequest,
     user: CurrentUser,
     db: web::Data<Database>,
     workout_id: web::Path<i64>,
@@ -187,8 +202,15 @@ pub async fn create_exercise(
     exercise_req
         .validate()
         .map_err(|e| AppError::BadRequest(e))?;
-    let exercise_id =
-        exercises::create_exercise(db.get_ref(), user.0.id, *workout_id, &exercise_req.0).await?;
+    let key = idempotency_key(&http_req);
+    let exercise_id = exercises::create_exercise(
+        db.get_ref(),
+        user.0.id,
+        *workout_id,
+        &exercise_req.0,
+        key.as_deref(),
+    )
+    .await?;
     Ok(HttpResponse::Created().json(json!({
         "id": exercise_id,
         "message": "Exercise created successfully"
@@ -298,6 +320,9 @@ pub async fn write_logs(_user: CurrentUser, logs: web::Json<Vec<ClientLogEntry>>
 
         let mut prefix = format!("component={}", target);
         if let Some(ts) = entry.timestamp.as_deref() {
+            // Sanitize like the other free-text fields — appending the raw value let
+            // an embedded newline forge additional log lines (B-LOW-5).
+            let ts = sanitize_log_field(ts, 64);
             if !ts.is_empty() {
                 prefix.push_str(&format!(" client_ts={}", ts));
             }
@@ -310,7 +335,14 @@ pub async fn write_logs(_user: CurrentUser, logs: web::Json<Vec<ClientLogEntry>>
                     if s.len() <= 2048 {
                         Some(s)
                     } else {
-                        Some(format!("{}…", &s[..2048]))
+                        // serde_json emits non-ASCII as raw UTF-8, so a fixed byte
+                        // slice can land mid-character and panic (worker abort DoS).
+                        // Floor to a char boundary before slicing (B-MED-6).
+                        let mut end = 2048;
+                        while end > 0 && !s.is_char_boundary(end) {
+                            end -= 1;
+                        }
+                        Some(format!("{}…", &s[..end]))
                     }
                 });
                 if let Some(meta) = metadata_str {
@@ -435,39 +467,68 @@ pub async fn restore_backup(
         return Err(AppError::BadRequest("Invalid backup filename".to_string()));
     }
 
-    // Close all existing connections in the pool
-    let current_pool = db.pool().await;
-    current_pool.close().await;
+    // Validate the archive BEFORE tearing down the live pool. A corrupt / truncated
+    // / db-less archive is rejected here with the pool still intact, so a bad restore
+    // request can no longer take the whole app down (B-MED-8).
+    if let Err(e) = backup::validate_backup_archive(&filename) {
+        error!("Rejected restore of invalid backup {}: {}", filename.as_str(), e);
+        return Err(AppError::BadRequest(format!(
+            "Backup archive is invalid or unreadable: {e}"
+        )));
+    }
 
-    // Wait for all connections to be dropped
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
-    // Perform the restore
-    backup::restore_backup(&filename).await.map_err(|e| {
-        error!("Failed to restore backup: {}", e);
-        AppError::InternalError(e.to_string())
-    })?;
-
-    // Wait for filesystem operations to complete
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
-    // Create a new connection pool with WAL mode disabled temporarily
     let db_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "sqlite:database/swolemate.db".to_string());
 
-    // Try to connect multiple times with increasing delays
-    let mut retry_count = 0;
+    // Close all existing connections in the pool.
+    let current_pool = db.pool().await;
+    current_pool.close().await;
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+    // Perform the restore, capturing (not propagating) the result so we ALWAYS
+    // re-establish a working pool afterwards — even on failure. If the restore
+    // failed, restore_backup leaves the original database file intact, so the
+    // rebuilt pool serves the pre-restore data rather than a closed pool (B-MED-8).
+    let restore_result = backup::restore_backup(&filename).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    match rebuild_sqlite_pool(&db_url).await {
+        Ok(new_pool) => db.replace_pool(new_pool).await,
+        Err(e) => {
+            // Genuinely unrecoverable (the database file itself is gone/unopenable).
+            error!("Failed to re-establish DB pool after restore attempt: {}", e);
+            return Err(AppError::DatabaseError(e));
+        }
+    }
+
+    match restore_result {
+        Ok(()) => Ok(HttpResponse::Ok().json(json!({
+            "message": "Backup restored successfully"
+        }))),
+        Err(e) => {
+            error!("Failed to restore backup: {}", e);
+            Err(AppError::InternalError(e.to_string()))
+        }
+    }
+}
+
+/// Build a fresh SQLite pool (with the app's PRAGMAs) with a few retries. Returns
+/// the pool so the caller can swap it in; used by restore so a failed restore
+/// never leaves the shared pool closed.
+async fn rebuild_sqlite_pool(
+    db_url: &str,
+) -> Result<sqlx::Pool<sqlx::Sqlite>, sqlx::Error> {
     let max_retries = 3;
+    let mut retry_count = 0;
     let mut last_error = None;
 
     while retry_count < max_retries {
         match sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(5)
-            .connect(&db_url)
+            .connect(db_url)
             .await
         {
             Ok(new_pool) => {
-                // Disable WAL mode temporarily to ensure database consistency
                 if let Err(e) = sqlx::query("PRAGMA journal_mode = DELETE")
                     .execute(&new_pool)
                     .await
@@ -482,7 +543,6 @@ pub async fn restore_backup(
                     continue;
                 }
 
-                // Re-enable WAL mode and other optimizations
                 let mut pragma_ok = true;
                 for pragma in [
                     "PRAGMA journal_mode = WAL",
@@ -508,11 +568,7 @@ pub async fn restore_backup(
                     continue;
                 }
 
-                // Update the database instance with the new pool
-                db.replace_pool(new_pool).await;
-                return Ok(HttpResponse::Ok().json(json!({
-                    "message": "Backup restored successfully"
-                })));
+                return Ok(new_pool);
             }
             Err(e) => {
                 last_error = Some(e);
@@ -523,10 +579,7 @@ pub async fn restore_backup(
         }
     }
 
-    // If we get here, all retries failed
-    Err(AppError::DatabaseError(last_error.unwrap_or_else(|| {
-        sqlx::Error::Protocol("restore retry failed".into())
-    })))
+    Err(last_error.unwrap_or_else(|| sqlx::Error::Protocol("restore retry failed".into())))
 }
 
 #[delete("/api/backups/{filename}")]
@@ -612,6 +665,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .service(admin::list_users)
         .service(admin::create_user)
         .service(admin::disable_user)
+        .service(admin::enable_user)
         .service(admin::reset_user_password)
         .service(admin::delete_user)
         .service(create_workout)

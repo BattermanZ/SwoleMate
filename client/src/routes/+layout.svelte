@@ -23,12 +23,27 @@
 	let currentPath = $derived($page.url.pathname);
 	let isLogin = $derived(currentPath === '/login');
 
+	// Only render protected page content once we actually know the session is
+	// valid. While auth is still 'unknown' (the initial /auth/me check is in
+	// flight) we must NOT flash cached data for a session that may already be
+	// revoked server-side (F-MED-8). The exception is offline mode: we can't
+	// verify with the server, so we trust the cached session — this preserves the
+	// offline-first experience.
+	let contentReady = $derived(
+		$authState.status === 'authenticated' ||
+			($authState.status === 'unknown' && $authState.offline)
+	);
+
 	$effect(() => {
 		if ($authState.status === 'unauthenticated' && !isLogin) {
 			void goto('/login');
 		}
 		if ($authState.status === 'authenticated' && isLogin) {
-			void goto('/');
+			// Send users flagged for a forced password change to /settings, not home.
+			// This effect races the login page's own post-login goto and, since
+			// isLogin is still true until navigation resolves, would otherwise win
+			// and drop a must-change-password user on '/' (F-LOW-4).
+			void goto($authState.user?.must_change_password ? '/settings' : '/');
 		}
 	});
 
@@ -177,7 +192,14 @@
 				</div>
 			{/if}
 			<main>
-				{@render children?.()}
+				{#if contentReady}
+					{@render children?.()}
+				{:else}
+					<div class="auth-pending" role="status" aria-live="polite">
+						<span class="spinner" aria-hidden="true"></span>
+						<span class="sr-only">Checking your session…</span>
+					</div>
+				{/if}
 			</main>
 		</div>
 
@@ -195,6 +217,41 @@
 		min-height: 100dvh;
 		display: flex;
 		flex-direction: column;
+	}
+	.auth-pending {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 50dvh;
+	}
+	.spinner {
+		width: 28px;
+		height: 28px;
+		border-radius: 50%;
+		border: 3px solid var(--color-border, rgba(128, 128, 128, 0.3));
+		border-top-color: var(--color-accent, #4f8cff);
+		animation: auth-spin 0.7s linear infinite;
+	}
+	@keyframes auth-spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.spinner {
+			animation-duration: 2s;
+		}
+	}
+	.sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		white-space: nowrap;
+		border: 0;
 	}
 	/* Chrome wrappers are layout-transparent on mobile so AppBar's sticky and
 	   BottomNav's fixed positioning behave as if direct children of .shell. */

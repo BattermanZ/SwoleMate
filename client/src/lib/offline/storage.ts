@@ -29,6 +29,9 @@ async function withStore<R>(
 		const request = fn(store);
 		request.onsuccess = () => resolve(request.result);
 		request.onerror = () => reject(request.error ?? new Error('IndexedDB request failed'));
+		// A quota abort can surface on the transaction rather than the request; without
+		// this the promise would hang instead of rejecting (F-MED-4).
+		tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
 	});
 }
 
@@ -38,6 +41,39 @@ function supportsIdb(): boolean {
 
 function lsKey(key: string): string {
 	return `swolemate:${key}`;
+}
+
+// Thrown when a local persist fails (IndexedDB quota / transaction abort, or the
+// localStorage fallback throwing). Distinct so callers can tell "your data was
+// NOT saved on this device" apart from a network failure (which IS recoverable
+// via later sync) and surface an accurate message (F-MED-4).
+export class StorageWriteError extends Error {
+	readonly quotaExceeded: boolean;
+	constructor(quotaExceeded: boolean, cause?: unknown) {
+		super(
+			quotaExceeded
+				? 'Could not save to this device — storage is full. Free up space to keep logging offline.'
+				: 'Could not save to this device.'
+		);
+		this.name = 'StorageWriteError';
+		this.quotaExceeded = quotaExceeded;
+		this.cause = cause;
+	}
+}
+
+export function isStorageWriteError(e: unknown): e is StorageWriteError {
+	return e instanceof StorageWriteError;
+}
+
+function isQuotaError(e: unknown): boolean {
+	if (typeof DOMException !== 'undefined' && e instanceof DOMException) {
+		return (
+			e.name === 'QuotaExceededError' ||
+			e.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+			e.code === 22
+		);
+	}
+	return e instanceof Error && /quota|storage.*full/i.test(e.message);
 }
 
 export async function kvGet<T>(key: string): Promise<T | null> {
@@ -61,11 +97,19 @@ export async function kvSet<T>(key: string, value: T): Promise<void> {
 	if (typeof window === 'undefined') return;
 
 	if (!supportsIdb()) {
-		localStorage.setItem(lsKey(key), JSON.stringify(value));
+		try {
+			localStorage.setItem(lsKey(key), JSON.stringify(value));
+		} catch (e) {
+			throw new StorageWriteError(isQuotaError(e), e);
+		}
 		return;
 	}
 
-	await withStore('readwrite', (store) => store.put({ key, value } satisfies KvEntry<T>));
+	try {
+		await withStore('readwrite', (store) => store.put({ key, value } satisfies KvEntry<T>));
+	} catch (e) {
+		throw new StorageWriteError(isQuotaError(e), e);
+	}
 }
 
 export async function kvDelete(key: string): Promise<void> {

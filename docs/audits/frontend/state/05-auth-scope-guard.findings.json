@@ -1,0 +1,48 @@
+{
+  "findings": [
+    {
+      "title": "A single 401 during an in-progress workout silently wipes all unsynced logged sets",
+      "severity": "critical",
+      "category": "data-integrity",
+      "file": "client/src/lib/auth/index.ts",
+      "line": "129-134, 26-66",
+      "description": "The global unauthorized handler calls clearClientSensitiveData(), which unconditionally deletes every offline in-progress session record from both localStorage and IndexedDB (kvListKeys('') filtered by the substrings 'offline.today.session.', 'currentWorkoutId', 'swolemate:currentWorkoutState' at lines 45-47 and 55-62). This handler is invoked for ANY 401 response via api.ts:73 (unauthorizedHandler?.() inside handleResponse). During a live workout the today controller makes ordinary authenticated API calls (e.g. loadEstimated1RmBaseline / loadLastTimeForExercise fire on every active exercise via +page.svelte:67-74, plus reconnect syncs). If the backend session cookie expires mid-session, the server restarts, or the server returns a transient/spurious 401, that call resolves to 401 -> handleUnauthorized -> clearClientSensitiveData deletes the persisted in-progress session, and the layout effect (+layout.svelte:26-33) then navigates to /login, destroying the in-memory currentSession store too. Every set logged in the current session that had not yet been persisted server-side is lost with no warning and no recovery.",
+      "attackOrTrigger": "Online, mid-workout. User logs several sets over a long session; backend session TTL lapses (or backend restarts). The next automatic API call the controller makes returns 401. The in-progress workout record is deleted from IndexedDB/localStorage and the user is bounced to /login. Sets are gone.",
+      "why": "This is exactly the rubric's critical case: silent loss of a user's logged workout. 401 mid-session is a routine, non-adversarial event (cookie expiry / redeploy), and the wipe is total and unrecoverable.",
+      "fixSketch": "On 401, do NOT delete in-progress / pending_sync offline session records. Only clear cached read-only data and session metadata; preserve unsynced workout records so they can be replayed after the user re-authenticates. Alternatively, gate the wipe behind an explicit user logout, and on 401 just flip auth status + redirect while keeping the offline session for post-login sync."
+    },
+    {
+      "title": "clearClientSensitiveData / user-switch destroys OTHER users' unsynced offline sessions on a shared device",
+      "severity": "high",
+      "category": "data-integrity",
+      "file": "client/src/lib/auth/index.ts",
+      "line": "53-63, 166-169",
+      "description": "Offline session records are per-user scoped keys of the form u{id}:offline.today.session.{n} (scope.ts:30-34, todaySessions.ts:22-24). But clearClientSensitiveData deletes by unscoped substring match: it lists ALL keys with kvListKeys('') and removes any whose name .includes('offline.today.session.') / 'offline.today.recentSessions' / 'today.plannedTemplate' / currentWorkoutId / currentWorkoutState (lines 55-62), and the same for localStorage (lines 37-47). Because the u{id}: prefix still contains those substrings, the clear wipes every user's records, not just the active user's. This runs on logout, on 401, and on user switch (login()/refresh() call clearClientSensitiveData when previousUserId differs, lines 142-144 and 166-169) BEFORE any sync attempt. So if user A ended a workout while offline (a pending_sync record that was never uploaded) and then user B logs in on the same browser, A's completed-but-unsynced workout is deleted permanently.",
+      "attackOrTrigger": "Shared device. User A finishes a workout offline (record status pending_sync, never synced). Without A syncing, user B signs in. login() sees previousUserId=A != B and calls clearClientSensitiveData, which substring-matches and deletes A's u{A}:offline.today.session.* record. A's workout is lost.",
+      "why": "The app deliberately scopes offline data per user for shared devices, so cross-user data destruction on switch/logout is a real, supported scenario. Deleting unsynced completed workouts with no upload attempt is silent data loss.",
+      "fixSketch": "Scope the deletion to the active user: build the filter from scopedKey(prefix)/getActiveUserId() so only u{activeId}: keys are removed, or match the exact scoped prefixes rather than a bare substring. Additionally, attempt to sync pending_sync records before clearing on user switch."
+    },
+    {
+      "title": "Protected routes render cached data during 'unknown' auth status (flash-of-content data leak)",
+      "severity": "medium",
+      "category": "security",
+      "file": "client/src/routes/+layout.svelte",
+      "line": "26-33, 147-149",
+      "description": "The auth store initializes status='unknown' with the user restored from localStorage (auth/index.ts:120-127). The layout only redirects to /login when status==='unauthenticated' (line 27); for status==='unknown' it falls through and renders the protected children immediately (line 147-149, the {#if isLogin} else branch). auth.refresh() validating the cookie is fired in onMount and resolves asynchronously. So on every cold load the last user's cached workout history/progress is painted before authMe confirms the session is still valid. If the cookie is expired or belongs to a different account, the previous user's logged data is visible on screen until the 401 comes back and clears it. Because the offline path also keeps status at 'unknown' (never 'unauthenticated') on a network failure (auth/index.ts:149-154), a revoked-but-offline user keeps seeing the cached data with no redirect.",
+      "attackOrTrigger": "Any cold load of a protected route (e.g. /workouts, /progress) with a stale auth.lastUser in localStorage: cached content flashes before validation. Sharper on a shared/borrowed device where the server session is no longer valid but localStorage still holds the prior user's cached data.",
+      "why": "Backend is the real authz gate, so this is data-leak/UX, not enforcement — hence medium. But it does surface one user's stored/cached workout data on-screen before the client can confirm authorization.",
+      "fixSketch": "Render a neutral loading/splash state (not protected children) while status==='unknown', or gate the else-branch on status==='authenticated'. Only reveal cached content once refresh() has confirmed authentication (or explicit offline-with-known-user)."
+    },
+    {
+      "title": "must_change_password redirect is overridden by the layout's authenticated->'/' effect",
+      "severity": "low",
+      "category": "security",
+      "file": "client/src/routes/login/+page.svelte",
+      "line": "17-20",
+      "description": "On successful login, submit() sets auth state to authenticated then navigates based on must_change_password: goto(mustChange ? '/settings' : '/') (lines 17-20). But the layout has a reactive effect that fires whenever status becomes authenticated while on /login and calls goto('/') (+layout.svelte:30-32). Since isLogin is $derived from the pathname which only updates after navigation resolves, the effect flush right after login() sees isLogin still true and issues goto('/'), which is the later of the two competing navigations and wins. A user flagged must_change_password is therefore dropped on '/' instead of the settings page where they'd change their password.",
+      "attackOrTrigger": "Admin creates a user with must_change_password=true. User logs in; instead of being routed to /settings to change the temporary password, they land on the home page.",
+      "why": "Low: the backend still enforces the password-change requirement on sensitive actions, so this is a UX/routing defect (weakened forced-password-change prompt), not an enforcement bypass.",
+      "fixSketch": "Have the layout effect respect must_change_password (redirect to /settings when set), or remove the client's authenticated->'/' auto-redirect on /login and let the login page own post-login routing."
+    }
+  ]
+}

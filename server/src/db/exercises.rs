@@ -2,6 +2,7 @@ use super::Database;
 use crate::{errors::AppError, models::*};
 use chrono::{DateTime, Utc};
 use log::{debug, error, info};
+use std::collections::HashMap;
 
 impl Database {
     pub async fn create_exercise(
@@ -420,12 +421,18 @@ impl Database {
             AppError::DatabaseError(e)
         })?;
 
+        let exercise_ids: Vec<i64> = rows
+            .iter()
+            .map(|row| {
+                row.id
+                    .ok_or_else(|| AppError::InternalError("Exercise row missing id".to_string()))
+            })
+            .collect::<Result<_, _>>()?;
+        let mut settings_by_exercise =
+            self.get_settings_for_exercises(user_id, &exercise_ids).await?;
+
         let mut exercises = Vec::with_capacity(rows.len());
-        for row in rows {
-            let id = row
-                .id
-                .ok_or_else(|| AppError::InternalError("Exercise row missing id".to_string()))?;
-            let settings = self.get_settings_for_exercise(user_id, id).await?;
+        for (row, id) in rows.into_iter().zip(exercise_ids) {
             exercises.push(Exercise {
                 id: Some(id),
                 workout_id: row.workout_id,
@@ -435,7 +442,7 @@ impl Database {
                 notes: row.notes,
                 per_side_weight: row.per_side_weight,
                 split_weight: row.split_weight,
-                settings,
+                settings: settings_by_exercise.remove(&id).unwrap_or_default(),
             });
         }
 
@@ -587,6 +594,88 @@ impl Database {
         })?;
 
         Ok(rows)
+    }
+
+    /// Batch-fetch sets for many exercises in a single query, grouped by
+    /// exercise_id. Avoids the N+1 fan-out of calling get_sets_for_exercise in a
+    /// loop (B-MED-9). Exercises with no sets are simply absent from the map.
+    pub async fn get_sets_for_exercises(
+        &self,
+        user_id: i64,
+        exercise_ids: &[i64],
+    ) -> Result<HashMap<i64, Vec<Set>>, AppError> {
+        let mut grouped: HashMap<i64, Vec<Set>> = HashMap::new();
+        if exercise_ids.is_empty() {
+            return Ok(grouped);
+        }
+
+        let pool = self.pool().await;
+        let placeholders = std::iter::repeat("?")
+            .take(exercise_ids.len())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "SELECT id, exercise_id, reps, weight, weight_left, weight_right, duration_seconds, notes \
+             FROM sets \
+             WHERE user_id = ? AND exercise_id IN ({placeholders}) \
+             ORDER BY id ASC"
+        );
+
+        let mut query = sqlx::query_as::<_, Set>(&sql).bind(user_id);
+        for id in exercise_ids {
+            query = query.bind(id);
+        }
+
+        let sets = query.fetch_all(&pool).await.map_err(|e| {
+            error!(target: "database", "Failed to batch-fetch sets: {}", e);
+            AppError::DatabaseError(e)
+        })?;
+
+        for set in sets {
+            grouped.entry(set.exercise_id).or_default().push(set);
+        }
+        Ok(grouped)
+    }
+
+    /// Batch-fetch settings for many exercises in a single query, grouped by
+    /// exercise_id. Avoids the N+1 fan-out of calling get_settings_for_exercise
+    /// in a loop (B-MED-9). Exercises with no settings are absent from the map.
+    pub async fn get_settings_for_exercises(
+        &self,
+        user_id: i64,
+        exercise_ids: &[i64],
+    ) -> Result<HashMap<i64, Vec<ExerciseSetting>>, AppError> {
+        let mut grouped: HashMap<i64, Vec<ExerciseSetting>> = HashMap::new();
+        if exercise_ids.is_empty() {
+            return Ok(grouped);
+        }
+
+        let pool = self.pool().await;
+        let placeholders = std::iter::repeat("?")
+            .take(exercise_ids.len())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "SELECT id, exercise_id, setting_key, setting_value \
+             FROM exercise_settings \
+             WHERE user_id = ? AND exercise_id IN ({placeholders}) \
+             ORDER BY id ASC"
+        );
+
+        let mut query = sqlx::query_as::<_, ExerciseSetting>(&sql).bind(user_id);
+        for id in exercise_ids {
+            query = query.bind(id);
+        }
+
+        let rows = query.fetch_all(&pool).await.map_err(|e| {
+            error!(target: "database", "Failed to batch-fetch exercise settings: {}", e);
+            AppError::DatabaseError(e)
+        })?;
+
+        for setting in rows {
+            grouped.entry(setting.exercise_id).or_default().push(setting);
+        }
+        Ok(grouped)
     }
 
     pub async fn delete_exercise(&self, user_id: i64, id: i64) -> Result<(), AppError> {

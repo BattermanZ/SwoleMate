@@ -50,8 +50,35 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler | null) {
 	unauthorizedHandler = handler;
 }
 
+// Ceiling on any single request. A fetch against a dead socket (common the
+// instant connectivity flaps back) can otherwise hang indefinitely and wedge the
+// reconnect sync loop / stall writes (F-MED-7). Generous enough for normal API
+// calls; callers needing longer (or none) can pass their own signal.
+const REQUEST_TIMEOUT_MS = 30_000;
+
+function requestTimeoutSignal(): AbortSignal | undefined {
+	if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+		return AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+	}
+	return undefined;
+}
+
+// JSON headers plus an optional Idempotency-Key so a retried offline-sync create
+// (whose original response was lost) is deduped server-side instead of creating a
+// duplicate workout/exercise (F-HIGH-3).
+function idempotencyHeaders(idempotencyKey?: string): Record<string, string> {
+	const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+	if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
+	return headers;
+}
+
 function withCredentials(init: RequestInit | undefined): RequestInit {
-	return { credentials: 'include', ...init };
+	const base: RequestInit = { credentials: 'include', ...init };
+	if (!base.signal) {
+		const signal = requestTimeoutSignal();
+		if (signal) base.signal = signal;
+	}
+	return base;
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
@@ -79,28 +106,38 @@ async function handleResponse<T>(response: Response): Promise<T> {
 	}
 
 	const contentType = response.headers.get('content-type') ?? '';
+	const text = await response.text().catch(() => '');
+
 	if (!contentType.includes('application/json')) {
-		// Defensive: treat non-JSON success bodies as "no payload" for this app.
+		// A 2xx carrying a non-empty, non-JSON body (e.g. an intercepting proxy's
+		// HTML page) never reached the backend as a real write. Reject it instead of
+		// reporting a successful no-payload write, so callers like the reconnect sync
+		// don't delete their retry copy after a write that didn't actually happen
+		// (F-LOW-3). A genuinely empty body stays an acceptable void success.
+		if (text.trim()) {
+			throw new ApiError(
+				response.status,
+				`Unexpected non-JSON response (content-type: ${contentType || 'none'})`
+			);
+		}
 		return undefined as T;
 	}
 
 	// Defensive: some endpoints may return an empty body with 200/201.
-	const text = await response.text().catch(() => '');
 	if (!text.trim()) return undefined as T;
 	return JSON.parse(text) as T;
 }
 
 export async function createWorkout(
 	workout: CreateWorkoutRequest,
-	fetcher: Fetcher = fetch
+	fetcher: Fetcher = fetch,
+	idempotencyKey?: string
 ): Promise<{ id: number }> {
 	const response = await fetcher(
 		`${API_BASE}/api/workouts`,
 		withCredentials({
 			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json'
-			},
+			headers: idempotencyHeaders(idempotencyKey),
 			body: JSON.stringify(workout)
 		})
 	);
@@ -154,15 +191,14 @@ export async function getWorkout(
 export async function createExercise(
 	workoutId: number,
 	exercise: CreateExerciseRequest,
-	fetcher: Fetcher = fetch
+	fetcher: Fetcher = fetch,
+	idempotencyKey?: string
 ): Promise<{ id: number }> {
 	const response = await fetcher(
 		`${API_BASE}/api/workouts/${workoutId}/exercises`,
 		withCredentials({
 			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json'
-			},
+			headers: idempotencyHeaders(idempotencyKey),
 			body: JSON.stringify(exercise)
 		})
 	);

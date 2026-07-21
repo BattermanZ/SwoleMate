@@ -1,0 +1,12 @@
+[
+  {
+    "idx": 1,
+    "verdicts": [
+      {
+        "title": "skipWaiting + activate cache-purge forces a mid-session full reload / broken route navigation after a deploy",
+        "refuted": false,
+        "reason": "Code-truth confirms the mechanism exactly as cited: install() calls sw.skipWaiting() unconditionally (line 33) with no gating; activate() deletes every cache key not equal to the current CACHE (lines 41-42) then calls clients.claim() (line 44) — also unconditional, no controllerchange messaging or update-prompt logic exists anywhere in this file. The fetch handler's cacheFirst path for /_app/immutable/ (lines 66-69) only checks the current-version cache via caches.open(CACHE), so a stale client requesting an old-hash chunk after purge falls through to network as claimed. No guard/early-return anywhere in this file prevents the described sequence."
+      }
+    ]
+  }
+]

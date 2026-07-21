@@ -90,8 +90,14 @@ pub async fn create_backup(backup_type: BackupType) -> Result<BackupInfo, std::i
         backup_type,
     };
 
-    // Create tar.gz file
-    let file = fs::File::create(&backup_path)?;
+    // Write to a temp file first and atomically rename into place only once the
+    // archive is fully written and flushed, so a crash or error mid-write can never
+    // leave a truncated/corrupt ".tar.gz" that list/restore would treat as valid
+    // (B-LOW-11). The ".partial" suffix is ignored by list_backups' ".tar.gz"
+    // filter, so a leftover temp is invisible to callers.
+    let tmp_filename = format!("{filename}.partial");
+    let tmp_path = backup_dir.join(&tmp_filename);
+    let file = fs::File::create(&tmp_path)?;
     let encoder = GzEncoder::new(file, Compression::default());
     let mut archive = Builder::new(encoder);
 
@@ -192,14 +198,69 @@ pub async fn create_backup(backup_type: BackupType) -> Result<BackupInfo, std::i
     header.set_cksum();
     archive.append_data(&mut header, "metadata.json", metadata.as_bytes())?;
 
-    // Finish the archive
-    archive.finish()?;
+    // Finish the tar, flush the gzip trailer, and fsync the temp file before the
+    // atomic rename so the published archive is always complete and durable. Any
+    // failure removes the temp file rather than leaving it behind.
+    let finalize = (|| -> Result<(), std::io::Error> {
+        let encoder = archive.into_inner()?; // writes the tar end blocks
+        let file = encoder.finish()?; // flushes the gzip stream
+        file.sync_all()?;
+        fs::rename(&tmp_path, &backup_path)?;
+        Ok(())
+    })();
+    if let Err(e) = finalize {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(e);
+    }
 
     // Clean up old backups
     cleanup_old_backups().await?;
 
     info!("Created {} backup: {}", backup_type, backup_info.filename);
     Ok(backup_info)
+}
+
+/// Validate that a backup archive is openable (gzip/tar intact) and contains a
+/// regular-file `database.db` entry, WITHOUT extracting anything. The restore
+/// handler runs this BEFORE tearing down the live DB pool, so a corrupt /
+/// truncated / db-less archive is rejected up front instead of leaving the app
+/// with a closed pool (B-MED-8). Rejecting a non-regular-file `database.db`
+/// entry is also defense-in-depth against symlink entries (B-LOW-12).
+pub fn validate_backup_archive(filename: &str) -> Result<(), std::io::Error> {
+    let backup_path = get_backup_dir()?.join(filename);
+    if !backup_path.exists() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Backup file not found",
+        ));
+    }
+
+    let file = fs::File::open(&backup_path)?;
+    let decoder = GzDecoder::new(file);
+    let mut archive = Archive::new(decoder);
+
+    let mut has_db = false;
+    for entry in archive.entries()? {
+        let entry = entry?;
+        let path = entry.path()?;
+        if path.to_string_lossy().as_ref() == "database.db" {
+            if !entry.header().entry_type().is_file() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "database.db entry is not a regular file",
+                ));
+            }
+            has_db = true;
+        }
+    }
+
+    if !has_db {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Backup archive does not contain database.db",
+        ));
+    }
+    Ok(())
 }
 
 pub async fn restore_backup(filename: &str) -> Result<(), std::io::Error> {
@@ -250,18 +311,26 @@ pub async fn restore_backup(filename: &str) -> Result<(), std::io::Error> {
     for entry in archive.entries()? {
         let mut entry = entry?;
         let path = entry.path()?;
-        match path.to_string_lossy().as_ref() {
-            "database.db" => {
-                entry.unpack(&temp_new_db)?;
-            }
-            "database.db-wal" => {
-                entry.unpack(&temp_new_wal)?;
-            }
-            "database.db-shm" => {
-                entry.unpack(&temp_new_shm)?;
-            }
-            _ => {}
+        let target = match path.to_string_lossy().as_ref() {
+            "database.db" => temp_new_db.clone(),
+            "database.db-wal" => temp_new_wal.clone(),
+            "database.db-shm" => temp_new_shm.clone(),
+            _ => continue,
+        };
+        // Defense-in-depth against a malicious archive: only ever unpack regular
+        // files. A symlink / hardlink / directory entry carrying one of these
+        // names would otherwise be recreated and then renamed onto the live DB
+        // path, redirecting subsequent writes outside the data directory
+        // (B-LOW-12). validate_backup_archive already enforces this for
+        // database.db before the restore starts; this also covers the WAL/SHM
+        // entries and keeps restore_backup safe on its own.
+        if !entry.header().entry_type().is_file() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Backup archive contains a non-regular-file database entry",
+            ));
         }
+        entry.unpack(&target)?;
     }
 
     // Remove existing WAL and SHM files to ensure clean state

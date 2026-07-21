@@ -25,6 +25,9 @@ vi.mock('$lib/api', () => ({
 describe('offline today flow', () => {
 	it('starts and persists a local session when offline', async () => {
 		localStorage.clear();
+		// A real offline session happens while logged in, so an active user scope
+		// exists for persistence (F-LOW-2 guard).
+		localStorage.setItem('auth.activeUserId', '1');
 		const controller = createTodayController();
 
 		await controller.startSession('empty');
@@ -41,6 +44,9 @@ describe('offline today flow', () => {
 
 	it('adds exercises locally without calling the API', async () => {
 		localStorage.clear();
+		// A real offline session happens while logged in, so an active user scope
+		// exists for persistence (F-LOW-2 guard).
+		localStorage.setItem('auth.activeUserId', '1');
 		const controller = createTodayController();
 
 		await controller.startSession('empty');
@@ -54,6 +60,9 @@ describe('offline today flow', () => {
 
 	it('collapses only the completed exercise card when marked done', async () => {
 		localStorage.clear();
+		// A real offline session happens while logged in, so an active user scope
+		// exists for persistence (F-LOW-2 guard).
+		localStorage.setItem('auth.activeUserId', '1');
 		const controller = createTodayController();
 
 		await controller.startSession('empty');

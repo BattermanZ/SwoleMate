@@ -66,11 +66,9 @@ fn validate_progress_offset(offset: i64) -> Result<(), AppError> {
     Ok(())
 }
 
-fn count_prs_in_period(events: &[PrEvent], start: DateTime<Utc>, end: DateTime<Utc>) -> i64 {
-    events
-        .iter()
-        .filter(|event| event.occurred_at >= start && event.occurred_at < end)
-        .count() as i64
+fn map_fact_err(e: sqlx::Error) -> AppError {
+    error!(target: "database", "Failed to map progress set fact: {}", e);
+    AppError::DatabaseError(e)
 }
 
 fn event_json(event: &PrEvent) -> serde_json::Value {
@@ -89,22 +87,40 @@ fn event_json(event: &PrEvent) -> serde_json::Value {
     })
 }
 
-fn detect_pr_events(facts: &[SetFact]) -> Vec<PrEvent> {
-    use std::collections::HashMap;
+/// All-time PR detection as an incremental fold: feed set facts in chronological
+/// order and it emits at most one PR event per set, tracking running bests in
+/// maps bounded by the number of distinct exercise types (not by history length).
+#[derive(Default)]
+struct AllTimePrDetector {
+    max_weight_by_exercise: std::collections::HashMap<String, f64>,
+    one_rm_by_exercise: std::collections::HashMap<String, f64>,
+    volume_by_exercise: std::collections::HashMap<String, f64>,
+    duration_by_exercise: std::collections::HashMap<String, f64>,
+    rep_by_exercise_and_reps: std::collections::HashMap<(String, i64), f64>,
+}
 
-    let mut max_weight_by_exercise: HashMap<String, f64> = HashMap::new();
-    let mut one_rm_by_exercise: HashMap<String, f64> = HashMap::new();
-    let mut volume_by_exercise: HashMap<String, f64> = HashMap::new();
-    let mut duration_by_exercise: HashMap<String, f64> = HashMap::new();
-    let mut rep_by_exercise_and_reps: HashMap<(String, i64), f64> = HashMap::new();
-    let mut events = Vec::new();
+/// Normalized grouping key for an exercise type in PR/recent-best detection.
+/// Mirrors SQLite's `LOWER()` (ASCII-only, no trimming) used by the volume and
+/// exercise-detail queries so the same movement in different casing is one PR
+/// history across every surface (B-LOW-14).
+fn exercise_group_key(exercise_type: &str) -> String {
+    exercise_type.to_ascii_lowercase()
+}
 
-    for fact in facts {
+impl AllTimePrDetector {
+    fn push(&mut self, fact: &SetFact) -> Option<PrEvent> {
         let mut set_events = Vec::new();
 
+        // Group by a case-normalized exercise key so a movement logged as
+        // "Bench Press" and "bench press" shares one PR history, matching the
+        // LOWER(exercise_type) comparisons the volume/detail pages use — otherwise
+        // the overview splits into inconsistent streams (B-LOW-14). The displayed
+        // exercise_type on each emitted event still uses the original casing.
+        let group = exercise_group_key(&fact.exercise_type);
+
         maybe_record_pr(
-            &mut max_weight_by_exercise,
-            fact.exercise_type.clone(),
+            &mut self.max_weight_by_exercise,
+            group.clone(),
             fact.effective_weight,
             fact,
             "max_weight",
@@ -113,8 +129,8 @@ fn detect_pr_events(facts: &[SetFact]) -> Vec<PrEvent> {
 
         if let Some(estimated_1rm) = fact.estimated_1rm() {
             maybe_record_pr(
-                &mut one_rm_by_exercise,
-                fact.exercise_type.clone(),
+                &mut self.one_rm_by_exercise,
+                group.clone(),
                 estimated_1rm,
                 fact,
                 "estimated_1rm",
@@ -123,10 +139,10 @@ fn detect_pr_events(facts: &[SetFact]) -> Vec<PrEvent> {
         }
 
         if fact.reps > 0 && fact.effective_weight > 0.0 {
-            let key = (fact.exercise_type.clone(), fact.reps);
-            let previous = rep_by_exercise_and_reps.insert(
+            let key = (group.clone(), fact.reps);
+            let previous = self.rep_by_exercise_and_reps.insert(
                 key.clone(),
-                rep_by_exercise_and_reps
+                self.rep_by_exercise_and_reps
                     .get(&key)
                     .copied()
                     .map_or(fact.effective_weight, |current| {
@@ -146,8 +162,8 @@ fn detect_pr_events(facts: &[SetFact]) -> Vec<PrEvent> {
         }
 
         maybe_record_pr(
-            &mut volume_by_exercise,
-            fact.exercise_type.clone(),
+            &mut self.volume_by_exercise,
+            group.clone(),
             fact.set_volume(),
             fact,
             "single_set_volume",
@@ -156,8 +172,8 @@ fn detect_pr_events(facts: &[SetFact]) -> Vec<PrEvent> {
 
         if let Some(duration) = fact.duration_seconds.filter(|d| *d > 0) {
             maybe_record_pr(
-                &mut duration_by_exercise,
-                fact.exercise_type.clone(),
+                &mut self.duration_by_exercise,
+                group,
                 duration as f64,
                 fact,
                 "timed_duration",
@@ -165,31 +181,29 @@ fn detect_pr_events(facts: &[SetFact]) -> Vec<PrEvent> {
             );
         }
 
-        if let Some(best_event) = set_events.into_iter().min_by_key(pr_priority) {
-            events.push(best_event);
-        }
+        set_events.into_iter().min_by_key(pr_priority)
     }
-
-    events.sort_by(|a, b| {
-        a.occurred_at
-            .cmp(&b.occurred_at)
-            .then_with(|| a.set_id.cmp(&b.set_id))
-    });
-    events
 }
 
-fn detect_recent_best_events(facts: &[SetFact]) -> Vec<PrEvent> {
-    use std::collections::HashMap;
+/// Trailing-90-day "recent best" detection as an incremental fold. Per-key
+/// histories are pruned to the rolling window on every push, so memory stays
+/// bounded by the sets in the last 90 days rather than the full history.
+#[derive(Default)]
+struct RecentBestDetector {
+    histories: std::collections::HashMap<String, Vec<(DateTime<Utc>, f64)>>,
+}
 
-    let mut histories: HashMap<String, Vec<(DateTime<Utc>, f64)>> = HashMap::new();
-    let mut events = Vec::new();
-
-    for fact in facts {
+impl RecentBestDetector {
+    fn push(&mut self, fact: &SetFact) -> Option<PrEvent> {
         let mut set_events = Vec::new();
 
+        // Case-normalized grouping key, consistent with the volume/detail pages
+        // and AllTimePrDetector (B-LOW-14).
+        let group = exercise_group_key(&fact.exercise_type);
+
         maybe_record_recent_best(
-            &mut histories,
-            format!("{}::max_weight", fact.exercise_type),
+            &mut self.histories,
+            format!("{group}::max_weight"),
             fact.effective_weight,
             fact,
             "max_weight",
@@ -198,8 +212,8 @@ fn detect_recent_best_events(facts: &[SetFact]) -> Vec<PrEvent> {
 
         if let Some(estimated_1rm) = fact.estimated_1rm() {
             maybe_record_recent_best(
-                &mut histories,
-                format!("{}::estimated_1rm", fact.exercise_type),
+                &mut self.histories,
+                format!("{group}::estimated_1rm"),
                 estimated_1rm,
                 fact,
                 "estimated_1rm",
@@ -209,8 +223,8 @@ fn detect_recent_best_events(facts: &[SetFact]) -> Vec<PrEvent> {
 
         if fact.reps > 0 && fact.effective_weight > 0.0 {
             maybe_record_recent_best(
-                &mut histories,
-                format!("{}::rep_pr::{}", fact.exercise_type, fact.reps),
+                &mut self.histories,
+                format!("{group}::rep_pr::{}", fact.reps),
                 fact.effective_weight,
                 fact,
                 "rep_pr",
@@ -219,8 +233,8 @@ fn detect_recent_best_events(facts: &[SetFact]) -> Vec<PrEvent> {
         }
 
         maybe_record_recent_best(
-            &mut histories,
-            format!("{}::single_set_volume", fact.exercise_type),
+            &mut self.histories,
+            format!("{group}::single_set_volume"),
             fact.set_volume(),
             fact,
             "single_set_volume",
@@ -229,8 +243,8 @@ fn detect_recent_best_events(facts: &[SetFact]) -> Vec<PrEvent> {
 
         if let Some(duration) = fact.duration_seconds.filter(|d| *d > 0) {
             maybe_record_recent_best(
-                &mut histories,
-                format!("{}::timed_duration", fact.exercise_type),
+                &mut self.histories,
+                format!("{group}::timed_duration"),
                 duration as f64,
                 fact,
                 "timed_duration",
@@ -238,17 +252,54 @@ fn detect_recent_best_events(facts: &[SetFact]) -> Vec<PrEvent> {
             );
         }
 
-        if let Some(best_event) = set_events.into_iter().min_by_key(pr_priority) {
-            events.push(best_event);
+        set_events.into_iter().min_by_key(pr_priority)
+    }
+}
+
+/// Bounded accumulator over an event stream that is emitted in non-decreasing
+/// occurred_at order. Keeps only the four period counts the overview needs plus
+/// a ring of the most recent RECENT_PR_LIMIT events, instead of materialising
+/// the whole event list (B-MED-10).
+struct EventWindow {
+    last_7_start: DateTime<Utc>,
+    last_7_end: DateTime<Utc>,
+    previous_7_start: DateTime<Utc>,
+    last_30_start: DateTime<Utc>,
+    last_30_end: DateTime<Utc>,
+    previous_30_start: DateTime<Utc>,
+    last_7_count: i64,
+    previous_7_count: i64,
+    last_30_count: i64,
+    previous_30_count: i64,
+    recent: std::collections::VecDeque<PrEvent>,
+}
+
+impl EventWindow {
+    fn record(&mut self, event: PrEvent) {
+        let at = event.occurred_at;
+        if at >= self.last_7_start && at < self.last_7_end {
+            self.last_7_count += 1;
+        }
+        if at >= self.previous_7_start && at < self.last_7_start {
+            self.previous_7_count += 1;
+        }
+        if at >= self.last_30_start && at < self.last_30_end {
+            self.last_30_count += 1;
+        }
+        if at >= self.previous_30_start && at < self.last_30_start {
+            self.previous_30_count += 1;
+        }
+
+        self.recent.push_back(event);
+        if self.recent.len() > RECENT_PR_LIMIT {
+            self.recent.pop_front();
         }
     }
 
-    events.sort_by(|a, b| {
-        a.occurred_at
-            .cmp(&b.occurred_at)
-            .then_with(|| a.set_id.cmp(&b.set_id))
-    });
-    events
+    /// Most-recent-first, matching the previous `events.iter().rev().take(N)`.
+    fn recent_json(&self) -> Vec<serde_json::Value> {
+        self.recent.iter().rev().map(event_json).collect()
+    }
 }
 
 fn maybe_record_recent_best(
@@ -373,17 +424,26 @@ impl Database {
             AppError::DatabaseError(e)
         })?;
 
-        let mut result = Vec::new();
-        for row in rows {
-            let exercise_id = row.id.ok_or_else(|| {
-                AppError::InternalError(
-                    "Exercise row missing id for progress sets lookup".to_string(),
-                )
-            })?;
-            let sets = self.get_sets_for_exercise(user_id, exercise_id).await?;
+        // Batch the sets/settings lookups into two queries instead of the 2N+1
+        // fan-out of a per-exercise loop (B-MED-9).
+        let exercise_ids: Vec<i64> = rows
+            .iter()
+            .map(|row| {
+                row.id.ok_or_else(|| {
+                    AppError::InternalError(
+                        "Exercise row missing id for progress sets lookup".to_string(),
+                    )
+                })
+            })
+            .collect::<Result<_, _>>()?;
+        let mut sets_by_exercise = self.get_sets_for_exercises(user_id, &exercise_ids).await?;
+        let mut settings_by_exercise =
+            self.get_settings_for_exercises(user_id, &exercise_ids).await?;
 
-            let mut exercise = Exercise {
-                id: row.id,
+        let mut result = Vec::with_capacity(rows.len());
+        for (row, exercise_id) in rows.into_iter().zip(exercise_ids) {
+            let exercise = Exercise {
+                id: Some(exercise_id),
                 workout_id: row.workout_id,
                 exercise_type: row.exercise_type,
                 start_time: row.start_time,
@@ -391,11 +451,9 @@ impl Database {
                 notes: row.notes,
                 per_side_weight: row.per_side_weight,
                 split_weight: row.split_weight,
-                settings: Vec::new(),
+                settings: settings_by_exercise.remove(&exercise_id).unwrap_or_default(),
             };
-
-            exercise.settings = self.get_settings_for_exercise(user_id, exercise_id).await?;
-            result.push((exercise, sets));
+            result.push((exercise, sets_by_exercise.remove(&exercise_id).unwrap_or_default()));
         }
 
         debug!(target: "database", "Found {} exercises for progress data", result.len());
@@ -409,14 +467,19 @@ impl Database {
         let stats = sqlx::query!(
             r#"
             WITH workout_times AS (
-                SELECT 
+                SELECT
                     strftime('%H', start_time) as hour,
                     ROUND((julianday(end_time) - julianday(start_time)) * 24 * 60) as duration,
                     date(start_time) as workout_date,
                     strftime('%Y-%W', start_time) as week,
                     feedback
                 FROM workouts
-                WHERE user_id = ?
+                -- Only completed workouts. A freshly-created or abandoned workout has
+                -- end_time == start_time (zero duration); counting those deflated the
+                -- average duration and inflated the 0-30min bucket, and disagreed with
+                -- the other series here that already filter end_time > start_time
+                -- (B-MED-11).
+                WHERE user_id = ? AND end_time > start_time
             ),
             feedback_counts AS (
                 SELECT 
@@ -768,24 +831,37 @@ impl Database {
         let last_30_start = today_start_utc - Duration::days(29);
         let previous_30_start = last_30_start - Duration::days(30);
 
-        let facts = self.get_progress_set_facts(user_id).await?;
-        let pr_events = detect_pr_events(&facts);
-        let recent_best_events = detect_recent_best_events(&facts);
+        let make_window = || EventWindow {
+            last_7_start,
+            last_7_end,
+            previous_7_start,
+            last_30_start,
+            last_30_end,
+            previous_30_start,
+            last_7_count: 0,
+            previous_7_count: 0,
+            last_30_count: 0,
+            previous_30_count: 0,
+            recent: std::collections::VecDeque::with_capacity(RECENT_PR_LIMIT + 1),
+        };
 
-        let last_7_pr_count = count_prs_in_period(&pr_events, last_7_start, last_7_end);
-        let previous_7_pr_count = count_prs_in_period(&pr_events, previous_7_start, last_7_start);
-        let last_30_pr_count = count_prs_in_period(&pr_events, last_30_start, last_30_end);
-        let previous_30_pr_count =
-            count_prs_in_period(&pr_events, previous_30_start, last_30_start);
+        // Stream the per-user set history and fold it through the two detectors,
+        // keeping only bounded state (running bests + a ring of recent events)
+        // instead of materialising the whole history and event lists (B-MED-10).
+        let mut pr_detector = AllTimePrDetector::default();
+        let mut recent_best_detector = RecentBestDetector::default();
+        let mut pr_window = make_window();
+        let mut recent_best_window = make_window();
 
-        let last_7_recent_best_count =
-            count_prs_in_period(&recent_best_events, last_7_start, last_7_end);
-        let previous_7_recent_best_count =
-            count_prs_in_period(&recent_best_events, previous_7_start, last_7_start);
-        let last_30_recent_best_count =
-            count_prs_in_period(&recent_best_events, last_30_start, last_30_end);
-        let previous_30_recent_best_count =
-            count_prs_in_period(&recent_best_events, previous_30_start, last_30_start);
+        self.for_each_progress_set_fact(user_id, |fact| {
+            if let Some(event) = pr_detector.push(&fact) {
+                pr_window.record(event);
+            }
+            if let Some(event) = recent_best_detector.push(&fact) {
+                recent_best_window.record(event);
+            }
+        })
+        .await?;
 
         let last_7_days = self
             .get_period_summary(
@@ -795,10 +871,10 @@ impl Database {
                 last_7_end,
                 previous_7_start,
                 last_7_start,
-                last_7_pr_count,
-                previous_7_pr_count,
-                last_7_recent_best_count,
-                previous_7_recent_best_count,
+                pr_window.last_7_count,
+                pr_window.previous_7_count,
+                recent_best_window.last_7_count,
+                recent_best_window.previous_7_count,
             )
             .await?;
         let last_30_days = self
@@ -809,26 +885,15 @@ impl Database {
                 last_30_end,
                 previous_30_start,
                 last_30_start,
-                last_30_pr_count,
-                previous_30_pr_count,
-                last_30_recent_best_count,
-                previous_30_recent_best_count,
+                pr_window.last_30_count,
+                pr_window.previous_30_count,
+                recent_best_window.last_30_count,
+                recent_best_window.previous_30_count,
             )
             .await?;
 
-        let recent_prs = pr_events
-            .iter()
-            .rev()
-            .take(RECENT_PR_LIMIT)
-            .map(event_json)
-            .collect::<Vec<_>>();
-
-        let recent_bests = recent_best_events
-            .iter()
-            .rev()
-            .take(RECENT_PR_LIMIT)
-            .map(event_json)
-            .collect::<Vec<_>>();
+        let recent_prs = pr_window.recent_json();
+        let recent_bests = recent_best_window.recent_json();
 
         Ok(json!({
             "last_7_days": last_7_days,
@@ -965,9 +1030,22 @@ impl Database {
         })
     }
 
-    async fn get_progress_set_facts(&self, user_id: i64) -> Result<Vec<SetFact>, AppError> {
+    /// Stream the user's full set history in chronological order, invoking `sink`
+    /// once per row. Streaming (rather than fetch_all + Vec<SetFact>) keeps the
+    /// unbounded history off the heap — only the caller's fold state is retained
+    /// (B-MED-10).
+    async fn for_each_progress_set_fact<F>(
+        &self,
+        user_id: i64,
+        mut sink: F,
+    ) -> Result<(), AppError>
+    where
+        F: FnMut(SetFact),
+    {
+        use futures_util::TryStreamExt;
+
         let pool = self.pool().await;
-        let rows = sqlx::query(
+        let mut stream = sqlx::query(
             r#"
             SELECT
                 e.exercise_type,
@@ -996,29 +1074,24 @@ impl Database {
         .bind(user_id)
         .bind(user_id)
         .bind(user_id)
-        .fetch_all(&pool)
-        .await
-        .map_err(|e| {
+        .fetch(&pool);
+
+        while let Some(row) = stream.try_next().await.map_err(|e| {
             error!(target: "database", "Failed to fetch progress set facts: {}", e);
             AppError::DatabaseError(e)
-        })?;
+        })? {
+            let fact = SetFact {
+                exercise_type: row.try_get("exercise_type").map_err(map_fact_err)?,
+                exercise_start_time: row.try_get("exercise_start_time").map_err(map_fact_err)?,
+                set_id: row.try_get("set_id").map_err(map_fact_err)?,
+                reps: row.try_get("reps").map_err(map_fact_err)?,
+                effective_weight: row.try_get("effective_weight").map_err(map_fact_err)?,
+                duration_seconds: row.try_get("duration_seconds").map_err(map_fact_err)?,
+            };
+            sink(fact);
+        }
 
-        rows.into_iter()
-            .map(|row| {
-                Ok(SetFact {
-                    exercise_type: row.try_get("exercise_type")?,
-                    exercise_start_time: row.try_get("exercise_start_time")?,
-                    set_id: row.try_get("set_id")?,
-                    reps: row.try_get("reps")?,
-                    effective_weight: row.try_get("effective_weight")?,
-                    duration_seconds: row.try_get("duration_seconds")?,
-                })
-            })
-            .collect::<Result<Vec<_>, sqlx::Error>>()
-            .map_err(|e| {
-                error!(target: "database", "Failed to map progress set facts: {}", e);
-                AppError::DatabaseError(e)
-            })
+        Ok(())
     }
 
     pub async fn get_volume_stats(
@@ -1332,5 +1405,48 @@ impl Database {
             },
             "timed_records": timed_records_json
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fact(exercise_type: &str, at: DateTime<Utc>, set_id: i64, weight: f64) -> SetFact {
+        SetFact {
+            exercise_type: exercise_type.to_string(),
+            exercise_start_time: at,
+            set_id,
+            reps: 5,
+            effective_weight: weight,
+            duration_seconds: None,
+        }
+    }
+
+    #[test]
+    fn pr_detection_groups_exercise_type_case_insensitively() {
+        // "Bench Press" and "bench press" are the same movement (B-LOW-14): the
+        // second, heavier set must be detected as a PR against the first, which
+        // only holds if both share one grouping key. Without normalization the
+        // second casing would be a brand-new key and yield no PR.
+        let t0: DateTime<Utc> = "2026-01-01T10:00:00Z".parse().unwrap();
+        let mut detector = AllTimePrDetector::default();
+
+        assert!(
+            detector.push(&fact("Bench Press", t0, 1, 100.0)).is_none(),
+            "first occurrence should not be a PR"
+        );
+        let event = detector
+            .push(&fact("bench press", t0 + Duration::days(1), 2, 110.0))
+            .expect("heavier set of the same (case-differing) movement should be a PR");
+        assert!(event.previous_value > 0.0, "PR must reference the earlier best");
+    }
+
+    #[test]
+    fn exercise_group_key_matches_sqlite_lower_semantics() {
+        // ASCII lowercase, no trimming (mirrors SQLite LOWER used by volume pages).
+        assert_eq!(exercise_group_key("Bench Press"), "bench press");
+        assert_eq!(exercise_group_key("DEADLIFT"), "deadlift");
+        assert_eq!(exercise_group_key("Bench Press "), "bench press ");
     }
 }

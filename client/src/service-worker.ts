@@ -30,9 +30,24 @@ sw.addEventListener('install', (event) => {
 			// URL (not scraped), so a failure here can't take down the rest of the
 			// precache.
 			await cache.add('/').catch(() => undefined);
-			await sw.skipWaiting();
+			// NOTE: we deliberately do NOT skipWaiting() here. Activating a new
+			// worker mid-session would delete the previous version's cache (see the
+			// activate handler) out from under the running page, 404-ing the lazy
+			// chunks it still needs and breaking an in-progress workout (F-MED-9).
+			// The new worker instead waits until every tab is closed, or until the
+			// client explicitly opts in via the SKIP_WAITING message below.
 		})()
 	);
+});
+
+// Let the page opt in to an immediate update once it's safe to do so (e.g. the
+// user taps an "update available" prompt). Without this message the new worker
+// stays in `waiting` until all controlled tabs are gone, so a deploy never
+// yanks assets from under an active session.
+sw.addEventListener('message', (event) => {
+	if (event.data === 'SKIP_WAITING') {
+		void sw.skipWaiting();
+	}
 });
 
 sw.addEventListener('activate', (event) => {
@@ -61,6 +76,22 @@ sw.addEventListener('fetch', (event) => {
 	// Don't interfere with cross-origin requests (e.g. an API on another origin).
 	if (url.origin !== sw.location.origin) return;
 	if (event.request.method !== 'GET') return;
+
+	// Never let the service worker touch backend responses: they carry
+	// per-identity, potentially authenticated data and must never be stored in the
+	// single shared cache (which is keyed only by URL) or served to a later request
+	// — including a different user on a shared device. This covers the whole
+	// backend seam exposed same-origin via the proxy, not just /api/ (F-LOW-6), and
+	// runs before the navigate branch so an /oauth* navigation can't be written
+	// under the '/' shell key and poison the offline shell.
+	if (
+		url.pathname.startsWith('/api/') ||
+		url.pathname.startsWith('/oauth') ||
+		url.pathname.startsWith('/mcp') ||
+		url.pathname.startsWith('/.well-known')
+	) {
+		return;
+	}
 
 	// Cache-first for immutable hashed build assets.
 	if (url.pathname.startsWith('/_app/immutable/')) {
@@ -93,9 +124,7 @@ sw.addEventListener('fetch', (event) => {
 		return;
 	}
 
-	// Never cache API responses (avoids leaking authenticated data across users).
-	if (url.pathname.startsWith('/api/')) return;
-
-	// Cache-first for everything else same-origin.
+	// Cache-first for everything else same-origin. Backend paths were already
+	// excluded above.
 	event.respondWith(cacheFirst(event.request));
 });

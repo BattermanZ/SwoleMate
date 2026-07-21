@@ -1,0 +1,12 @@
+[
+  {
+    "idx": 1,
+    "verdicts": [
+      {
+        "title": "Panic (worker request abort / DoS) on non-char-boundary byte slice of request-controlled log metadata",
+        "refuted": false,
+        "reason": "Confirmed at routes.rs:308-315. `s` is a String from serde_json::to_string(value) (raw UTF-8 output, no \\u-escaping for non-ASCII by default), and `&s[..2048]` is a byte-index range slice with no char_indices/floor-to-boundary check. If byte offset 2048 lands mid-multibyte-character, this is a real Rust panic ('byte index 2048 is not a char boundary'). No guard, no is_char_boundary check, no catch_unwind around the handler. The mechanism is genuine as written."
+      }
+    ]
+  }
+]

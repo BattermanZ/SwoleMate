@@ -163,6 +163,25 @@ where
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
         if should_skip_auth(&req) {
+            // The login endpoint skips *session* auth (there is no cookie yet) but
+            // it still establishes a session, so it must not be exempt from the
+            // CSRF origin check — otherwise a cross-site page could drive a login
+            // (login CSRF, B-LOW-1). The other skipped paths (/mcp, /oauth/*,
+            // /.well-known/*) are legitimately cross-origin API surfaces and stay
+            // exempt.
+            if self.cfg.enforce_csrf
+                && req.path() == "/api/auth/login"
+                && is_mutating_method(req.method())
+                && !csrf_origin_ok(&req)
+            {
+                let (req, _) = req.into_parts();
+                let resp = HttpResponse::Forbidden().json(serde_json::json!({
+                    "error": "Forbidden",
+                    "code": "CSRF_VALIDATION_FAILED"
+                }));
+                return Box::pin(async move { Ok(ServiceResponse::new(req, resp)) });
+            }
+
             let fut = self.service.call(req);
             return Box::pin(async move { fut.await.map(ServiceResponse::map_into_boxed_body) });
         }

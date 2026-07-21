@@ -150,6 +150,39 @@ pub const SCHEMA_UPDATES: &[(i64, &str)] = &[
         ALTER TABLE sets ADD COLUMN duration_seconds INTEGER;
         "#,
     ),
+    (
+        14,
+        r#"
+        -- Idempotency keys for offline-sync replay of the two non-idempotent POST
+        -- creates (workout / exercise). A lost HTTP response used to duplicate the
+        -- workout and its sets on reconnect replay; the client now sends a stable
+        -- Idempotency-Key per offline entity and the server dedups on it.
+        CREATE TABLE IF NOT EXISTS idempotency_keys (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            request_kind TEXT NOT NULL,
+            idempotency_key TEXT NOT NULL,
+            resource_id INTEGER NOT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            UNIQUE(user_id, request_kind, idempotency_key)
+        );
+        "#,
+    ),
+    (
+        15,
+        r#"
+        -- Token-family ids so rotated OAuth refresh tokens share a lineage. On
+        -- replay of an already-rotated refresh token (reuse detection, RFC 6819
+        -- 5.2.2.3) the whole family is revoked, killing a thief's descendant tokens.
+        ALTER TABLE oauth_access_tokens ADD COLUMN family_id TEXT;
+        ALTER TABLE oauth_refresh_tokens ADD COLUMN family_id TEXT;
+        CREATE INDEX IF NOT EXISTS idx_oauth_access_tokens_family
+            ON oauth_access_tokens(family_id);
+        CREATE INDEX IF NOT EXISTS idx_oauth_refresh_tokens_family
+            ON oauth_refresh_tokens(family_id);
+        "#,
+    ),
 ];
 
 pub const SCHEMA_VERSION_TABLE: &str = r#"

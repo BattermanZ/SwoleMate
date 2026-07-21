@@ -86,14 +86,41 @@ export async function hydrateOfflineState(access: OfflineStoreAccess) {
 	}
 }
 
-export async function persistInProgressSession(
+// `extra` may be a plain patch or a function that derives the patch from the
+// record as it exists at write time. The functional form is required for
+// merge-only fields (deleted ids, id map): computing them from a value read
+// outside the critical section reintroduces the very race we serialize against.
+type PersistExtra =
+	| Partial<OfflineSessionRecord>
+	| ((existing: OfflineSessionRecord | null) => Partial<OfflineSessionRecord>);
+
+// Single-flight queue: overlapping persists (e.g. the fire-and-forget offline
+// handler racing a removeExercise persist) must not interleave their
+// load-then-save, or the later save clobbers the earlier one's merge-only
+// fields. Chaining forces each read-modify-write to run to completion before the
+// next begins (F-MED-3).
+let persistChain: Promise<void> = Promise.resolve();
+
+export function persistInProgressSession(
 	access: Pick<OfflineStoreAccess, 'currentSession' | 'pendingSyncCount'>,
-	extra?: Partial<OfflineSessionRecord>
+	extra?: PersistExtra
+): Promise<void> {
+	const run = persistChain.then(() => persistInProgressSessionInner(access, extra));
+	// Keep the chain alive even if one write throws, so a single failure does not
+	// wedge every subsequent persist.
+	persistChain = run.catch(() => undefined);
+	return run;
+}
+
+async function persistInProgressSessionInner(
+	access: Pick<OfflineStoreAccess, 'currentSession' | 'pendingSyncCount'>,
+	extra?: PersistExtra
 ) {
 	const session = get(access.currentSession);
 	if (!session) return;
 	const key = sessionKeyForId(session.id);
 	const existing = await loadOfflineSession(key).catch(() => null);
+	const resolvedExtra = typeof extra === 'function' ? extra(existing) : extra;
 	const record: OfflineSessionRecord = {
 		key,
 		status: 'in_progress',
@@ -103,7 +130,7 @@ export async function persistInProgressSession(
 		server_exercise_ids_by_local: existing?.server_exercise_ids_by_local ?? {},
 		deleted_server_exercise_ids: existing?.deleted_server_exercise_ids ?? [],
 		cancel_workout: existing?.cancel_workout,
-		...extra
+		...resolvedExtra
 	};
 	await saveOfflineSession(record);
 	await refreshPendingSyncCount(access);
@@ -121,14 +148,18 @@ export type SyncApi = {
 			per_side_weight: boolean;
 			split_weight: boolean;
 			settings?: Array<{ key: string; value: string }>;
-		}
+		},
+		idempotencyKey?: string
 	) => Promise<{ id: number }>;
-	createWorkout: (workout: {
-		date: string;
-		start_time: string;
-		notes?: string;
-		timezone_offset_minutes?: number;
-	}) => Promise<{ id: number }>;
+	createWorkout: (
+		workout: {
+			date: string;
+			start_time: string;
+			notes?: string;
+			timezone_offset_minutes?: number;
+		},
+		idempotencyKey?: string
+	) => Promise<{ id: number }>;
 	endExercise: (
 		id: number,
 		payload: {
@@ -185,12 +216,17 @@ export async function syncOne(record: OfflineSessionRecord, api: SyncApi) {
 	};
 
 	if (!workoutId) {
-		const created = await api.createWorkout({
-			date: record.session.startedAt,
-			start_time: record.session.startedAt,
-			notes: record.session.notes.trim() || undefined,
-			timezone_offset_minutes: record.session.timezoneOffsetMinutes
-		});
+		// Stable key derived from the offline session's local (negative) id so a
+		// retried create after a lost response is deduped, not duplicated (F-HIGH-3).
+		const created = await api.createWorkout(
+			{
+				date: record.session.startedAt,
+				start_time: record.session.startedAt,
+				notes: record.session.notes.trim() || undefined,
+				timezone_offset_minutes: record.session.timezoneOffsetMinutes
+			},
+			`w:${record.session.id}`
+		);
 		workoutId = created.id;
 		await checkpoint();
 	}
@@ -198,29 +234,34 @@ export async function syncOne(record: OfflineSessionRecord, api: SyncApi) {
 	for (const ex of record.session.exercises) {
 		let exerciseId = ex.id > 0 ? ex.id : exerciseMap[ex.id];
 		if (!exerciseId) {
-			const created = await api.createExercise(workoutId, {
-				exercise_type: ex.name,
-				start_time: ex.startedAt,
-				notes: ex.notes.trim() || undefined,
-				per_side_weight: ex.perSideWeight,
-				split_weight: ex.splitWeight,
-				settings: ex.settings.length
-					? [
-							...ex.settings.map((s) => ({ key: s.key, value: s.value })),
-							trackingFieldsSetting({
-								reps: ex.tracksReps ?? true,
-								time: ex.tracksTime ?? false,
-								weight: ex.tracksWeight ?? true
-							})
-						]
-					: [
-							trackingFieldsSetting({
-								reps: ex.tracksReps ?? true,
-								time: ex.tracksTime ?? false,
-								weight: ex.tracksWeight ?? true
-							})
-						]
-			});
+			const created = await api.createExercise(
+				workoutId,
+				{
+					exercise_type: ex.name,
+					start_time: ex.startedAt,
+					notes: ex.notes.trim() || undefined,
+					per_side_weight: ex.perSideWeight,
+					split_weight: ex.splitWeight,
+					settings: ex.settings.length
+						? [
+								...ex.settings.map((s) => ({ key: s.key, value: s.value })),
+								trackingFieldsSetting({
+									reps: ex.tracksReps ?? true,
+									time: ex.tracksTime ?? false,
+									weight: ex.tracksWeight ?? true
+								})
+							]
+						: [
+								trackingFieldsSetting({
+									reps: ex.tracksReps ?? true,
+									time: ex.tracksTime ?? false,
+									weight: ex.tracksWeight ?? true
+								})
+							]
+				},
+				// Stable key from the exercise's local (negative) id (F-HIGH-3).
+				`e:${ex.id}`
+			);
 			exerciseId = created.id;
 			exerciseMap[ex.id] = created.id;
 			await checkpoint();

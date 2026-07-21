@@ -71,11 +71,37 @@ pub async fn disable_user(
     db: web::Data<Database>,
     id: web::Path<i64>,
 ) -> Result<HttpResponse, AppError> {
+    let Some(target) = db.get_user_by_id(*id).await? else {
+        return Err(AppError::NotFound("User not found".to_string()));
+    };
+
+    // The invariant "at least one active admin must always exist" (enforced in
+    // delete_user) must hold here too, otherwise disabling the last admin bricks
+    // all admin-gated routes with no API path to recover (B-MED-7).
+    if target.role.is_admin() && target.disabled_at.is_none() {
+        let admins = db.count_active_admins().await?;
+        if admins <= 1 {
+            return Err(AppError::Conflict(
+                "Cannot disable the last active admin account.".to_string(),
+            ));
+        }
+    }
+
+    db.disable_user(*id).await?;
+    db.revoke_all_sessions_for_user(*id).await?;
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "status": "ok" })))
+}
+
+#[post("/api/admin/users/{id}/enable")]
+pub async fn enable_user(
+    _admin: AdminUser,
+    db: web::Data<Database>,
+    id: web::Path<i64>,
+) -> Result<HttpResponse, AppError> {
     if db.get_user_by_id(*id).await?.is_none() {
         return Err(AppError::NotFound("User not found".to_string()));
     }
-    db.disable_user(*id).await?;
-    db.revoke_all_sessions_for_user(*id).await?;
+    db.enable_user(*id).await?;
     Ok(HttpResponse::Ok().json(serde_json::json!({ "status": "ok" })))
 }
 
@@ -92,6 +118,11 @@ pub async fn reset_user_password(
     let new_hash = password::hash_password(&body.new_password).map_err(AppError::BadRequest)?;
     db.update_password_hash(*id, &new_hash, true).await?;
     db.revoke_all_sessions_for_user(*id).await?;
+    // Also sever bearer-token access: must_change_password only blocks tokens until
+    // the user next changes their password, after which stale tokens would work
+    // again — so revoke them outright (B-MED-4).
+    db.revoke_all_mcp_tokens_for_user(*id).await?;
+    db.revoke_all_oauth_tokens_for_user(*id).await?;
     Ok(HttpResponse::Ok().json(serde_json::json!({ "status": "ok" })))
 }
 

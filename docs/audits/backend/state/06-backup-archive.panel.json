@@ -1,0 +1,12 @@
+[
+  {
+    "idx": 1,
+    "verdicts": [
+      {
+        "title": "Failed backup restore leaves the global DB connection pool permanently closed (app-wide outage until restart)",
+        "refuted": false,
+        "reason": "Code-truth confirmed: line 440 closes current_pool unconditionally before any reversible work. backup::restore_backup's Err propagates via `?` at line 446-449, returning early — replace_pool (line 512) is only reached inside the Ok(new_pool) success branch of the retry loop. The retry-exhaustion path (526-529) also returns Err with no call to replace_pool. No branch in the function re-opens/restores db's pool on failure, so a closed pool persists app-wide until process restart."
+      }
+    ]
+  }
+]

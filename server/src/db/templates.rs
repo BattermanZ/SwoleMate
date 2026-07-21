@@ -422,6 +422,12 @@ impl Database {
         };
         workout.validate().map_err(AppError::BadRequest)?;
 
+        // Insert the workout only if the user still has no active session, as a
+        // single atomic statement. The COUNT check above is a fast-path / gives
+        // the friendly precedence, but two concurrent "start" requests could both
+        // pass it (TOCTOU); the NOT EXISTS guard here holds the write lock during
+        // evaluation so at most one of them inserts, preserving the
+        // single-active-session invariant (B-LOW-13).
         let result = sqlx::query(
             r#"
             INSERT INTO workouts (
@@ -433,7 +439,11 @@ impl Database {
                 timezone_offset_minutes,
                 last_activity_time
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            SELECT ?, ?, ?, ?, ?, ?, ?
+            WHERE NOT EXISTS (
+                SELECT 1 FROM workouts
+                WHERE user_id = ? AND end_time <= start_time
+            )
             RETURNING id
             "#,
         )
@@ -444,7 +454,8 @@ impl Database {
         .bind(workout.notes)
         .bind(workout.timezone_offset_minutes)
         .bind(workout.start_time)
-        .fetch_one(&mut *tx)
+        .bind(user_id)
+        .fetch_optional(&mut *tx)
         .await
         .map_err(|e| {
             error!(
@@ -455,6 +466,15 @@ impl Database {
             );
             AppError::DatabaseError(e)
         })?;
+
+        let Some(result) = result else {
+            // Lost the race with a concurrent start; the transaction rolls back on
+            // drop, so no partial workout is left behind.
+            return Err(AppError::Conflict(
+                "You already have an active session. End or cancel it before starting a new one."
+                    .to_string(),
+            ));
+        };
 
         let workout_id: i64 = result.get("id");
 

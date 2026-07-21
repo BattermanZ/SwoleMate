@@ -1,0 +1,12 @@
+[
+  {
+    "idx": 1,
+    "verdicts": [
+      {
+        "title": "No request timeout/abort in api.ts wedges the reconnect sync loop and stalls writes",
+        "refuted": false,
+        "reason": "Confirmed in source: withCredentials (lines 53-55) only spreads {credentials:'include', ...init} and never adds a signal; createWorkout/endWorkout (97-126) and by extension every other exported call in api.ts pass no AbortController/signal to fetcher(). There is no timeout, no AbortSignal.timeout(), and no early-return/guard in api.ts that would bound a hung fetch. The mechanism claimed (raw, unbounded fetch with no abort wiring) is real and reachable as written in this file."
+      }
+    ]
+  }
+]

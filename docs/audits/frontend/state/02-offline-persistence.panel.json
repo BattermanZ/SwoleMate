@@ -1,0 +1,47 @@
+[
+  {
+    "idx": 1,
+    "verdicts": [
+      {
+        "title": "Online end-session that fails on the network loses mood/notes and resurrects the workout",
+        "refuted": false,
+        "reason": "Confirmed against session.ts:268-355 and offline.ts:89-110. The online branch never captures mood/end_notes into a local 'ended' object (that object is only built in the offline branch at line 281) — it just calls endExercise/endWorkout on the raw session. On a network failure in that block, state.currentSession is still the untouched pre-end session (it's only nulled at line 338, after endWorkout succeeds), so the catch's persistInProgressSession(state) at offline.ts:89-110 reads that unmodified session and writes status:'in_progress' with no end_mood/end_notes/endedAt, exactly as claimed. In syncOne (verified in sync.ts, formerly offline.ts logic now inlined at actions/sync.ts... actually offline.ts:163-ish / actions/sync.ts syncOne), the pending_sync+end_mood branch is gated on status==='pending_sync', so an 'in_progress' record skips the endWorkout call and, since session.id>0, the record is deleted after only re-ending exercises — matching the claimed drop of the end intent."
+      },
+      {
+        "title": "A single unparseable/old-shape offline record aborts syncing of ALL pending sessions",
+        "refuted": false,
+        "reason": "Confirmed in sync.ts:40-79 and offline.ts's syncOne: the for-loop at sync.ts:54 has no per-iteration try/catch, only one try wrapping the entire loop. syncOne unconditionally dereferences ex.settings.length, ex.sets.map, and ex.settings.map without any shape validation. A throw from a malformed record lands in the outer catch (sync.ts:69), and since it isn't a network error, state.error is set and the loop exits — any records after the poison one in the array are never attempted. The mechanism is real as written in the cited files."
+      },
+      {
+        "title": "Read-modify-write race in persistInProgressSession drops merge-only fields (deletions / id map)",
+        "refuted": false,
+        "reason": "Confirmed in offline.ts:89-110: persistInProgressSession does `await loadOfflineSession(key)` then builds and saves a new record merging in existing.server_exercise_ids_by_local / deleted_server_exercise_ids / cancel_workout plus any `extra`. The await is a genuine yield point, so two concurrent invocations (e.g. the unawaited `void persistInProgressSession(state)` fired from the 'offline' handler at sync.ts:91) can interleave load/save and the later save can overwrite the earlier one's extra fields with stale existing-data. Nothing in the cited code serializes or version-checks these writes, so the described last-write-wins race is real as written."
+      },
+      {
+        "title": "No quota/IndexedDB error handling — a failed persist silently discards the just-logged set",
+        "refuted": false,
+        "reason": "Confirmed in storage.ts:60-69: kvSet's IndexedDB path is `await withStore('readwrite', (store) => store.put(...))` with no try/catch around it, and the localStorage fallback path (line 64) calls `localStorage.setItem` directly, which throws synchronously on quota exceeded — neither path swallows or handles a quota/abort error. Any rejection would propagate up to the caller unhandled at this layer, matching the claim that storage.ts itself has zero quota/error handling."
+      }
+    ]
+  },
+  {
+    "idx": 2,
+    "verdicts": [
+      {
+        "title": "Online end-session that fails on the network loses mood/notes and resurrects the workout",
+        "refuted": false,
+        "reason": "Reachability holds. Verified in session.ts:308-355: the online branch runs endExercise for each open exercise via Promise.all, then calls endWorkout separately at line 330. A network drop specifically during/after the endExercise calls but during the endWorkout call is a plausible flaky-connectivity scenario (not a contrived race) — it doesn't require simultaneous failure, just a drop that outlasts the first batch of requests but hits the second. Critically, state.currentSession is only cleared at line 338, which sits AFTER the endWorkout call; if endWorkout throws, execution jumps straight to the catch block with currentSession still populated and unmodified (mood/notes never written into the session object, only passed as separate args to the failed endWorkout call). The catch's isNetworkFailure branch then persists that stale in-progress session via persistInProgressSession with no path to attach end_mood/end_notes, matching the claim. A user tapping 'End' while online on a real mobile connection with degrading signal is an ordinary, reachable trigger, and there is no client guard that would intercept this sequence before it reaches the network calls."
+      }
+    ]
+  },
+  {
+    "idx": 3,
+    "verdicts": [
+      {
+        "title": "Online end-session that fails on the network loses mood/notes and resurrects the workout",
+        "refuted": false,
+        "reason": "Read session.ts:260-356 directly. The catch block at line 346-349 for the online end-session path calls only the generic persistInProgressSession(state) helper on network failure -- the same helper used for other in-progress-session network failures elsewhere in the file (lines 170, 250) -- with no capture of mood, endNotes, or endedAt. This is asymmetric with the offline branch (lines 289-301), which explicitly persists end_mood/end_notes under status:'pending_sync'. There is no sanitizer, guard, debounce-flush, or idempotency key in this file that recovers the end-intent in the online-failure path; the claim is not already mitigated."
+      }
+    ]
+  }
+]

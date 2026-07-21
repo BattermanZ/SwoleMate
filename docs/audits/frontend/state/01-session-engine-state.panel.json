@@ -1,0 +1,37 @@
+[
+  {
+    "idx": 1,
+    "verdicts": [
+      {
+        "title": "Online action reducers capture a stale session snapshot across an await and overwrite the whole store with .set(), silently discarding concurrent mutations",
+        "refuted": false,
+        "reason": "Code-truth check confirms the mechanism exactly as claimed. addExercise() captures `const session = get(state.currentSession)` at line 106 before any await. The first await, loadLastTimeForExercise() at line 118, occurs inside the try block (lines 113-119) strictly before `state.loading.set(true)` at line 179 — so there is a real network round-trip window where loading is false and nothing in the UI is disabled. A second await (createExercise, line 180) follows, also using the same stale `session` closure variable. At line 211, `state.currentSession.set({ ...session, exercises: [...session.exercises, newExercise] })` rebuilds the entire store from that pre-await snapshot with no merge/update against whatever the store holds at that moment — any concurrent synchronous .set() to state.currentSession made during either await window (e.g. from a notes/settings mutation elsewhere) is structurally overwritten and lost, since JS/Svelte store .set() has no knowledge of intervening writes. No guard, version check, or .update()-style merge exists anywhere in this function to prevent it. The mechanism is real and reachable in the source as written."
+      },
+      {
+        "title": "Network failure during the final endWorkout of submitEndSession drops the entered mood/notes and leaves the workout un-ended forever on the next sync",
+        "refuted": false,
+        "reason": "Code-truth check confirms the described control flow in session.ts. The online path awaits Promise.all(endExercise...) at line 309 then awaits endWorkout at line 330; state.currentSession is only cleared/nulled and the offline record deleted (line 337-338) AFTER endWorkout succeeds. The catch block (345-352) is shared by both awaits: on isNetworkFailure it calls setOffline + persistInProgressSession(state) + hydrateOfflineState(state), passing no mood/notes/endedAt into the persisted call — mood/notes were read into local variables (`mood`, `get(state.endNotes)`) only for the success-path endWorkout call (line 330-334), never attached to the object handed to persistInProgressSession in the failure branch. This contrasts with the offline branch (277-306), which explicitly builds `ended` with `endedAt, mood` and calls saveOfflineSession with `end_mood`/`end_notes` fields. So within session.ts alone, the asymmetry the finding describes — mood/notes captured for the success path but silently absent from the failure-path persistence call — is real and visible in the cited lines."
+      }
+    ]
+  },
+  {
+    "idx": 2,
+    "verdicts": [
+      {
+        "title": "Online action reducers capture a stale session snapshot across an await and overwrite the whole store with .set(), silently discarding concurrent mutations",
+        "refuted": false,
+        "reason": "Read through core.ts confirms the precise mechanics cited: addExercise() snapshots `session = get(state.currentSession)` at line 106, and when the exercise name is new (not cached in recentSessions/lastTimeByExercise), it awaits the network call loadLastTimeForExercise() at line 118 -- which happens strictly before `state.loading.set(true)` at line 179. There is no intervening guard that sets loading (or otherwise disables the UI) during this specific await window, so the reachability precondition the finding relies on (an unguarded network round-trip during which the rest of the UI is still interactive) genuinely exists in this code, not just in the abstract. The subsequent online-path rebuild at line 211 (`state.currentSession.set({...session, exercises: [...]})`) does use the pre-await `session` object captured at line 106, so any concurrent synchronous mutation to the store made during the loadLastTimeForExercise await (or during the createExercise await that follows) would indeed be overwritten by this stale-snapshot .set(). Nothing in this file forecloses the trigger sequence (type a brand-new exercise name, tap add, then interact with another part of the session while the network call is in flight) -- it's a normal, reachable user action sequence, not a contrived race. My lens (reachability) does not surface a reason to refute; verifying the other files (sets.ts, settings.ts) for the debounce-sync claim and the exact loss mechanism is outside the single file I was scoped to, but nothing here contradicts the finding."
+      }
+    ]
+  },
+  {
+    "idx": 3,
+    "verdicts": [
+      {
+        "title": "Online action reducers capture a stale session snapshot across an await and overwrite the whole store with .set(), silently discarding concurrent mutations",
+        "refuted": false,
+        "reason": "Confirmed in core.ts: addExercise() captures `const session = get(state.currentSession)` at line 106, then awaits loadLastTimeForExercise() at line 118 — which runs before `state.loading.set(true)` at line 179, so there is a genuine unguarded network-await window where the UI is not disabled. At line 211, the reducer does `state.currentSession.set({ ...session, exercises: [...] })` using the pre-await `session` variable rather than re-reading current state or using `.update()`. There is no sanitizer, try-catch recovery, debounce-flush, or idempotency mechanism in this file that re-syncs or merges concurrent mutations before the final .set — the stale snapshot is written unconditionally. removeExercise() at lines 244-274 has the identical pattern (snapshot at 245, await cancelExercise at 270, blind .set at 271-274). No mitigation is visible in the cited file, so from the already-mitigated lens this finding holds up as a real, reachable defect."
+      }
+    ]
+  }
+]

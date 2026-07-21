@@ -3,8 +3,18 @@ use log::error;
 use serde_json::json;
 use thiserror::Error;
 
+/// Parse the EXPOSE_INTERNAL_ERRORS flag truthily rather than keying on mere
+/// presence, so that an operator who sets it to 0 / false to *disable* leakage
+/// actually disables it (B-LOW-6). Matches the ENABLE_HSTS convention.
+fn expose_flag_enabled(value: Option<&str>) -> bool {
+    value
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
 fn expose_internal_errors() -> bool {
-    cfg!(debug_assertions) || std::env::var("EXPOSE_INTERNAL_ERRORS").is_ok()
+    cfg!(debug_assertions)
+        || expose_flag_enabled(std::env::var("EXPOSE_INTERNAL_ERRORS").ok().as_deref())
 }
 
 #[derive(Error, Debug)]
@@ -93,5 +103,22 @@ impl ResponseError for AppError {
                 "error": msg
             })),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::expose_flag_enabled;
+
+    #[test]
+    fn expose_flag_only_enabled_for_truthy_values() {
+        assert!(expose_flag_enabled(Some("1")));
+        assert!(expose_flag_enabled(Some("true")));
+        assert!(expose_flag_enabled(Some("TRUE")));
+        // Presence alone must not enable it (B-LOW-6): a disabling value stays off.
+        assert!(!expose_flag_enabled(Some("0")));
+        assert!(!expose_flag_enabled(Some("false")));
+        assert!(!expose_flag_enabled(Some("")));
+        assert!(!expose_flag_enabled(None));
     }
 }

@@ -1,0 +1,59 @@
+{
+  "findings": [
+    {
+      "title": "Online end-session that fails on the network loses mood/notes and resurrects the workout",
+      "severity": "high",
+      "category": "data-integrity",
+      "file": "client/src/lib/today/controller/actions/session.ts",
+      "line": "308-355",
+      "description": "In submitEndSession the online branch fires endExercise(...) for each open exercise and then endWorkout(session.id, {end_time, notes, feedback: mood}). If the network drops during this sequence (e.g. endExercise calls succeed but endWorkout throws, or endWorkout itself throws), the catch at line 345 detects isNetworkFailure and calls persistInProgressSession(state). That helper (offline.ts:97) writes the record with status:'in_progress' and NEVER captures end_mood/end_notes/endedAt — unlike the offline branch at lines 291-301 which writes status:'pending_sync' with end_mood set. So the end intent is dropped. On reconnect syncOne (offline.ts:163) sees status==='in_progress', skips the endWorkout block at line 269, and because session.id>0 deletes the record at line 283 after only re-ending the exercises. The workout's end_time/feedback is never set on the server, so workoutIsActive() (backend.ts:14, end_time<=start_time) still reports it active and the next refreshFromBackend (backend.ts:24-42) restores it as the current in-progress session — the ended workout silently reappears and the mood/notes the user entered are gone.",
+      "attackOrTrigger": "Route '/', user is online mid-workout, taps End with a mood selected; connectivity drops during the end request. If the user then reloads or navigates away instead of manually re-tapping End (the modal is left open but nothing forces a retry), the mood + end notes are lost and on reconnect the workout is re-opened as active.",
+      "why": "A completed workout silently loses its feedback/notes and comes back to life as in-progress; the user believes the session was saved and ended.",
+      "fixSketch": "In the network-failure catch of submitEndSession, persist a pending_sync record carrying end_mood/end_notes/endedAt (reuse the offline-branch save at lines 291-301) instead of calling the plain persistInProgressSession, so syncOne runs the endWorkout replay on reconnect."
+    },
+    {
+      "title": "A single unparseable/old-shape offline record aborts syncing of ALL pending sessions",
+      "severity": "medium",
+      "category": "data-integrity",
+      "file": "client/src/lib/today/controller/actions/sync.ts",
+      "line": "54-64",
+      "description": "syncPendingSessions loops over every offline record sequentially with `await syncOne(record, ...)` and no per-record try/catch. syncOne dereferences the stored session shape directly (offline.ts:207 ex.settings.length, 231 ex.sets.map, 253 ex.settings.map) and OfflineSessionRecord (todaySessions.ts:7) has NO version field and no validation/migration on read (kvGet in storage.ts:56 returns the raw JSON cast to the type). If any record was written by an older client whose UiSession/exercise shape lacked settings or sets (or is otherwise partially corrupt), syncOne throws a TypeError. That is not a network failure, so the catch at sync.ts:69 sets state.error and the loop aborts — every OTHER pending session after (and including) the poison record never syncs. Because records are listed newest-first (todaySessions.ts:47) and the poison one is not removed, the block is permanent across reconnects.",
+      "attackOrTrigger": "User upgrades the PWA across a release that changed the persisted session shape while an offline session (or two) sits pending; on reconnect the first record throws and no offline workout ever reaches the server.",
+      "why": "One corrupt/version-skewed record indefinitely strands every queued offline workout as unsynced with no recovery path.",
+      "fixSketch": "Wrap each syncOne call in its own try/catch so one bad record is skipped (or quarantined) without blocking the rest, and add a `version` field to OfflineSessionRecord plus a validating/migrating read that drops or upgrades unknown shapes rather than trusting the cast."
+    },
+    {
+      "title": "Read-modify-write race in persistInProgressSession drops merge-only fields (deletions / id map)",
+      "severity": "medium",
+      "category": "data-integrity",
+      "file": "client/src/lib/today/controller/offline.ts",
+      "line": "93-108",
+      "description": "persistInProgressSession does a load-then-save: `const existing = await loadOfflineSession(key)` (line 96) then builds a record preserving existing.server_exercise_ids_by_local / deleted_server_exercise_ids / cancel_workout (lines 102-105) and saves. The await on load yields the event loop, so two overlapping persists interleave and the later save clobbers the earlier one's merge-only fields. Concretely: removeExercise (core.ts:256-262) reads existing.deleted_server_exercise_ids and calls persistInProgressSession with extra {deleted_server_exercise_ids:[...,exId]}. If a plain persist (e.g. the unawaited `void persistInProgressSession(state)` in the offline event handler, sync.ts:91, or an in-flight set action's persist) loaded `existing` before removeExercise's save landed, it writes back the old deleted list and the deletion is lost. On reconnect syncOne never calls cancelExercise for that id, so a server exercise the user deleted offline persists (or, symmetrically, a lost server_exercise_ids_by_local entry causes createExercise to run twice → duplicate exercise).",
+      "attackOrTrigger": "Offline (or connectivity dropping): user removes a previously-synced exercise while another persist is in flight — e.g. the window 'offline' handler's fire-and-forget persist overlaps the removeExercise persist. Last write wins on the whole record and the deletion/id-map merge field is silently reverted.",
+      "why": "A user's offline deletion of an exercise (or the create-idempotency map) is silently lost, leaving deleted data on the server or duplicating exercises on reconnect.",
+      "fixSketch": "Serialize offline writes through a single-flight queue (or use an IndexedDB read-modify-write inside one transaction / a merge function) so concurrent persists cannot clobber each other's merge-only fields; at minimum await, never fire-and-forget, the offline-event persist."
+    },
+    {
+      "title": "No quota/IndexedDB error handling — a failed persist silently discards the just-logged set",
+      "severity": "medium",
+      "category": "data-integrity",
+      "file": "client/src/lib/offline/storage.ts",
+      "line": "60-69",
+      "description": "kvSet awaits store.put with no handling for QuotaExceededError or a rejected/aborted IndexedDB transaction (the localStorage fallback at line 64 likewise throws on quota). The offline write path updates in-memory state FIRST and persists AFTER: e.g. addSet offline (sets.ts:170-190) sets currentSession then `await persistInProgressSession(state)`, and persistInProgressSession -> saveOfflineSession -> kvSet. If that put rejects (storage pressure / eviction / quota), the rejection propagates to the action's catch, which is only guarded for isNetworkFailure — a QuotaExceededError is not a network failure, so it lands in the generic branch (e.g. sets.ts:230 state.error.set) while the set is already shown in the UI but was never durably written. On reload/crash the set is gone. persistentStorage.ts only *requests* persistence (best-effort, often denied on non-installed iOS Safari) and nothing verifies it or reacts to a failed write.",
+      "attackOrTrigger": "Offline session on a device under storage pressure or an origin without granted persistent storage; a set/exercise is added, the IndexedDB put fails, the user sees the entry on screen, then reloads — the entry is silently absent.",
+      "why": "Logged workout data appears saved in the UI but is never persisted, and is lost on the next reload with only a generic error surfaced.",
+      "fixSketch": "Detect write failures in kvSet (catch QuotaExceededError / transaction abort) and surface a distinct 'could not save locally' state so the UI does not present unpersisted edits as saved; consider verifying navigator.storage.persisted() and warning when best-effort storage is in use."
+    },
+    {
+      "title": "scopedKey falls back to an unscoped key when the active user id is unknown, orphaning offline sessions",
+      "severity": "low",
+      "category": "data-integrity",
+      "file": "client/src/lib/auth/scope.ts",
+      "line": "30-34",
+      "description": "scopedKey returns the bare base key when getActiveUserId() is null (localStorage 'auth.activeUserId' unset or unreadable). All offline session keys (todaySessions.ts:22-28), the recent-sessions cache (offline.ts:18) and planned-template keys route through scopedKey. If any persist happens while activeUserId is null (e.g. the value not yet written after session restore, or localStorage throwing in the try/catch at scope.ts:9-14), the record is stored under the unscoped base key; once the user id is later populated, every read uses the 'u<id>:' prefix and never finds that record, so an in-progress offline session written in the null window is orphaned and lost. The same unscoped record is also visible to a different user on the same device during their own null window (listOfflineSessions with an empty scope prefix would enumerate it), a weak cross-user data-leak surface.",
+      "attackOrTrigger": "App writes an offline session during a brief window where auth.activeUserId is not yet set (cold start / restore race, or localStorage access throwing); after the id resolves, the scoped read misses the base-keyed record and the session is silently gone.",
+      "why": "An in-progress offline workout can be orphaned (lost) across the auth-resolution boundary, and an unscoped record is momentarily readable by another account on a shared device.",
+      "fixSketch": "Refuse to persist (or defer) offline session writes until a concrete user id is known, or key such writes under an explicit 'anonymous' namespace that is migrated to the real user id on login rather than silently sharing the unscoped base key."
+    }
+  ]
+}

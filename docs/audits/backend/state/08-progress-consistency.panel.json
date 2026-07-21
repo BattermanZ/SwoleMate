@@ -1,0 +1,12 @@
+[
+  {
+    "idx": 1,
+    "verdicts": [
+      {
+        "title": "get_workout_stats counts never-ended (in-progress/abandoned) workouts as zero-duration, deflating average duration and skewing distribution",
+        "refuted": false,
+        "reason": "Code-truth check confirms the claim as written. The workout_times CTE (lines 411-420) selects FROM workouts WHERE user_id = ? only — no end_time > start_time or similar completion filter. total_workouts (COUNT(*) at line 492) and avg_duration (AVG(duration) at line 493) both draw from this unfiltered CTE, as does duration_ranges (lines 473-489) which buckets duration into '0-30' etc. Since workouts.rs sets end_time = start_time on INSERT, any in-progress or abandoned-without-auto-close workout yields duration = 0 via the julianday computation at line 414, and is counted into total_workouts, averaged into avg_duration, and bucketed into '0-30'. No WHERE clause, JOIN condition, or HAVING anywhere in this CTE chain filters out zero/negative-duration rows before they reach total_workouts/avg_duration/duration_distribution. The mechanism is real and reachable exactly as described."
+      }
+    ]
+  }
+]

@@ -1,0 +1,12 @@
+[
+  {
+    "idx": 1,
+    "verdicts": [
+      {
+        "title": "Refresh-token rotation has no reuse-detection / family revocation",
+        "refuted": false,
+        "reason": "Code matches the claim exactly. Lines 778-789 reject a presented refresh token solely via `stored.revoked_at.is_some()` (and other single-token checks) and return invalid_grant; there is no lookup or revocation of sibling/descendant tokens from the same grant. rotate_oauth_refresh_token is called at line 804-816 with only `stored.id` (the single presented token's row id) plus the new access/refresh hashes — no family/grant identifier is threaded through, so nothing in this function could cascade-revoke a previously-issued descendant token. The mechanism described (reuse of an already-revoked token is detected but no downstream action taken) is real and reachable as written."
+      }
+    ]
+  }
+]

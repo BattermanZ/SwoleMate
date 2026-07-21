@@ -1,7 +1,5 @@
 use crate::auth::password;
-use crate::auth::rate_limit::{
-    clear_ip_failures, is_ip_rate_limited, record_ip_failure, request_ip,
-};
+use crate::auth::rate_limit::{admit_login_attempt, clear_ip_failures, request_ip};
 use crate::auth::{build_session_cookie, normalize_username, PublicUser, SessionConfig};
 use crate::db::Database;
 use crate::errors::AppError;
@@ -34,46 +32,51 @@ pub async fn login(
     let client_ip = request_ip(&req);
 
     if let Some(ip) = client_ip.as_deref() {
-        if is_ip_rate_limited(ip, now) {
+        // Atomically check-and-record so concurrent attempts can't overshoot the
+        // limit through a check-then-record gap (B-LOW-10).
+        if !admit_login_attempt(ip, now) {
             return Err(AppError::TooManyRequests(
                 "Too many login attempts from this IP. Try again later.".to_string(),
             ));
         }
     }
 
-    // Generic response for unknown users.
-    let Some(user) = db.get_user_by_username(&username).await? else {
-        if let Some(ip) = client_ip.as_deref() {
-            record_ip_failure(ip, now);
+    // Load the account (may be absent). We ALWAYS spend an argon2 verification and
+    // a fixed delay on the failure path, and we NEVER short-circuit on lock or
+    // disabled state, so that:
+    //   * unknown / disabled / wrong-password accounts are indistinguishable by
+    //     status code, body, or timing — closing the enumeration channel (B-MED-1);
+    //   * a correct password for an enabled account always succeeds, so a stream of
+    //     bad-password attempts can no longer freeze an account out from its owner
+    //     (B-HIGH-1). Brute force is bounded by the per-IP limiter above, not by a
+    //     hard per-account lock that an attacker can weaponise into a DoS.
+    let user = db.get_user_by_username(&username).await?;
+    let password_ok = match user.as_ref() {
+        Some(u) if u.disabled_at.is_none() => {
+            password::verify_password(&u.password_hash, &body.password).unwrap_or(false)
         }
-        password::verify_dummy_password(&body.password);
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-        return Err(AppError::Unauthorized);
+        Some(u) => {
+            // Disabled account: still pay the argon2 cost to equalise timing, but a
+            // disabled account can never authenticate.
+            let _ = password::verify_password(&u.password_hash, &body.password);
+            false
+        }
+        None => {
+            password::verify_dummy_password(&body.password);
+            false
+        }
     };
 
-    if user.disabled_at.is_some() {
-        return Err(AppError::Unauthorized);
-    }
-
-    if let Some(locked_until) = user.locked_until {
-        if locked_until > now {
-            return Err(AppError::TooManyRequests(
-                "Too many login attempts. Try again later.".to_string(),
-            ));
+    if !password_ok {
+        if let Some(u) = user.as_ref() {
+            db.record_failed_login(u.id).await?;
         }
-    }
-
-    let ok = password::verify_password(&user.password_hash, &body.password)
-        .map_err(|_| AppError::Unauthorized)?;
-    if !ok {
-        db.record_failed_login(user.id).await?;
-        if let Some(ip) = client_ip.as_deref() {
-            record_ip_failure(ip, now);
-        }
+        // The IP attempt was already recorded atomically by admit_login_attempt.
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
         return Err(AppError::Unauthorized);
     }
 
+    let user = user.expect("password_ok is only true when the account exists");
     db.reset_login_failures(user.id).await?;
     if let Some(ip) = client_ip.as_deref() {
         clear_ip_failures(ip);
@@ -150,6 +153,10 @@ pub async fn change_password(
     let new_hash = password::hash_password(&body.new_password).map_err(AppError::BadRequest)?;
     db.update_password_hash(user.0.id, &new_hash, false).await?;
     db.revoke_all_sessions_for_user(user.0.id).await?;
+    // Password rotation is the canonical response to compromise, so it must sever
+    // bearer-token access too — not just cookie sessions (B-MED-4).
+    db.revoke_all_mcp_tokens_for_user(user.0.id).await?;
+    db.revoke_all_oauth_tokens_for_user(user.0.id).await?;
 
     // Create a new session immediately.
     let token = crate::auth::generate_session_token();

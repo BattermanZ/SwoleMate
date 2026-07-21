@@ -1,0 +1,37 @@
+{
+  "findings": [
+    {
+      "title": "Failed backup restore leaves the global DB connection pool permanently closed (app-wide outage until restart)",
+      "severity": "medium",
+      "category": "correctness",
+      "file": "server/src/routes.rs",
+      "line": "438-449, 526-530",
+      "description": "restore_backup() unconditionally closes the live shared pool (current_pool.close() at line 440) BEFORE doing anything reversible, then calls backup::restore_backup(). If the restore returns Err (lines 446-449 propagate with `?`) OR all three pool-reconnect retries fail (lines 526-529 return DatabaseError), the handler returns early and db.replace_pool(new_pool) (line 512) is never reached. The Database's pool remains the closed one, so every subsequent request that calls db.pool() gets a closed pool and fails. There is no re-open of the old/previous pool on any error path. The server is bricked for all users until the process is restarted.",
+      "attackOrTrigger": "An authenticated admin (session cookie, Role::Admin) POSTs /api/backups/{filename}/restore for a filename that passes is_safe_backup_filename but whose archive is corrupt/truncated (e.g. a backup whose write was interrupted — see the non-atomic-write finding), is missing the database.db entry, or is otherwise unreadable by GzDecoder/Archive. backup::restore_backup returns Err, restore_backup handler returns InternalError, and the closed pool is never replaced. Transient sqlx reconnect failures during the retry loop produce the same permanent-closed-pool state even for a valid archive.",
+      "why": "The teardown (pool close) is done up front and eagerly, but the only code path that restores service (replace_pool) is on the success branch. Any failure between close() and replace_pool() leaves the running server with a closed pool and no recovery, turning an admin operation that merely fails into an app-wide denial of service.",
+      "fixSketch": "Do not tear down the live pool until a validated new database is staged. Validate/open the restored DB into a fresh pool first, and only then close+swap. On ANY error path in restore_backup, re-establish a working pool (reconnect to the current db_url and db.replace_pool) before returning the error, or keep the original pool alive until replacement succeeds. Also validate the archive (openable, contains database.db) before calling current_pool.close()."
+    },
+    {
+      "title": "Backups are written non-atomically to their final path, leaving truncated archives that surface in the UI and can be selected for restore",
+      "severity": "low",
+      "category": "correctness",
+      "file": "server/src/backup.rs",
+      "line": "94",
+      "description": "create_backup opens fs::File::create(&backup_path) directly on the final swolemate_*.tar.gz path and streams the tar/gzip into it in place (lines 94-196). If the process is killed, the DB read fails, or an IO error occurs after the file is created but before archive.finish(), a truncated/partial .tar.gz remains at the real backup name. list_backups (used by GET /api/backups and by cleanup_old_backups) will skip it only if metadata.json is unreadable, but a partial archive that happened to flush metadata first, or any half-written file, still occupies a valid backup name in the directory.",
+      "attackOrTrigger": "Server crash / OOM / disk-full during a scheduled Auto backup (main.rs:134, schema.rs auto-backups) or an admin manual backup (POST /api/backups). The leftover partial file then appears selectable; an admin restoring it triggers the permanent-closed-pool outage described in the restore finding.",
+      "why": "Direct-to-final-path writes for archive artifacts are not crash-safe; the standard pattern is write-to-temp then atomic rename so only fully-formed archives ever appear under a real backup name.",
+      "fixSketch": "Write the archive to a temp path (e.g. backup_path.with_extension(\"tar.gz.tmp\")), call archive.finish() and fsync, then fs::rename() to the final backup_path. On any error, delete the temp file. This guarantees only complete backups are ever visible/restorable."
+    },
+    {
+      "title": "Restore extraction relies on entry-name whitelist and would follow symlink/hardlink tar entries if an untrusted-archive ingress were ever added",
+      "severity": "low",
+      "category": "security",
+      "file": "server/src/backup.rs",
+      "line": "250-265",
+      "description": "restore_backup iterates archive entries and, for entries whose path exactly equals \"database.db\"/\"database.db-wal\"/\"database.db-shm\", calls entry.unpack(&temp_new_db|wal|shm) into a fixed, controlled destination; all other entries are ignored. This is currently safe against zip-slip: the destination is fixed (not the entry's own path), the route pre-validates the filename via is_safe_backup_filename, and — verified — there is NO backup upload/import route anywhere (grep of server/src shows backups/ is written only by server-side create_backup). So no attacker-controlled archive can reach this code today. However, tar::Entry::unpack honors the entry's typeflag: a symlink/hardlink entry named \"database.db\" would be materialized as a symlink at temp_new_db and then fs::rename'd to db_path (line 276), after which the reopened SQLite pool would write through the symlink to an arbitrary path.",
+      "attackOrTrigger": "Not reachable in the current codebase (no route or other vector lets an attacker place a crafted .tar.gz into the backups/ directory). It becomes a real arbitrary-file-write-on-restore primitive only if a future feature allows importing/uploading backup archives, or if the backups/ directory becomes writable by an untrusted party.",
+      "why": "Logged as defense-in-depth: the safety here is contingent on the archive source being fully trusted, not on the extraction being hardened. A single future feature (backup import) would silently turn this into a critical vulnerability because the extraction does not reject non-regular-file entry types.",
+      "fixSketch": "Before unpacking, assert entry.header().entry_type().is_file() and reject anything else; unpack raw bytes with io::copy into a freshly-created O_CREAT|O_EXCL file rather than entry.unpack(); and if a backup-import feature is ever added, additionally enforce a decompressed-size cap on the gzip stream (flate2 GzDecoder is unbounded) and validate the archive before touching the live DB."
+    }
+  ]
+}

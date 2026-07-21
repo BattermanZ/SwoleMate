@@ -5,6 +5,16 @@ export function getErrorMessage(e: unknown): string {
 
 export function isNetworkFailure(e: unknown): boolean {
 	if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
+	// A request that timed out or was aborted (see the request timeout in api.ts) is
+	// a connectivity problem, not a bug — treat it as offline so the write is queued
+	// and retried on reconnect rather than surfaced as an error (F-MED-7).
+	if (
+		typeof DOMException !== 'undefined' &&
+		e instanceof DOMException &&
+		(e.name === 'TimeoutError' || e.name === 'AbortError')
+	) {
+		return true;
+	}
 	// A failed fetch throws a TypeError, but so do plenty of genuine bugs
 	// ("x is not a function", undefined access). Matching every TypeError flips
 	// the app into offline mode on real errors and strands data as "pending".
@@ -12,7 +22,9 @@ export function isNetworkFailure(e: unknown): boolean {
 	// browser's wording (Chrome "Failed to fetch", Firefox "NetworkError…",
 	// Safari "Load failed") — and let other errors propagate.
 	const message = e instanceof Error ? e.message : String(e);
-	return /failed to fetch|networkerror|load failed|connection/i.test(message);
+	return /failed to fetch|networkerror|load failed|connection|timed out|the operation was aborted/i.test(
+		message
+	);
 }
 
 // Local (offline) entities use negative integer ids as a sentinel for

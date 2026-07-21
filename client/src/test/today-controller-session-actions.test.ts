@@ -208,6 +208,60 @@ describe('today controller session actions', () => {
 		);
 	});
 
+	it('online end-session network failure persists a replayable pending_sync end record (F-HIGH-2)', async () => {
+		apiMocks.endExercise.mockResolvedValue(undefined);
+		// endWorkout drops mid-flight after exercises were ended.
+		apiMocks.endWorkout.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+		const state = createTodayState();
+		state.endModalOpen.set(true);
+		state.endMood.set('😐');
+		state.endNotes.set('  solid  ');
+		state.currentSession.set({
+			id: 55,
+			startedAt: '2026-01-01T10:00:00.000Z',
+			notes: 'server session',
+			exercises: [
+				{
+					id: 88,
+					name: 'Squat',
+					notes: '',
+					startedAt: '2026-01-01T10:00:00.000Z',
+					endedAt: '2026-01-01T10:05:00.000Z',
+					status: 'active',
+					perSideWeight: false,
+					splitWeight: false,
+					settings: [],
+					sets: []
+				}
+			]
+		});
+		offlineSessionMocks.loadOfflineSession.mockResolvedValueOnce(null);
+
+		const actions = createSessionActions({
+			state,
+			addExercise: vi.fn(async () => undefined),
+			refreshFromBackend: vi.fn(async () => undefined)
+		});
+
+		await actions.submitEndSession();
+
+		// The offline record must carry the mood/notes AND an endedAt so syncOne's
+		// endWorkout branch fires on reconnect — not a bare in_progress record.
+		expect(offlineSessionMocks.saveOfflineSession).toHaveBeenCalledWith(
+			expect.objectContaining({
+				status: 'pending_sync',
+				end_mood: '😐',
+				end_notes: 'solid',
+				server_workout_id: 55,
+				session: expect.objectContaining({ endedAt: expect.any(String) })
+			})
+		);
+		expect(offlineActionMocks.persistInProgressSession).not.toHaveBeenCalled();
+		expect(get(state.currentSession)).toBeNull();
+		expect(get(state.endModalOpen)).toBe(false);
+	});
+
 	it('surfaces start-session non-network errors', async () => {
 		apiMocks.createWorkout.mockRejectedValueOnce(new Error('server rejected payload'));
 

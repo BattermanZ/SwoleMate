@@ -1,0 +1,52 @@
+[
+  {
+    "idx": 1,
+    "verdicts": [
+      {
+        "title": "A single 401 during an in-progress workout silently wipes all unsynced logged sets",
+        "refuted": false,
+        "reason": "Code confirms the mechanism exactly as described: setUnauthorizedHandler(handleUnauthorized) at line 136 wires ANY 401 (via api.ts's global handler) to handleUnauthorized (129-134), which unconditionally calls clearClientSensitiveData(). That function's localStorage loop (30-48) and IndexedDB pass (53-66) delete every key matching the unscoped substrings 'offline.today.session.', 'currentWorkoutId', 'swolemate:currentWorkoutState' with no check for whether a workout is in progress, no confirmation, and no distinction between a genuine session-expiry 401 and a transient one. There is no early-return/guard in handleUnauthorized or clearClientSensitiveData that would prevent this during an active workout. The mechanism is real and reachable exactly as the finding states."
+      },
+      {
+        "title": "clearClientSensitiveData / user-switch destroys OTHER users' unsynced offline sessions on a shared device",
+        "refuted": false,
+        "reason": "Verified: both the localStorage sweep (37-47) and the IndexedDB sweep (55-62) filter purely by k.includes(...)/key.includes(...) substring checks with no per-user prefix isolation, so a key like 'u7:offline.today.session.3' still matches and is deleted. This is called from login() (164-173) and refresh() (138-162) whenever previousUserId !== the newly authenticated user's id (142-144, 166-169), confirming the user-switch trigger exactly as described. No guard scopes the deletion to only the previous or only the active user's keys."
+      },
+      {
+        "title": "Protected routes render cached data during 'unknown' auth status (flash-of-content data leak)",
+        "refuted": false,
+        "reason": "Confirmed line-for-line: the store initializes status:'unknown' with user restored from localStorage via readStoredUser() (120-127); the layout's $effect (26-33) only triggers goto('/login') when status==='unauthenticated', leaving 'unknown' to fall into the render branch (147-149) where protected children render immediately since isLogin is false. In refresh() (138-162), the network-failure branch (149-154) only sets offline:true via state.update, explicitly preserving whatever status was already set (spread of `current`), so on a network failure status never transitions away from 'unknown' — matching the claim that an offline/revoked user is never redirected and cached data keeps rendering."
+      }
+    ]
+  },
+  {
+    "idx": 2,
+    "verdicts": [
+      {
+        "title": "A single 401 during an in-progress workout silently wipes all unsynced logged sets",
+        "refuted": false,
+        "reason": "auth/index.ts confirms handleUnauthorized (line 129-134) is registered as the global unauthorized handler (line 136, via setUnauthorizedHandler) and runs unconditionally on ANY 401 seen by the api layer, with no distinction for transient/spurious 401s vs a genuine logout. It calls clearClientSensitiveData() synchronously in the same tick as clearing auth state and navigating away, with no confirmation, retry, or check for an in-progress/unsynced session before wiping. Nothing in this file gates or debounces this path, and a live workout session routinely makes background authenticated calls, so a cookie TTL lapse or backend restart mid-session is a realistic, non-adversarial trigger. Reachable as described."
+      },
+      {
+        "title": "clearClientSensitiveData / user-switch destroys OTHER users' unsynced offline sessions on a shared device",
+        "refuted": false,
+        "reason": "Confirmed reachable in this file: login() (166-169) and refresh() (142-144) both compare previousUserId (from getActiveUserId()) to the newly authenticated user's id and call clearClientSensitiveData() when they differ -- this is exactly the shared-device user-switch flow, triggered on every successful login where the browser's previously active user differs from the one logging in now. clearClientSensitiveData itself (26-66) matches keys by plain substring (k.includes('offline.today.session.') etc.) with no per-user prefix check, so a prefixed key like u{A}:offline.today.session.1 still matches and gets deleted even though the active user is now B. No code path in this file scopes the deletion to the current/previous user before wiping, and the wipe runs before any sync/upload of pending offline data is attempted. Reachable as described."
+      }
+    ]
+  },
+  {
+    "idx": 3,
+    "verdicts": [
+      {
+        "title": "A single 401 during an in-progress workout silently wipes all unsynced logged sets",
+        "refuted": false,
+        "reason": "No mitigation exists in this file for this path. handleUnauthorized (129-134) is invoked unconditionally by setUnauthorizedHandler for any 401, with no debounce, no re-auth retry, no check for whether the 401 originated from a background/ancillary call vs. a genuine session-invalidation, and no confirmation before clearClientSensitiveData() runs. The try/catch blocks inside clearClientSensitiveData only swallow storage-API errors, they do not gate or scope the deletion itself. Nothing here makes a transient/spurious 401 unreachable or the wipe recoverable."
+      },
+      {
+        "title": "clearClientSensitiveData / user-switch destroys OTHER users' unsynced offline sessions on a shared device",
+        "refuted": false,
+        "reason": "Confirmed directly in this file: clearClientSensitiveData (26-66) matches keys by plain substring (k.includes('offline.today.session.'), etc.) against the full, unfiltered key set (all of localStorage at 30-48, and kvListKeys('') at 54 with no prefix filter), not scoped to the active user's u{id}: prefix. There is no per-user filtering logic anywhere in this function, and it is invoked pre-sync on user-switch in both login() (166-169) and refresh() (141-144). Nothing in this file mitigates the cross-user deletion the claim describes."
+      }
+    ]
+  }
+]

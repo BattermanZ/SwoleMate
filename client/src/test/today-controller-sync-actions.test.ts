@@ -109,6 +109,56 @@ describe('today controller sync actions', () => {
 		expect(refreshFromBackend).toHaveBeenCalledTimes(1);
 	});
 
+	it('skips a poison record and still syncs the rest (F-MED-2)', async () => {
+		sessionMocks.listOfflineSessions.mockResolvedValueOnce([
+			{ key: 'poison', status: 'pending_sync' },
+			{ key: 'good', status: 'pending_sync' }
+		]);
+		// First record throws a non-network error (corrupt/version-skewed shape);
+		// the second must still be synced.
+		offlineMocks.syncOne
+			.mockRejectedValueOnce(new TypeError("Cannot read properties of undefined (reading 'length')"))
+			.mockResolvedValueOnce(undefined);
+		offlineMocks.refreshPendingSyncCount.mockResolvedValueOnce(0);
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+
+		const state = createTodayState();
+		const actions = createSyncActions({
+			state,
+			refreshFromBackend: vi.fn(async () => undefined),
+			hydrateExerciseLibrary: vi.fn(async () => undefined)
+		});
+
+		await actions.syncPendingSessions();
+
+		expect(offlineMocks.syncOne).toHaveBeenCalledTimes(2);
+		expect(get(state.error)).toMatch(/could not be synced/);
+		// A poison record must NOT flip the app back to offline.
+		expect(offlineMocks.setOffline).not.toHaveBeenCalled();
+	});
+
+	it('a network failure mid-run stops and flips to offline (not skipped)', async () => {
+		sessionMocks.listOfflineSessions.mockResolvedValueOnce([
+			{ key: 'a', status: 'pending_sync' },
+			{ key: 'b', status: 'pending_sync' }
+		]);
+		offlineMocks.syncOne
+			.mockResolvedValueOnce(undefined)
+			.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+		const state = createTodayState();
+		const actions = createSyncActions({
+			state,
+			refreshFromBackend: vi.fn(async () => undefined),
+			hydrateExerciseLibrary: vi.fn(async () => undefined)
+		});
+
+		await actions.syncPendingSessions();
+
+		expect(offlineMocks.setOffline).toHaveBeenCalled();
+		expect(get(state.offlineMode)).toBe(true);
+	});
+
 	it('concurrent syncPendingSessions calls do not double-submit', async () => {
 		let release: () => void = () => {};
 		const gate = new Promise<void>((resolve) => {

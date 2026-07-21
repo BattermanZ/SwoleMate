@@ -92,6 +92,21 @@ describe('syncOne idempotency across partial failures', () => {
 		expect(last?.server_exercise_ids_by_local).toEqual({ '-1': 11 });
 	});
 
+	it('sends stable idempotency keys derived from local ids (F-HIGH-3)', async () => {
+		const createWorkout = vi.fn(async () => ({ id: 555 }));
+		const createExercise = vi.fn(async () => ({ id: Math.floor(Math.random() * 1000) + 1 }));
+		const api = makeApi({ createWorkout, createExercise });
+
+		await syncOne(makeRecord(), api);
+
+		// Workout key is derived from the session's negative local id, so a retry
+		// carries the same key and the server dedups it.
+		expect(createWorkout).toHaveBeenCalledWith(expect.anything(), 'w:-100');
+		// Each exercise create carries a key derived from its own local id.
+		expect(createExercise).toHaveBeenCalledWith(555, expect.anything(), 'e:-1');
+		expect(createExercise).toHaveBeenCalledWith(555, expect.anything(), 'e:-2');
+	});
+
 	it('retry after partial failure does not re-create the workout or done exercises', async () => {
 		// Simulate the persisted state after the first run created workout 555 and
 		// mapped the first exercise.

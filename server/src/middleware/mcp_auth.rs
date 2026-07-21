@@ -80,10 +80,27 @@ where
             .get(header::AUTHORIZATION)
             .and_then(|value| value.to_str().ok())
             .map(ToString::to_string);
+        // Per-IP key for the pre-auth throttle. Mirrors the login limiter: prefer
+        // the nginx-set X-Real-IP, fall back to the peer socket.
+        let ip_key = req
+            .headers()
+            .get("x-real-ip")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .or_else(|| req.peer_addr().map(|a| a.ip().to_string()))
+            .unwrap_or_else(|| "unknown".to_string());
         let db = self.db.clone();
         let service = self.service.clone();
 
         Box::pin(async move {
+            // Throttle by IP BEFORE any DB work so an unauthenticated flood of bogus
+            // bearer tokens cannot amplify into unbounded DB reads/writes (B-MED-3).
+            if !crate::mcp::rate_limit::admit_auth_attempt(&ip_key, Utc::now()) {
+                let (req, _) = req.into_parts();
+                return Ok(ServiceResponse::new(req, too_many_requests_response()));
+            }
+
             let Some(auth_header) = auth_header else {
                 let (req, _) = req.into_parts();
                 let resp = unauthorized_response();
@@ -128,9 +145,13 @@ where
                 {
                     None
                 } else {
-                    db.touch_mcp_token_last_used(token_row.id)
-                        .await
-                        .map_err(Error::from)?;
+                    // Debounce the last-used write so a valid-token flood does not
+                    // force a SQLite UPDATE on every request (B-MED-3).
+                    if crate::mcp::rate_limit::should_touch_token(token_row.id, Utc::now()) {
+                        db.touch_mcp_token_last_used(token_row.id)
+                            .await
+                            .map_err(Error::from)?;
+                    }
                     Some(McpPrincipal {
                         user_id: token_row.user_id,
                         client_id: format!("mcp_token:{}", token_row.id),
@@ -153,6 +174,13 @@ where
             Ok(res.map_into_boxed_body())
         })
     }
+}
+
+fn too_many_requests_response() -> HttpResponse {
+    HttpResponse::TooManyRequests().json(serde_json::json!({
+        "error": "Too Many Requests",
+        "auth_type": "bearer_token"
+    }))
 }
 
 fn unauthorized_response() -> HttpResponse {

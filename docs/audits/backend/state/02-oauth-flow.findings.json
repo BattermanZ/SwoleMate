@@ -1,0 +1,48 @@
+{
+  "findings": [
+    {
+      "title": "Refresh-token rotation has no reuse-detection / family revocation",
+      "severity": "medium",
+      "category": "security",
+      "file": "server/src/oauth/routes.rs",
+      "line": "778-830",
+      "description": "exchange_refresh_token rotates the refresh token (rotate_oauth_refresh_token revokes the presented token and issues a new access+refresh pair). When a previously-rotated (already revoked) refresh token is presented again, the code at lines 778-789 simply returns invalid_grant because stored.revoked_at.is_some(). It never revokes the still-active descendant tokens issued from that same grant chain. rotate_oauth_refresh_token in server/src/db/oauth.rs:425 only revokes the single presented token id; there is no grant/family id linking successive refresh tokens, so reuse of a leaked token cannot trigger cascade revocation.",
+      "attackOrTrigger": "Attacker steals refresh token RT1 (bearer value). Attacker redeems RT1 at POST /oauth/token (grant_type=refresh_token), receiving RT2 and a live access token; RT1 is now revoked. The legitimate client later redeems its copy of RT1, gets invalid_grant, and simply re-authenticates — but the server takes no action against RT2/its access token, so the attacker retains persistent, silent access. This is exactly the replay scenario RFC 6819 §5.2.2.3 says rotation must detect by revoking the whole chain.",
+      "why": "Refresh tokens are long-lived (default 30 days). Without reuse detection the primary benefit of rotation (bounding the damage of a stolen refresh token) is lost, giving a thief indefinite access to the victim's MCP data.",
+      "fixSketch": "Add a grant/family identifier column shared across rotated refresh tokens; on presentation of an already-revoked (but non-expired) refresh token, revoke all access+refresh tokens in that family and return invalid_grant. rotate_oauth_refresh_token already runs in a transaction, so the family revoke can be added there."
+    },
+    {
+      "title": "Authorization-code replay does not revoke tokens already issued from that code",
+      "severity": "low",
+      "category": "security",
+      "file": "server/src/oauth/routes.rs",
+      "line": "643-683",
+      "description": "Single-use of the authorization code is enforced (stored.used_at check at line 643 plus the atomic mark_oauth_authorization_code_used UPDATE ... WHERE used_at IS NULL at server/src/db/oauth.rs:213 returning rows_affected==1). However, on a detected replay of an already-used code the handler only returns invalid_grant; it does not revoke the access/refresh tokens minted during the first successful exchange, contrary to RFC 6749 §4.1.2 which states the AS SHOULD revoke tokens previously issued for a replayed code.",
+      "attackOrTrigger": "If an authorization code leaks (e.g. via referrer/log exposure) and is redeemed a second time, the second attempt is correctly rejected, but the tokens from the first (possibly attacker) redemption remain valid. Note PKCE (S256, enforced at lines 654-667) already requires the code_verifier, so a bare code leak is not by itself sufficient to redeem — which is why this is rated low.",
+      "why": "Defense-in-depth: PKCE materially reduces exploitability, but a leaked code redeemed by the legitimate client should still invalidate any parallel malicious issuance. Low launch impact given PKCE is mandatory.",
+      "fixSketch": "On observing stored.used_at.is_some() for an otherwise-matching code, revoke all access/refresh tokens issued for (client_id, user_id, code) and return invalid_grant."
+    },
+    {
+      "title": "Username enumeration via differential response/timing in authorize_post",
+      "severity": "low",
+      "category": "security",
+      "file": "server/src/oauth/routes.rs",
+      "line": "462-494",
+      "description": "The combined login+consent POST /oauth/authorize handler leaks account state before verifying the password. A non-existent username (line 464) triggers a dummy argon2 verify plus a fixed 200ms sleep. A disabled or must_change_password account (line 481) returns 401 access_denied immediately with no dummy hash and no sleep, and a locked account (line 487) returns 429 too_many_requests. These divergent status codes and response latencies let an unauthenticated caller distinguish 'no such user' from 'user exists (disabled/locked/active)' without knowing the password.",
+      "attackOrTrigger": "An attacker POSTs to /oauth/authorize (a public, unauthenticated endpoint) with a valid client_id/redirect_uri/PKCE, approve=yes, a guessed username and an arbitrary password. A near-instant 401 indicates an existing-but-disabled account; a 429 indicates an existing locked account; a ~200ms 401 indicates the username does not exist. Iterating enumerates valid usernames prior to targeted password attacks.",
+      "why": "Enables reliable account enumeration against the MCP OAuth login surface, aiding credential-stuffing/targeting. Low because it does not directly bypass auth.",
+      "fixSketch": "Move the disabled/must_change_password/locked checks to after password verification (or apply the same dummy-hash + fixed-delay path), and normalize the response to a single generic access_denied for all failure modes."
+    },
+    {
+      "title": "Authorization response builder blindly appends '?code=', corrupting redirect URIs that already contain a query string",
+      "severity": "low",
+      "category": "correctness",
+      "file": "server/src/oauth/routes.rs",
+      "line": "549-555",
+      "description": "The success redirect is built with format!(\"{}?code={}\", form.redirect_uri, ...) and then \"&state=\" is appended. redirect_uri is exact-matched against a registered value, but registered redirect URIs are permitted to contain query components (RFC 6749 §3.1.2 only forbids fragments, which validate_redirect_uri does reject at line 109). A registered URI such as https://client.example/cb?tenant=42 yields https://client.example/cb?tenant=42?code=...&state=..., which is a malformed authorization response (two '?').",
+      "attackOrTrigger": "A legitimately registered client whose redirect_uri includes a query string completes the login/consent flow; the returned Location header contains a double '?', so the client's callback fails to parse the code and the authorization flow breaks. Not attacker-driven; a functional/interop defect.",
+      "why": "Breaks otherwise-valid clients and violates the spec requirement to append parameters preserving any existing query component. Low security impact (no injection: code and state are urlencoded), but real correctness impact for such clients.",
+      "fixSketch": "Parse redirect_uri with Url and use query_pairs_mut().append_pair(\"code\", &code) / append_pair(\"state\", state) so the separator ('?' vs '&') is chosen correctly."
+    }
+  ]
+}

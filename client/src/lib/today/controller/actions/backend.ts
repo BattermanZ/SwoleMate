@@ -1,6 +1,5 @@
 import { getWorkout, getWorkouts } from '$lib/api';
 import { kvSet } from '$lib/offline/storage';
-import { deleteOfflineSession } from '$lib/offline/todaySessions';
 import { toUiSession, workoutIsActive } from '$lib/today/backend';
 import { get } from 'svelte/store';
 import {
@@ -57,31 +56,32 @@ export async function refreshFromBackend(state: TodayState) {
 			if (offlineInProgress?.session) {
 				const offlineSessionId =
 					offlineInProgress.server_workout_id ?? offlineInProgress.session.id;
-				const isAlreadyCompleted =
+				// The server workout for this offline record exists but is no longer
+				// active — it was completed on another device. The offline record only
+				// exists because it carries unsynced local edits, so deleting it here
+				// silently dropped those edits (F-MED-5). Keep it (still counted as
+				// pending) so reconnect's syncOne can replay the edits, and surface a
+				// conflict notice instead of discarding data.
+				const completedElsewhere =
 					offlineSessionId > 0 && workouts.some((w) => w.id === offlineSessionId);
-				if (isAlreadyCompleted) {
-					await deleteOfflineSession(offlineInProgress.key).catch(() => undefined);
-					state.currentSession.set(null);
-					state.sessionNotes.set('');
-					state.openExerciseIds.set([]);
-					state.plannedTemplateExercises.set([]);
-					void clearPlannedTemplate();
-				} else {
-					state.currentSession.set(offlineInProgress.session);
-					state.sessionNotes.set(offlineInProgress.session.notes);
-					state.openExerciseIds.set(
-						offlineInProgress.session.exercises
-							.filter((exercise) => exercise.status !== 'done')
-							.map((exercise) => exercise.id)
-					);
-					if (get(state.plannedTemplateExercises).length === 0) {
-						const restored = await loadPlannedTemplate(offlineInProgress.session.id);
-						if (restored && restored.length > 0) {
-							state.plannedTemplateExercises.set(restored);
-						}
+				state.currentSession.set(offlineInProgress.session);
+				state.sessionNotes.set(offlineInProgress.session.notes);
+				state.openExerciseIds.set(
+					offlineInProgress.session.exercises
+						.filter((exercise) => exercise.status !== 'done')
+						.map((exercise) => exercise.id)
+				);
+				if (get(state.plannedTemplateExercises).length === 0) {
+					const restored = await loadPlannedTemplate(offlineInProgress.session.id);
+					if (restored && restored.length > 0) {
+						state.plannedTemplateExercises.set(restored);
 					}
-					state.notice.set('Local session in progress. You can keep logging and sync later.');
 				}
+				state.notice.set(
+					completedElsewhere
+						? 'This workout was completed on another device. Your unsynced changes are kept and will sync.'
+						: 'Local session in progress. You can keep logging and sync later.'
+				);
 			} else {
 				state.currentSession.set(null);
 				state.sessionNotes.set('');

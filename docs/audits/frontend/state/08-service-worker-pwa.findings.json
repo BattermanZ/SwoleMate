@@ -1,0 +1,26 @@
+{
+  "findings": [
+    {
+      "title": "skipWaiting + activate cache-purge forces a mid-session full reload / broken route navigation after a deploy",
+      "severity": "medium",
+      "category": "data-integrity",
+      "file": "client/src/service-worker.ts",
+      "line": "33, 38-47, 66-69",
+      "description": "The install handler calls sw.skipWaiting() (line 33) and the activate handler deletes every cache whose key is not the new swolemate-cache-<version> (line 42) and then clients.claim() (line 44). This means that the moment a new build finishes precaching, the new SW activates immediately and purges the OLD version cache that holds all the old hashed /_app/immutable/ chunks — while a client that is still running the OLD build (e.g. a user mid-workout on the Today live logger) is now controlled by the new SW. As soon as that old page performs any lazy chunk import (SvelteKit client-side navigation to /workouts, /progress, opening a lazily-imported component, etc.) it requests an OLD hashed asset URL. The new SW's cacheFirst (line 49) misses (new cache only has new hashes) and falls through to network; on adapter-static the old-hash file has been overwritten/removed by the deploy, so it 404s, the dynamic import rejects, and SvelteKit falls back to a full-page reload. There is no 'update available – reload when ready' prompt and no controllerchange gating; the reload happens mid-session with no user control.",
+      "attackOrTrigger": "User is on '/' (Today) with an in-progress logged session. A new version is deployed while the tab is open. The new SW installs, skipWaiting + claim, and deletes the old cache. User taps History (or any route needing a not-yet-loaded chunk) → old-hash chunk 404 → SvelteKit forces a full page reload mid-session.",
+      "why": "Committed sets are persisted to IndexedDB after each action (persistInProgressSession in client/src/lib/today/controller/offline.ts, called from sets.ts/core.ts/settings.ts) and rehydrated on boot, so already-logged sets survive the forced reload — hence medium, not critical. But any not-yet-submitted input in the live logger (a set typed but not saved, an in-progress note) is lost, and the workout view reloads out from under the user mid-set. This is precisely the 'update flow that forces a reload mid-session' hazard: the classic reason SPAs avoid unconditional skipWaiting.",
+      "fixSketch": "Do not skipWaiting/clients.claim unconditionally. Let the new SW wait, detect it from the page (registration.waiting), and surface a non-destructive 'Update ready — reload' affordance that the user triggers (ideally suppressed while an in-progress session is live). At minimum, keep the old version's immutable chunks reachable (don't purge the previous cache immediately, or fall back to serving stale index for failed old-hash chunk requests) so an old client can finish its session without a hard 404 reload."
+    },
+    {
+      "title": "SW cache-exclusion only covers /api/; same-origin GET to /oauth, /mcp, /.well-known falls through to the shared cache",
+      "severity": "low",
+      "category": "security",
+      "file": "client/src/service-worker.ts",
+      "line": "96-100",
+      "description": "The comment at line 96 states 'Never cache API responses (avoids leaking authenticated data across users)', but the guard at line 97 only matches url.pathname.startsWith('/api/'). The dev/proxy seam also exposes /oauth, /mcp and /.well-known as same-origin paths (see vite.config.ts proxy and client/src/routes/settings/+page.svelte which builds `${origin}/mcp`). Any same-origin GET to one of those paths that returns a 200 basic response falls through to the catch-all cacheFirst at line 100 and is stored in the single shared swolemate-cache-<version> Cache Storage bucket, keyed only by URL with no per-user scoping. A subsequent request (including a different user on a shared device) would be served the cached copy from cacheFirst before it ever hits the network. Navigations to /oauth* are additionally captured by the navigate branch and written under the '/' key (line 80), which could poison the offline shell with an OAuth-page body.",
+      "attackOrTrigger": "A GET to /oauth/... or /.well-known/... (e.g. server metadata, or an OAuth authorize/callback page hit via navigation) returns 200; cacheFirst stores it. On the same device the next user's identical GET is served the cached response instead of a fresh, per-identity one.",
+      "why": "In practice the SPA drives all its data through /api/ (client/src/lib/api.ts), the /mcp and /oauth surfaces are for external MCP clients, and logout runs a swolemate-cache-* sweep (client/src/lib/auth/index.ts), so real exposure is narrow — hence low. But the exclusion list not matching the stated intent is a defense-in-depth gap on exactly the paths the comment is meant to protect.",
+      "fixSketch": "Broaden the non-cache guard to cover all backend-proxied prefixes (/api/, /mcp, /oauth, /.well-known) and exclude those paths from the navigate-branch cache.put('/') as well, so no authenticated/identity-scoped response can enter the shared cache."
+    }
+  ]
+}

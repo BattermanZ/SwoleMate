@@ -1,0 +1,37 @@
+{
+  "findings": [
+    {
+      "title": "No request timeout/abort in api.ts wedges the reconnect sync loop and stalls writes",
+      "severity": "medium",
+      "category": "data-integrity",
+      "file": "client/src/lib/api.ts",
+      "line": "97-107",
+      "description": "Every request in api.ts is a raw fetch() with no AbortController or timeout (withCredentials at lines 53-55 only sets credentials; no signal is ever attached). On mobile the `online` event fires the moment the radio reassociates, but the TCP path is frequently half-open/stalled for tens of seconds after that. syncPendingSessions (client/src/lib/today/controller/actions/sync.ts:40) awaits syncOne -> api.createWorkout/createExercise/endWorkout sequentially with no time bound. While that fetch hangs: state.loading stays true (spinner stuck), and the module-level `isSyncing` guard (sync.ts:31,41-42) stays true so every subsequent `online` event short-circuits at sync.ts:41 and no pending session ever re-attempts to sync. The same unbounded fetch is on the live set-logging path (createSet/replaceSets), so an in-workout write can appear to hang indefinitely with no error and no offline fallback. In the pathological case where the socket never errors, isSyncing is never reset in the finally block (sync.ts:77) and auto-sync is silently dead for the page's lifetime, stranding all logged data as 'pending'.",
+      "attackOrTrigger": "Online: user regains connectivity (subway exit, elevator) so the browser fires `online` with a stale/half-open socket. syncPendingSessions starts, the first sync fetch stalls, isSyncing stays true, loading spinner stuck; any further set the user logs also hangs. Until the OS TCP timeout fires (or forever if keep-alive holds the socket), no pending workout syncs and the user gets no signal that their data is not saved.",
+      "why": "Silently strands a user's logged workout as unsynced and blocks all further auto-sync with no error surfaced, defeating the offline-first guarantee that changes 'will sync later'.",
+      "fixSketch": "Attach an AbortController with a sane timeout (e.g. 15-30s) to each fetch (or a shared wrapper in api.ts), and translate the abort into a network-failure-shaped error so isNetworkFailure() classifies it as offline rather than leaving the promise pending. This lets syncOne fail fast, reset isSyncing, and re-arm on the next reconnect."
+    },
+    {
+      "title": "handleResponse treats any 2xx with a non-JSON body as a successful void write",
+      "severity": "low",
+      "category": "data-integrity",
+      "file": "client/src/lib/api.ts",
+      "line": "81-90",
+      "description": "On a 2xx response whose content-type is not application/json, handleResponse returns undefined and treats the call as a successful no-payload write (lines 82-85), never throwing. For the void endpoints used in the reconnect replay this becomes a false positive: syncOne calls api.endWorkout (client/src/lib/today/controller/offline.ts:270) and then unconditionally deleteOfflineSession(record.key) at line 275 on the strength of that 'success'. If a same-origin reverse proxy or gateway ever answers /api with a 2xx text/html or text/plain body (maintenance page, auth gateway that returns 200 with an HTML interstitial, misconfigured upstream) instead of the backend JSON, the workout finalization (end_time/mood/feedback) is never persisted yet the offline record carrying it is deleted, so it can never be retried. The app's own service worker cannot cause this (it explicitly bypasses /api and non-GET at service-worker.ts:63,97) and a cross-origin captive-portal fetch would reject under CORS, which is why realism is limited to a same-origin infra intermediary; but the contract still converts a non-backend response into an apparent successful write.",
+      "attackOrTrigger": "Reconnect/sync path, online: a same-origin proxy in front of the Rust backend returns HTTP 200 with an HTML body for POST /api/workouts/{id}/end during syncOne. handleResponse returns undefined (treated as success), syncOne deletes the pending offline session, and the workout's end/mood/feedback is silently lost with no error.",
+      "why": "A response that never reached the backend is accepted as a completed write, and the local copy that would allow retry is deleted, causing recoverable-but-real loss of workout finalization data.",
+      "fixSketch": "For endpoints that expect a body, require application/json on success and throw an ApiError on an unexpected content-type instead of returning undefined; reserve the undefined path for 204/explicitly-empty responses only. Alternatively have syncOne verify the write (e.g. re-read status) before deleting the offline record."
+    },
+    {
+      "title": "Remote logger drops the in-flight batch and permanently disables logging on 401/403",
+      "severity": "low",
+      "category": "data-integrity",
+      "file": "client/src/lib/logger.ts",
+      "line": "111-119",
+      "description": "processLogQueue drains the queue into a local `logs` array (lines 98-99) before POSTing. On a 401/403 it sets remoteEnabled=false and returns (lines 112-115) WITHOUT unshifting `logs` back onto the queue, so that batch of warn/error diagnostics is silently discarded, and remote logging stays off until setRemoteEnabled(true) is called again (typically only on next auth bootstrap). A transient 401 during a token refresh window therefore both loses the current diagnostics and blinds remote logging for the rest of the session. This only affects diagnostic logs, not user workout data, so impact is minor; noting it because it is a silent error-swallow in the api seam's sibling module.",
+      "attackOrTrigger": "Online: a warn/error is queued, the session cookie momentarily lapses so POST /api/logs returns 401. The batch is dropped (not re-queued) and remoteEnabled flips to false, so subsequent server-side diagnostics are also lost until the app re-enables remote logging.",
+      "why": "Silent loss of diagnostic logs plus a sticky disable makes post-incident debugging of exactly the auth/network failures that matter unreliable; low because no user-facing workout data is affected.",
+      "fixSketch": "On 401/403, unshift the drained `logs` back onto the queue (as the generic-failure branch already does) before disabling, and/or re-enable remote logging automatically once auth is re-established."
+    }
+  ]
+}

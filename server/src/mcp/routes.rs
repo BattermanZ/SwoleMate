@@ -822,7 +822,10 @@ async fn handle_mcp_message(
     }
 
     let now = Utc::now();
-    let rate_limit_key = format!("{}:{}", principal.client_id, principal.user_id);
+    // Key the limiter on the user alone. Keying on client_id too let a single user
+    // multiply their budget by minting extra personal MCP tokens (or OAuth clients),
+    // each producing a distinct bucket — defeating the per-account throttle (B-MED-5).
+    let rate_limit_key = format!("user:{}", principal.user_id);
     if !rate_limit::admit_request(&rate_limit_key, now) {
         let name = if rpc.method == "tools/call" {
             rpc.params
@@ -1062,7 +1065,7 @@ async fn call_tool(
             require_scope(principal, authz::McpScope::WorkoutsWrite)?;
             let request: CreateWorkoutRequest = parse_args(args)?;
             request.validate().map_err(invalid_params)?;
-            let workout_id = workouts::create_workout(db, principal.user_id, &request)
+            let workout_id = workouts::create_workout(db, principal.user_id, &request, None)
                 .await
                 .map_err(rpc_error_from_app_error)?;
             Ok(tool_success(json!({
@@ -1149,6 +1152,7 @@ async fn call_tool(
                 principal.user_id,
                 request.workout_id,
                 &request.request,
+                None,
             )
             .await
             .map_err(rpc_error_from_app_error)?;

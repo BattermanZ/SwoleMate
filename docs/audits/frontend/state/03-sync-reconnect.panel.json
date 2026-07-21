@@ -1,0 +1,42 @@
+[
+  {
+    "idx": 1,
+    "verdicts": [
+      {
+        "title": "No idempotency key on createWorkout/createExercise: a lost HTTP response duplicates the workout/exercise (and its sets) on reconnect replay",
+        "refuted": false,
+        "reason": "Confirmed in offline.ts: workoutId/exerciseMap are only persisted via checkpoint() after the api.createWorkout/api.createExercise await resolves (lines 187-196, 198-227). There is no idempotency-key/client-id parameter passed to either call, and no guard elsewhere in syncOne that would detect a duplicate on replay. If the awaited promise rejects (network drop) after the server has already committed the row, workoutId/exerciseId remain unset and the next syncOne invocation re-enters the `if (!workoutId)` / `if (!exerciseId)` branches and re-creates. The mechanism as described is real and reachable in this source."
+      },
+      {
+        "title": "refreshFromBackend deletes an offline record with unsynced edits when the server session was completed elsewhere, silently dropping the local edits",
+        "refuted": false,
+        "reason": "Matches the code exactly at backend.ts:56-68: when there is no active server workout, offlineInProgress is looked up, isAlreadyCompleted is computed purely from `offlineSessionId > 0 && workouts.some(w => w.id === offlineSessionId)`, and on true it calls deleteOfflineSession(offlineInProgress.key) directly — no call to syncOne, no check of pending edits/sets beyond presence in the completed workouts list. No guard distinguishes 'completed and already synced' from 'completed elsewhere while local edits are still pending'. The claimed data loss path is real as written."
+      },
+      {
+        "title": "submitEndSession online path: a mid-flight network failure in the endExercise Promise.all loses the selected mood/feedback and leaves the workout un-ended",
+        "refuted": false,
+        "reason": "Confirmed at session.ts:308-349: the online path runs Promise.all over endExercise calls, then endWorkout; the catch block (345-349) on isNetworkFailure calls persistInProgressSession(state) with no `extra` argument, so per persistInProgressSession's implementation (offline.ts:89-110) the resulting record has status 'in_progress' and no end_mood/end_notes fields set (unlike the offline branch at 291-301 which explicitly builds a 'pending_sync' record carrying end_mood/end_notes). The mood/notes captured in local state (state.endMood/state.endNotes) are never persisted on this path, matching the claim."
+      }
+    ]
+  },
+  {
+    "idx": 2,
+    "verdicts": [
+      {
+        "title": "No idempotency key on createWorkout/createExercise: a lost HTTP response duplicates the workout/exercise (and its sets) on reconnect replay",
+        "refuted": false,
+        "reason": "Code at lines 187-227 matches the claim exactly: workoutId/exerciseId are only persisted via checkpoint() after the await resolves, and there is no idempotency key or client-generated id sent with createWorkout/createExercise. The reachability lens finds no guard blocking this: syncOne is invoked from the 'online' handler in syncPendingSessions with no in-flight lock preventing a second sync run after a network drop, and a request-committed-but-response-lost scenario is a normal, well-known TCP/HTTP failure mode (not a contrived edge case), especially plausible at the exact moment connectivity is flapping back (the trigger condition). The offline record (negative session id, pending edits) is reachable via any fully-offline workout session, and the online/offline transition is a real browser event this code explicitly listens for. Nothing here contradicts reachability."
+      }
+    ]
+  },
+  {
+    "idx": 3,
+    "verdicts": [
+      {
+        "title": "No idempotency key on createWorkout/createExercise: a lost HTTP response duplicates the workout/exercise (and its sets) on reconnect replay",
+        "refuted": false,
+        "reason": "Read offline.ts:163-267 directly. The only mitigation present is the checkpoint() helper, and its own comment (lines 175-177) states its purpose is to avoid re-running createWorkout/createExercise on retry — but checkpoint() is invoked only AFTER each await resolves (line 195 after createWorkout, line 226 after createExercise). There is no idempotency-key/client-id header in the request construction, no try/catch around the awaits, and no dedup mechanism on the client side at all. If the awaited fetch throws (e.g. TypeError from a dropped connection) after the server has already committed the row, workoutId/exerciseId remain unset and the checkpoint is never written, so the existing guard does not cover exactly the window the finding describes. Nothing in this file makes the scenario unreachable or recoverable — the described gap is real and un-mitigated from an already-mitigated-lens reading of this code."
+      }
+    ]
+  }
+]

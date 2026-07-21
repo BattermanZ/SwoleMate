@@ -50,9 +50,12 @@ describe('api client behavior', () => {
 		await expect(cancelWorkout(9, fetcher as unknown as typeof fetch)).resolves.toBeUndefined();
 	});
 
-	it('returns undefined for successful non-json and empty-json bodies', async () => {
+	it('treats empty success bodies as void but rejects non-empty non-JSON (F-LOW-3)', async () => {
 		const { authLogout } = await import('$lib/api');
 
+		// A non-empty, non-JSON 2xx (e.g. an intercepting proxy's HTML/text page)
+		// must throw — it did not come from the backend, so callers (like the
+		// reconnect sync) must not treat it as a completed write.
 		const textFetcher = vi.fn(
 			async () =>
 				new Response('ok', {
@@ -60,7 +63,17 @@ describe('api client behavior', () => {
 					headers: { 'content-type': 'text/plain' }
 				})
 		);
-		await expect(authLogout(textFetcher as unknown as typeof fetch)).resolves.toBeUndefined();
+		await expect(authLogout(textFetcher as unknown as typeof fetch)).rejects.toThrow();
+
+		// A genuinely empty body (any content-type) is an acceptable void success.
+		const emptyTextFetcher = vi.fn(
+			async () =>
+				new Response('', {
+					status: 200,
+					headers: { 'content-type': 'text/plain' }
+				})
+		);
+		await expect(authLogout(emptyTextFetcher as unknown as typeof fetch)).resolves.toBeUndefined();
 
 		const emptyJsonFetcher = vi.fn(
 			async () =>

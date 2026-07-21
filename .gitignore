@@ -69,3 +69,6 @@ server/backups/
 # mockup-only screenshot captures (local visual audits)
 mockups/.shots/
 .superpowers/
+
+# CodeGraph local index (machine-local, do not commit)
+.codegraph/

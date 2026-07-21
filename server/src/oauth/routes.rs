@@ -1,7 +1,5 @@
 use crate::auth::password;
-use crate::auth::rate_limit::{
-    clear_ip_failures, is_ip_rate_limited, record_ip_failure, request_ip,
-};
+use crate::auth::rate_limit::{admit_login_attempt, clear_ip_failures, request_ip};
 use crate::auth::{generate_session_token, hash_session_token};
 use crate::db::Database;
 use crate::oauth::OAuthConfig;
@@ -218,6 +216,13 @@ fn escape_html(raw: &str) -> String {
 fn code_challenge_for(verifier: &str) -> String {
     let digest = Sha256::digest(verifier.as_bytes());
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(digest)
+}
+
+/// Deterministic rotation-family key for the tokens issued from an authorization
+/// code. Keying on the code id lets a replay of that code revoke the whole
+/// lineage (B-LOW-2). This is an internal grouping value, never sent to clients.
+fn auth_code_family_id(code_id: i64) -> String {
+    format!("code:{code_id}")
 }
 
 fn token_json(status: actix_web::http::StatusCode, body: serde_json::Value) -> HttpResponse {
@@ -451,7 +456,9 @@ pub async fn authorize_post(
     }
 
     if let Some(ip) = client_ip.as_deref() {
-        if is_ip_rate_limited(ip, now) {
+        // Atomically check-and-record so concurrent attempts can't overshoot the
+        // limit through a check-then-record gap (B-LOW-10).
+        if !admit_login_attempt(ip, now) {
             return HttpResponse::TooManyRequests().json(serde_json::json!({
                 "error": "too_many_requests",
                 "error_description": "Too many login attempts from this IP. Try again later."
@@ -462,9 +469,7 @@ pub async fn authorize_post(
     let user = match db.get_user_by_username(&form.username).await {
         Ok(Some(user)) => user,
         Ok(None) => {
-            if let Some(ip) = client_ip.as_deref() {
-                record_ip_failure(ip, now);
-            }
+            // The IP attempt was already recorded atomically by admit_login_attempt.
             password::verify_dummy_password(&form.password);
             tokio::time::sleep(std::time::Duration::from_millis(200)).await;
             return HttpResponse::Unauthorized().json(serde_json::json!({
@@ -477,12 +482,6 @@ pub async fn authorize_post(
             }))
         }
     };
-
-    if user.disabled_at.is_some() || user.must_change_password {
-        return HttpResponse::Unauthorized().json(serde_json::json!({
-            "error": "access_denied"
-        }));
-    }
 
     if let Some(locked_until) = user.locked_until {
         if locked_until > now {
@@ -497,11 +496,15 @@ pub async fn authorize_post(
         Ok(result) => result,
         Err(_) => false,
     };
-    if !password_ok {
-        let _ = db.record_failed_login(user.id).await;
-        if let Some(ip) = client_ip.as_deref() {
-            record_ip_failure(ip, now);
+    // A disabled or must-change-password account is treated exactly like a wrong
+    // password here: the argon2 verification has already run, and we take the same
+    // failure path (record, delay, identical response) so an attacker can't
+    // distinguish these states — or a valid username — by timing or reply (B-LOW-3).
+    if !password_ok || user.disabled_at.is_some() || user.must_change_password {
+        if !password_ok {
+            let _ = db.record_failed_login(user.id).await;
         }
+        // The IP attempt was already recorded atomically by admit_login_attempt.
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
         return HttpResponse::Unauthorized().json(serde_json::json!({
             "error": "access_denied"
@@ -546,7 +549,21 @@ pub async fn authorize_post(
         .store_oauth_consent(user.id, &form.client_id, &scopes_json)
         .await;
 
-    let mut location = format!("{}?code={}", form.redirect_uri, urlencoding::encode(&code));
+    // A registered redirect_uri may legitimately carry its own query string (RFC
+    // 6749 §3.1.2; fragments are rejected at registration). Append the code with
+    // the correct separator instead of a blind "?", which would otherwise produce
+    // a malformed "...?foo=bar?code=..." URL (B-LOW-8).
+    let separator = if form.redirect_uri.contains('?') {
+        '&'
+    } else {
+        '?'
+    };
+    let mut location = format!(
+        "{}{}code={}",
+        form.redirect_uri,
+        separator,
+        urlencoding::encode(&code)
+    );
     if let Some(state) = form.state.as_deref() {
         if !state.is_empty() {
             location.push_str("&state=");
@@ -640,8 +657,21 @@ async fn exchange_authorization_code(
         );
     };
 
-    if stored.used_at.is_some()
-        || stored.client_id != client.client_id
+    // A replayed authorization code (already exchanged) is a strong signal the
+    // code leaked. Per RFC 6749 §4.1.2 / §10.5, revoke every token previously
+    // issued from this code (its rotation family, keyed by the code id) before
+    // rejecting the request (B-LOW-2).
+    if stored.used_at.is_some() {
+        let _ = db
+            .revoke_oauth_token_family(&auth_code_family_id(stored.id))
+            .await;
+        return token_json(
+            actix_web::http::StatusCode::BAD_REQUEST,
+            serde_json::json!({ "error": "invalid_grant" }),
+        );
+    }
+
+    if stored.client_id != client.client_id
         || stored.redirect_uri != redirect_uri
         || stored.expires_at <= Utc::now()
     {
@@ -696,6 +726,12 @@ async fn exchange_authorization_code(
         }
     };
 
+    // The rotation family for this grant is keyed by the authorization code id so
+    // that a later replay of the same code can revoke the whole lineage (B-LOW-2).
+    // It is carried forward on each refresh so a replayed (already-rotated)
+    // refresh token can also revoke the whole lineage (B-MED-2). The family id is
+    // an internal grouping key, never exposed to clients.
+    let family_id = auth_code_family_id(stored.id);
     if db
         .create_oauth_access_token(
             &access_token_hash,
@@ -703,6 +739,7 @@ async fn exchange_authorization_code(
             stored.user_id,
             &scopes_json,
             Utc::now() + cfg.access_token_ttl,
+            &family_id,
         )
         .await
         .is_err()
@@ -719,6 +756,7 @@ async fn exchange_authorization_code(
             stored.user_id,
             &scopes_json,
             Utc::now() + cfg.refresh_token_ttl,
+            &family_id,
         )
         .await
         .is_err()
@@ -776,7 +814,6 @@ async fn exchange_refresh_token(
     };
 
     if stored.client_id != client_id
-        || stored.revoked_at.is_some()
         || stored.expires_at <= Utc::now()
         || stored.user_disabled_at.is_some()
         || stored.user_must_change_password
@@ -787,6 +824,26 @@ async fn exchange_refresh_token(
             serde_json::json!({ "error": "invalid_grant" }),
         );
     }
+
+    // Reuse detection (RFC 6819 5.2.2.3): a still-valid refresh token that has
+    // already been rotated (revoked) is being presented again — the classic stolen-
+    // token replay. Revoke every access+refresh token in this family so a thief's
+    // descendant tokens die alongside the legit client's, then reject (B-MED-2).
+    if stored.revoked_at.is_some() {
+        if let Some(family_id) = stored.family_id.as_deref() {
+            let _ = db.revoke_oauth_token_family(family_id).await;
+        }
+        return token_json(
+            actix_web::http::StatusCode::BAD_REQUEST,
+            serde_json::json!({ "error": "invalid_grant" }),
+        );
+    }
+
+    // Carry the family forward so the whole lineage stays revocable.
+    let family_id = stored
+        .family_id
+        .clone()
+        .unwrap_or_else(generate_session_token);
 
     let access_token = generate_session_token();
     let next_refresh_token = generate_session_token();
@@ -811,6 +868,7 @@ async fn exchange_refresh_token(
             &scopes_json,
             Utc::now() + cfg.access_token_ttl,
             Utc::now() + cfg.refresh_token_ttl,
+            &family_id,
         )
         .await
     {

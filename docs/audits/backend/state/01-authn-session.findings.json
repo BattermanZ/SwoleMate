@@ -1,0 +1,37 @@
+{
+  "findings": [
+    {
+      "title": "Unauthenticated attacker can permanently lock out any account (incl. admin) via failed-login lockout",
+      "severity": "high",
+      "category": "security",
+      "file": "server/src/routes/auth.rs",
+      "line": "58-64, 69",
+      "description": "Login enforces a per-account lockout: db.record_failed_login (server/src/db/auth.rs:245-260) increments failed_login_count and, once it reaches 5, sets locked_until = now+5min. While locked, the login handler returns TooManyRequests at server/src/routes/auth.rs:58-64 BEFORE the password is ever checked, so even the legitimate owner with the correct password is bounced. Critically, failed_login_count is NOT reset when the lock expires (it is only reset on a *successful* login at server/src/routes/auth.rs:77, which is unreachable while locked). Because the counter stays at 5, a single additional failed attempt after the 5-minute window immediately re-locks the account (5+1 >= 5). An unauthenticated attacker therefore needs only one bad-password request roughly every 5 minutes to keep a target account (e.g. the admin) locked out indefinitely.",
+      "attackOrTrigger": "Attacker POSTs /api/auth/login (route is skipped by SessionAuth via should_skip_auth, so no session/CSRF gate) with {username: \"admin\", password: \"x\"} five times to lock the account, then repeats one bad attempt every 5 min. The IP rate limiter defaults to 30 attempts / 10 min (server/src/auth/rate_limit.rs:16), which is far more than the ~1 request/5min needed to sustain the lock, so a single IP suffices; the real admin can never log in.",
+      "why": "Remote, unauthenticated, sustained denial-of-service of authentication for arbitrary named accounts including the sole admin, with trivial cost to the attacker. Lockout without counter-reset-on-expiry turns a brute-force defense into a permanent account-freeze primitive.",
+      "fixSketch": "Reset failed_login_count to 0 when locked_until has elapsed (so post-window attempts start fresh), or use exponential backoff keyed on time rather than a sticky counter; do not block the legitimate correct-password login purely on lock state, and consider tarpitting per-IP rather than hard-locking the account. At minimum clear the counter atomically when a lock expires."
+    },
+    {
+      "title": "Username enumeration via divergent login responses (locked 429, disabled fast 401, unknown delayed 401)",
+      "severity": "medium",
+      "category": "security",
+      "file": "server/src/routes/auth.rs",
+      "line": "44-74",
+      "description": "The login handler leaks account existence through both response content and timing. Unknown users (line 45-52) get a 401 after verify_dummy_password + a 200ms sleep. A disabled user (line 54-56) returns 401 IMMEDIATELY with no argon2 verification and no compensating sleep, so its response is measurably faster. A locked user (line 58-64) returns 429 with the distinct body message \"Too many login attempts. Try again later.\" (different from the IP-limit message \"...from this IP...\" at line 38-40). So an attacker can (a) distinguish disabled accounts by timing, and (b) confirm a username exists by sending 5 bad passwords and observing the account transition into the locked 429 state — a nonexistent username never locks (no user row) and keeps returning delayed 401s.",
+      "attackOrTrigger": "Attacker sends 5 bad-password POSTs to /api/auth/login for a candidate username. If responses flip to 429 \"Too many login attempts. Try again later.\", the username exists; if they stay 401, it does not. Separately, a single request that returns a 401 with near-zero latency (no argon2 cost) reveals a disabled account.",
+      "why": "Defeats the deliberate generic-response design (the dummy-hash + 200ms sleep on the unknown-user path shows enumeration was meant to be prevented). Enumerated valid usernames feed targeted lockout DoS (finding above) and credential-stuffing.",
+      "fixSketch": "Make the disabled and locked paths return the same status/body and the same argon2+sleep timing profile as the unknown-user and wrong-password paths (e.g. run verify_dummy_password and the 200ms delay, then return a uniform 401). Avoid surfacing lock state to unauthenticated callers."
+    },
+    {
+      "title": "Login endpoint is exempt from CSRF origin check, enabling cross-site forced login",
+      "severity": "low",
+      "category": "security",
+      "file": "server/src/middleware/session_auth.rs",
+      "line": "86-97",
+      "description": "should_skip_auth returns true for \"/api/auth/login\", so the SessionAuth middleware (including the csrf_origin_ok check at lines 129-150) never runs for the login POST. Login is a state-changing request that sets an authenticated session cookie, yet there is no Origin/Referer validation on it. A malicious site can trigger a cross-site POST to /api/auth/login with the attacker's OWN credentials; the browser will send the request (CORS only blocks reading the response, not sending the POST) and the SameSite=Lax response cookie is still set on the victim's browser, silently logging the victim into an attacker-controlled account (login CSRF / session fixation into attacker account).",
+      "attackOrTrigger": "Victim visits evil.com, which auto-submits a form/fetch POST to https://swolemate/api/auth/login with attacker-known credentials. Victim's browser is now authenticated as the attacker's account; workouts the victim subsequently logs are written into the attacker's account, which the attacker later reads.",
+      "why": "Integrity/confidentiality impact is bounded (victim data lands in an attacker account the attacker controls) so severity is low, but the CSRF origin check that guards every other mutating route is deliberately bypassed here.",
+      "fixSketch": "Apply the same csrf_origin_ok Origin/Referer check to /api/auth/login (either don't skip it entirely, or run the CSRF portion of the middleware for login even though the session gate is skipped), rejecting login POSTs whose Origin/Referer does not match the server origin when enforce_csrf is on."
+    }
+  ]
+}

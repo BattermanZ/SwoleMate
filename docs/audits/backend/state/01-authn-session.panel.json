@@ -1,0 +1,37 @@
+[
+  {
+    "idx": 1,
+    "verdicts": [
+      {
+        "title": "Unauthenticated attacker can permanently lock out any account (incl. admin) via failed-login lockout",
+        "refuted": false,
+        "reason": "auth.rs matches the claim exactly: locked_until check at lines 58-64 returns TooManyRequests before any password verification (verify_password is only reached at line 66, after the lock check), so the correct-password path is unreachable while locked. reset_login_failures is only called at line 77 inside the success path, which is unreachable during a lock, and record_failed_login is only invoked on a failed verify (line 69) which cannot occur while locked. The control flow in this file is consistent with the claimed mechanism; nothing in auth.rs itself guards against the counter staying saturated across lock expiry."
+      },
+      {
+        "title": "Username enumeration via divergent login responses (locked 429, disabled fast 401, unknown delayed 401)",
+        "refuted": false,
+        "reason": "Line-by-line this matches: unknown-user branch (44-52) does verify_dummy_password + 200ms sleep before 401; disabled-user branch (54-56) returns Unauthorized immediately with no argon2 call and no sleep; locked branch (58-64) returns TooManyRequests with a distinct message from the IP-limiter message at 38-40. The three branches are textually and behaviorally divergent in this file exactly as described — no unified/generic-response guard unifies them."
+      }
+    ]
+  },
+  {
+    "idx": 2,
+    "verdicts": [
+      {
+        "title": "Unauthenticated attacker can permanently lock out any account (incl. admin) via failed-login lockout",
+        "refuted": false,
+        "reason": "Confirmed reachable end-to-end from this lens: /api/auth/login has no session/CSRF/auth gate visible in auth.rs (it's the public login endpoint), the locked_until check at lines 58-64 runs before password verification and returns TooManyRequests unconditionally while locked, and record_failed_login's SQL (db/auth.rs:245-260) re-arms the 5-minute lock whenever failed_login_count+1 >= 5 -- since the counter only resets on a successful login (unreachable while locked), it permanently stays >=5 after the first lockout. No admin exemption or ownership check intervenes; any named username, including admin, can be targeted by an unauthenticated caller. The cited IP limiter (30/10min) does not block the ~1 request/5min cadence needed to sustain the lock."
+      }
+    ]
+  },
+  {
+    "idx": 3,
+    "verdicts": [
+      {
+        "title": "Unauthenticated attacker can permanently lock out any account (incl. admin) via failed-login lockout",
+        "refuted": false,
+        "reason": "Read server/src/routes/auth.rs:25-100 directly. Confirms the claim exactly: the locked_until check (lines 58-64) short-circuits and returns TooManyRequests before password verification, and db.reset_login_failures (line 77) is only reached on a successful login, which is unreachable while locked_until is in the future. There is no separate unlock/expiry code path in this handler that resets failed_login_count when the lock naturally expires — the only reset is tied to a successful password check. The IP-based rate limiter (is_ip_rate_limited/record_ip_failure) is an independent, much looser per-IP throttle (30/10min per the claim) and provides no per-account protection against this pattern. No guard, middleware, or DB constraint visible in this file mitigates the missing counter-reset-on-expiry; nothing exempts admin accounts either. Under the already-mitigated lens, I find no existing control that neutralizes this."
+      }
+    ]
+  }
+]

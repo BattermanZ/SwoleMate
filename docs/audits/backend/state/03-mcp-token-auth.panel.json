@@ -1,0 +1,17 @@
+[
+  {
+    "idx": 1,
+    "verdicts": [
+      {
+        "title": "Password change does not revoke MCP (or OAuth) bearer tokens, so a leaked token survives the reset",
+        "refuted": false,
+        "reason": "Code-truth check confirms: change_password (auth.rs:150-152) only calls update_password_hash(..., false) and revoke_all_sessions_for_user; there is no call touching mcp_tokens or oauth_access_tokens tables. mcp_auth.rs:105-108 (OAuth token) and 122-129 (MCP token) show the only rejection predicates are revoked_at, expiry, user disabled, and must_change_password — the password change sets must_change_password to false, so none of these trip. The mechanism as described is real and reachable in this source."
+      },
+      {
+        "title": "MCP auth middleware performs unrated DB reads/writes per request; rate limiter only guards post-auth RPC dispatch",
+        "refuted": false,
+        "reason": "Confirmed in mcp_auth.rs: any request with an Authorization header reaches lines 100-121, unconditionally calling get_oauth_access_token_by_hash then (if None) get_mcp_token_by_hash — two DB reads with no rate-limit gate anywhere in this middleware file. A valid mcp_token additionally calls db.touch_mcp_token_last_used (lines 131-133), a DB write, before the request is handed off. Nothing in this file references or invokes a rate limiter, consistent with the claim that admit_request runs later in handle_mcp_message, after this auth-layer DB work has already executed."
+      }
+    ]
+  }
+]

@@ -1,0 +1,48 @@
+{
+  "findings": [
+    {
+      "title": "Panic (worker request abort / DoS) on non-char-boundary byte slice of request-controlled log metadata",
+      "severity": "medium",
+      "category": "security",
+      "file": "server/src/routes.rs",
+      "line": "313",
+      "description": "In write_logs (POST /api/logs), the debug-level branch serializes the client-supplied `metadata` JSON value and, when it exceeds 2048 bytes, truncates it with `&s[..2048]`. This is a byte index slice on a String. serde_json emits non-ASCII characters as raw UTF-8 (it does not \\u-escape them), so if byte offset 2048 lands in the middle of a multibyte UTF-8 character the slice panics with 'byte index is not a char boundary'. The truncation is computed eagerly inside `and_then`, before any log-level filtering, so it runs regardless of the configured log level.",
+      "attackOrTrigger": "Any authenticated session user (route is guarded by CurrentUser, so it is reachable post-login) POSTs to /api/logs a body like `[{\"level\":\"debug\",\"metadata\":{\"x\":\"éééé…\"}}]` where the serialized metadata exceeds 2048 bytes and a multibyte char (é, emoji, CJK, etc.) straddles byte 2048. The handler future panics, aborting that request/connection.",
+      "why": "Request-controlled input reaches a byte-boundary slice with no char_indices/floor-to-boundary guard. Repeatable per-request DoS against the logging endpoint; each crafted request aborts its worker task and drops the connection with no useful response.",
+      "fixSketch": "Truncate on a char boundary: e.g. `s.char_indices().take_while(|(i,_)| *i < 2048).last()` to find a safe end, or `let end = s.floor_char_boundary(2048)` (or iterate chars while byte length < limit as sanitize_log_field already does). Never index a String with a fixed byte range derived from arbitrary input."
+    },
+    {
+      "title": "Log injection via unsanitized client-supplied timestamp field",
+      "severity": "low",
+      "category": "security",
+      "file": "server/src/routes.rs",
+      "line": "302",
+      "description": "write_logs carefully passes `target` and `message` through sanitize_log_field (which strips control characters), but the client-supplied `timestamp` is appended to the log line verbatim as `client_ts={}` with no sanitization. The log format is a single-line writeln, so embedded newlines/carriage returns and other control characters let a caller forge additional log lines or corrupt structured log parsing.",
+      "attackOrTrigger": "An authenticated user POSTs `[{\"timestamp\":\"2026-01-01\\n[2026-01-01] ERROR error - forged admin event\",\"message\":\"x\"}]`; the newline is written straight into the server log, injecting a fake log record.",
+      "why": "Inconsistent sanitization: the two other free-text fields are cleaned but timestamp is not, so the mitigation is trivially bypassed by moving the payload into timestamp. Enables log forgery / audit-trail confusion.",
+      "fixSketch": "Run timestamp through the same sanitize_log_field (or a strict RFC3339 parse/validation) before appending it to the prefix."
+    },
+    {
+      "title": "Internal error exposure toggle enabled by mere presence of env var (misconfiguration footgun)",
+      "severity": "low",
+      "category": "security",
+      "file": "server/src/errors.rs",
+      "line": "6",
+      "description": "expose_internal_errors() returns true when `std::env::var(\"EXPOSE_INTERNAL_ERRORS\").is_ok()` — i.e. whenever the variable is *set to any value at all*, including `0`, `false`, or empty string. When true, AppError::DatabaseError and AppError::InternalError include the raw underlying error (sqlx error text, which can contain SQL fragments, column/table names, and file paths) in the HTTP response body. An operator who sets `EXPOSE_INTERNAL_ERRORS=false` (a natural way to *disable* it) actually turns leakage ON in production.",
+      "attackOrTrigger": "Operator sets EXPOSE_INTERNAL_ERRORS=false/0 intending to disable exposure; production then returns full DB/internal error strings to any client that triggers a 500. Also enabled unconditionally by debug builds via cfg!(debug_assertions).",
+      "why": "The presence-based check inverts the intended safety default and is easy to trip. Information leakage of DB internals aids attackers mapping the schema.",
+      "fixSketch": "Parse the value explicitly, e.g. only expose when the value equals `1`/`true` (case-insensitive), mirroring how ENABLE_HSTS is parsed in main.rs. Consider logging a warning when exposure is enabled outside debug builds."
+    },
+    {
+      "title": "Unbounded set array in replace_sets allows write amplification within body limit",
+      "severity": "low",
+      "category": "security",
+      "file": "server/src/routes.rs",
+      "line": "229",
+      "description": "PUT /api/exercises/{id}/sets accepts `web::Json<Vec<CreateSetRequest>>` with no cap on the number of elements. Each element is individually validated and then written to the database in replace_sets. Unlike template exercises (capped at MAX_TEMPLATE_EXERCISES=64) and per-exercise settings (MAX_SETTINGS_PER_EXERCISE=24), there is no count limit here — the only bound is the 512KB JSON body limit, which permits on the order of tens of thousands of minimal set objects (`{\"reps\":1,\"weight\":0}`) per request, each becoming a DB insert.",
+      "attackOrTrigger": "An authenticated user repeatedly PUTs ~512KB bodies of thousands of tiny set objects for an exercise they own, forcing large delete+insert transactions and inflating the sets table.",
+      "why": "Missing an explicit element-count cap that the rest of the model layer applies consistently; enables cheap write-amplification / storage-growth abuse.",
+      "fixSketch": "Add a MAX_SETS_PER_EXERCISE cap and reject arrays exceeding it in the handler or in a CreateSetRequest-list validator, consistent with the template/settings caps."
+    }
+  ]
+}

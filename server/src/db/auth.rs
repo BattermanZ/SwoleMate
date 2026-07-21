@@ -211,6 +211,24 @@ impl Database {
         Ok(())
     }
 
+    pub async fn enable_user(&self, user_id: i64) -> Result<(), AppError> {
+        let pool = self.pool().await;
+        // Clear the disabled marker and any stale lockout so a re-enabled account can
+        // log in immediately. Runtime-checked query so no sqlx offline-cache regen.
+        sqlx::query(
+            r#"
+            UPDATE users
+            SET disabled_at = NULL, failed_login_count = 0, locked_until = NULL
+            WHERE id = ?
+            "#,
+        )
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .map_err(AppError::DatabaseError)?;
+        Ok(())
+    }
+
     pub async fn update_password_hash(
         &self,
         user_id: i64,

@@ -1,0 +1,37 @@
+{
+  "findings": [
+    {
+      "title": "Unbounded N+1 query fan-out in progress/exercise reads",
+      "severity": "medium",
+      "category": "correctness",
+      "file": "server/src/db/progress.rs",
+      "line": "376-399",
+      "description": "get_exercise_progress() fetches all exercises of a given type for a user (no LIMIT) and then, in a Rust for-loop, issues TWO additional round-trip queries per row: get_sets_for_exercise() (exercises.rs:446) and get_settings_for_exercise() (exercises.rs:565). get_exercises_for_workout() (exercises.rs:391-440) has the same per-exercise get_settings_for_exercise() N+1. Because a user can create an effectively unlimited number of exercises of one type (each set/exercise create is its own request, and there is no cap), the number of sequential DB queries per single /progress/{type} or workout-read call grows linearly and unboundedly with stored data.",
+      "attackOrTrigger": "An authenticated session-cookie user OR an MCP-token AI agent (routes.rs:559 -> services/progress.rs:16 -> db::get_exercise_progress; and mcp/routes.rs:1018 get_exercise_progress tool) bulk-creates thousands of exercises of one exercise_type via repeated create_exercise calls, then requests get_exercise_progress for that type. The backend then executes ~2*N sequential SQLite queries on a single pooled connection while holding it, blocking the pool and inflating latency for every request.",
+      "why": "The read is scoped to the caller's own user_id (no IDOR), but the query count is proportional to attacker-controlled row count with no pagination or LIMIT, giving a self-service latency/connection-exhaustion DoS vector that is amplified because MCP agents can generate data volumes a human UI never would.",
+      "fixSketch": "Replace the per-row lookups with a single JOINed query (or two batched IN (...) queries keyed by the fetched exercise ids) that pulls exercises, their sets, and their settings in one/two round trips; add a sane server-side LIMIT/pagination to get_exercise_progress and get_exercises_for_workout."
+    },
+    {
+      "title": "Progress overview loads an entire user's set history into memory and recomputes PRs in Rust on every call",
+      "severity": "medium",
+      "category": "correctness",
+      "file": "server/src/db/progress.rs",
+      "line": "968-1022",
+      "description": "get_progress_set_facts() selects EVERY set the user has ever logged (JOIN sets/exercises/workouts, no LIMIT, no time window) into a Vec<SetFact>, and get_progress_overview() (line 771-773) then runs detect_pr_events() and detect_recent_best_events() which build several HashMaps and Vecs over the full set on each request. Memory and CPU cost are O(total sets) and unbounded, with no caching.",
+      "attackOrTrigger": "An MCP-token agent or session user creates a very large number of sets (each create_set is a cheap authenticated write), then calls get_progress_overview (routes.rs:578 / mcp/routes.rs:1036). Each call re-materializes the entire history in memory and re-sorts/re-hashes it; repeated concurrent calls multiply the RSS spike and CPU burn.",
+      "why": "Scoped to own data so it is not an IDOR, but the fully unbounded in-memory materialization plus per-request recomputation is a real resource-exhaustion path for a public launch, especially reachable by automated MCP clients that can inflate dataset size quickly.",
+      "fixSketch": "Bound the fact query with a rolling time window (the overview only needs recent + comparison windows plus all-time PR baselines, which can be computed incrementally/aggregated in SQL) and/or cache computed PR events; avoid pulling the complete lifetime set history on every overview request."
+    },
+    {
+      "title": "TOCTOU on single-active-session check in start_workout_from_template",
+      "severity": "low",
+      "category": "correctness",
+      "file": "server/src/db/templates.rs",
+      "line": "396-447",
+      "description": "The 'you already have an active session' guard runs as a standalone COUNT query on the pool (lines 396-405) BEFORE the transaction that actually inserts the workout is begun (tx = pool.begin() at line 415). The uniqueness invariant (at most one workout with end_time <= start_time per user) is therefore checked outside the write transaction, so two concurrent requests can both observe active_count == 0 and both insert an active workout.",
+      "attackOrTrigger": "A user (or MCP agent) fires two start_workout_from_template requests (routes.rs:173 / mcp/routes.rs:1126) nearly simultaneously. Both pass the active_count==0 check before either commits, producing two simultaneously-active sessions, violating the invariant the check exists to enforce (and confusing downstream auto-close / active-session logic).",
+      "why": "Own-data only and not corrupting other users, so low severity, but it defeats a stated business invariant and the same non-atomic check-then-act pattern would let clients create inconsistent state under normal double-submit conditions.",
+      "fixSketch": "Perform the active-session COUNT inside the same transaction that inserts the new workout, or enforce the invariant at the schema level (e.g. a partial unique index on user_id WHERE end_time <= start_time) so concurrent inserts fail atomically."
+    }
+  ]
+}

@@ -3,6 +3,18 @@ use crate::errors::AppError;
 use chrono::{DateTime, Utc};
 use sqlx::Row;
 
+/// Expiry for a rotated MCP token: re-apply the original token's lifetime
+/// (expires_at - created_at) from `now`, so a token rotated late in its window
+/// still gets its full duration back instead of inheriting a nearly-elapsed
+/// absolute expiry (B-LOW-9). A non-expiring token (None) stays non-expiring.
+fn rotated_expiry(
+    original_expiry: Option<DateTime<Utc>>,
+    created_at: DateTime<Utc>,
+    now: DateTime<Utc>,
+) -> Option<DateTime<Utc>> {
+    original_expiry.map(|expiry| now + (expiry - created_at))
+}
+
 #[derive(Debug, Clone)]
 pub struct McpTokenRow {
     pub id: i64,
@@ -136,6 +148,24 @@ impl Database {
         Ok(result.rows_affected() == 1)
     }
 
+    /// Revoke every live MCP token for a user. Used when a password changes so a
+    /// leaked bearer token cannot outlive the credential rotation (B-MED-4).
+    pub async fn revoke_all_mcp_tokens_for_user(&self, user_id: i64) -> Result<(), AppError> {
+        let pool = self.pool().await;
+        sqlx::query(
+            r#"
+            UPDATE mcp_tokens
+            SET revoked_at = CURRENT_TIMESTAMP
+            WHERE user_id = ? AND revoked_at IS NULL
+            "#,
+        )
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .map_err(AppError::DatabaseError)?;
+        Ok(())
+    }
+
     pub async fn rotate_mcp_token_for_user(
         &self,
         token_id: i64,
@@ -147,7 +177,7 @@ impl Database {
 
         let existing = sqlx::query(
             r#"
-            SELECT name, scopes_json, expires_at
+            SELECT name, scopes_json, expires_at, created_at
             FROM mcp_tokens
             WHERE id = ? AND user_id = ? AND revoked_at IS NULL
             LIMIT 1
@@ -172,6 +202,16 @@ impl Database {
         let expires_at: Option<DateTime<Utc>> = existing
             .try_get("expires_at")
             .map_err(AppError::DatabaseError)?;
+        let created_at: DateTime<Utc> = existing
+            .try_get("created_at")
+            .map_err(AppError::DatabaseError)?;
+
+        // Rotation hands out a durable replacement credential, so re-apply the
+        // original token's lifetime from *now* rather than copying its (possibly
+        // nearly-elapsed) absolute expiry — otherwise a token rotated late in its
+        // window would expire almost immediately (B-LOW-9). A non-expiring token
+        // (NULL expiry) stays non-expiring.
+        let new_expires_at = rotated_expiry(expires_at, created_at, Utc::now());
 
         let result = sqlx::query(
             r#"
@@ -183,7 +223,7 @@ impl Database {
         .bind(&name)
         .bind(token_hash)
         .bind(&scopes_json)
-        .bind(expires_at)
+        .bind(new_expires_at)
         .execute(&mut *tx)
         .await
         .map_err(AppError::DatabaseError)?;
@@ -203,7 +243,12 @@ impl Database {
 
         tx.commit().await.map_err(AppError::DatabaseError)?;
 
-        Ok(Some((result.last_insert_rowid(), name, scopes, expires_at)))
+        Ok(Some((
+            result.last_insert_rowid(),
+            name,
+            scopes,
+            new_expires_at,
+        )))
     }
 
     pub async fn touch_mcp_token_last_used(&self, token_id: i64) -> Result<(), AppError> {
@@ -246,5 +291,32 @@ impl Database {
                 .map_err(AppError::DatabaseError)?
                 != 0,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rotated_expiry;
+    use chrono::{Duration, Utc};
+
+    #[test]
+    fn rotation_reapplies_full_lifetime_from_now() {
+        // A 30-day token created 29 days ago (expiry 1 day out). Rotating it must
+        // grant a fresh ~30-day window from now, NOT the near-elapsed 1 day.
+        let now = Utc::now();
+        let created_at = now - Duration::days(29);
+        let original_expiry = Some(created_at + Duration::days(30)); // ~1 day from now
+
+        let rotated = rotated_expiry(original_expiry, created_at, now).unwrap();
+        let remaining = rotated - now;
+        assert!(
+            (remaining - Duration::days(30)).num_seconds().abs() < 5,
+            "rotated token should have ~30 days left, got {remaining}"
+        );
+    }
+
+    #[test]
+    fn rotation_keeps_non_expiring_tokens_non_expiring() {
+        assert!(rotated_expiry(None, Utc::now(), Utc::now()).is_none());
     }
 }

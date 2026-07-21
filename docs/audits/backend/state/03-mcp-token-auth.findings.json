@@ -1,0 +1,37 @@
+{
+  "findings": [
+    {
+      "title": "Password change does not revoke MCP (or OAuth) bearer tokens, so a leaked token survives the reset",
+      "severity": "medium",
+      "category": "security",
+      "file": "server/src/routes/auth.rs",
+      "line": "150-152",
+      "description": "change_password updates the password hash and calls db.revoke_all_sessions_for_user(user.0.id) (auth.rs:151-152) but never revokes the user's mcp_tokens or oauth_access_tokens. The MCP auth middleware (server/src/middleware/mcp_auth.rs:122-129) only rejects a token when revoked_at is set, it is expired, the user is disabled, or must_change_password is set — none of which a voluntary password change triggers. Voluntary password change clears must_change_password to false (update_password_hash(..., false)).",
+      "attackOrTrigger": "An attacker steals a user's smcp_ token (or an OAuth access token). The user notices suspicious activity and changes their password to lock the attacker out. All web sessions are killed, but the stolen bearer token keeps full workout.read/write/progress.read access to the account via POST /mcp until the token's expiry (up to 365 days, default 30) or until the user separately discovers and manually revokes each token in /settings.",
+      "why": "Password rotation is the canonical user response to account compromise; users reasonably expect it to sever all active access. Here it severs cookie sessions but leaves bearer-token access — which grants an AI agent full read/write authority over the user's training data — fully intact.",
+      "fixSketch": "In change_password, after update_password_hash, also revoke the user's live MCP tokens and OAuth access/refresh tokens (e.g. an UPDATE mcp_tokens SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=? AND revoked_at IS NULL, plus the OAuth equivalents), or make it opt-in via a checkbox but default to revoking."
+    },
+    {
+      "title": "MCP auth middleware performs unrated DB reads/writes per request; rate limiter only guards post-auth RPC dispatch",
+      "severity": "medium",
+      "category": "security",
+      "file": "server/src/middleware/mcp_auth.rs",
+      "line": "99-133",
+      "description": "For every POST /mcp request carrying any Authorization: Bearer value, the middleware computes the hash and issues get_oauth_access_token_by_hash then get_mcp_token_by_hash (two SQLite SELECTs, mcp_auth.rs:100-121). For a request bearing a valid MCP token it additionally issues touch_mcp_token_last_used — a SQLite UPDATE — on every single request (mcp_auth.rs:131-133). The only rate limiter, rate_limit::admit_request, runs later inside handle_mcp_message (server/src/mcp/routes.rs:826), i.e. AFTER authentication and after the per-request UPDATE, and it only short-circuits JSON-RPC method dispatch. So none of the auth-layer DB work is rate limited.",
+      "attackOrTrigger": "Unauthenticated: an attacker floods POST /mcp with a bogus 'Authorization: Bearer x' header; each request forces two DB reads with no rate limiting or auth required. Authenticated (any registered user can mint a token): an attacker floods /mcp with a valid token; every request forces a mcp_tokens UPDATE before the rate limiter is consulted. On single-writer SQLite these writes serialize and contend with all other application writes, degrading the whole service.",
+      "why": "The rate limiter is positioned to protect tool execution but not the authentication path it sits behind, so the most expensive-to-abuse layer (DB lookups and a guaranteed per-request write) is left unthrottled. This is a low-cost remote DoS amplification against a single-writer datastore.",
+      "fixSketch": "Apply IP/token rate limiting inside the McpBearerAuth middleware before the DB lookups, and stop writing last_used on every request — debounce touch_mcp_token_last_used (e.g. update at most once per N minutes per token) or move it behind the rate-limit gate."
+    },
+    {
+      "title": "Token rotation copies the original absolute expires_at instead of issuing a fresh lifetime",
+      "severity": "low",
+      "category": "correctness",
+      "file": "server/src/db/mcp_tokens.rs",
+      "line": "172-206",
+      "description": "rotate_mcp_token_for_user reads the existing row's expires_at as a stored absolute timestamp (mcp_tokens.rs:172-174) and binds that same value into the new token's INSERT (line 186, returned at line 206). Rotation therefore does not reset the expiry window; the replacement token inherits the original's absolute expiry moment.",
+      "attackOrTrigger": "A user created a token with the default 30-day expiry, then rotates it 29 days later (a common reaction to a suspected leak). The freshly issued token expires in ~1 day rather than getting a new 30-day window, silently breaking the integration shortly after rotation and surprising the user.",
+      "why": "Rotation is meant to hand out a durable replacement credential; inheriting a nearly-elapsed absolute expiry defeats that expectation and is inconsistent with create_mcp_token, which always computes a fresh window (server/src/routes/mcp_tokens.rs:74-82).",
+      "fixSketch": "On rotate, recompute expires_at from now using the token's original intended duration (or re-apply the default window), rather than copying the stored absolute timestamp."
+    }
+  ]
+}

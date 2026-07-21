@@ -133,9 +133,14 @@ export function createExerciseWeightModeActions(args: {
 			if (!enabled) {
 				const left = s.weightLeft ?? s.weight;
 				const right = s.weightRight ?? s.weight;
+				// perSideWeight is still on, so the single collapsed weight is
+				// interpreted as per-side and doubled for volume. Use the average of
+				// the two sides so the total lifted load (left + right) — and thus the
+				// recorded volume — is preserved, instead of Math.max which silently
+				// discards the lighter side and inflates volume (F-LOW-1).
 				return {
 					...s,
-					weight: Math.max(left, right),
+					weight: (left + right) / 2,
 					weightLeft: undefined,
 					weightRight: undefined
 				};

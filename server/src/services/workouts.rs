@@ -24,8 +24,31 @@ pub async fn create_workout(
     db: &Database,
     user_id: i64,
     request: &CreateWorkoutRequest,
+    idempotency_key: Option<&str>,
 ) -> Result<i64, AppError> {
-    db.create_workout(user_id, request).await
+    use crate::db::idempotency::KIND_WORKOUT;
+
+    // A retried offline-sync create (same key) returns the original workout rather
+    // than creating a duplicate (F-HIGH-3).
+    if let Some(key) = idempotency_key {
+        if let Some(existing) = db.lookup_idempotent(user_id, KIND_WORKOUT, key).await? {
+            return Ok(existing);
+        }
+    }
+
+    let id = db.create_workout(user_id, request).await?;
+
+    if let Some(key) = idempotency_key {
+        let authoritative = db.record_idempotent(user_id, KIND_WORKOUT, key, id).await?;
+        if authoritative != id {
+            // A concurrent request with the same key won the race — drop our
+            // duplicate and return the winner.
+            let _ = db.delete_workout(user_id, id).await;
+            return Ok(authoritative);
+        }
+    }
+
+    Ok(id)
 }
 
 pub async fn end_workout(

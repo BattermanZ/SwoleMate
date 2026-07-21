@@ -16,6 +16,12 @@ describe('isNetworkFailure', () => {
 		expect(isNetworkFailure(new Error('connection reset'))).toBe(true);
 	});
 
+	it('treats a request timeout/abort as offline (F-MED-7)', () => {
+		expect(isNetworkFailure(new DOMException('signal timed out', 'TimeoutError'))).toBe(true);
+		expect(isNetworkFailure(new DOMException('aborted', 'AbortError'))).toBe(true);
+		expect(isNetworkFailure(new Error('The operation was aborted'))).toBe(true);
+	});
+
 	it('does NOT treat an arbitrary TypeError (a real bug) as offline', () => {
 		expect(isNetworkFailure(new TypeError('x is not a function'))).toBe(false);
 		expect(isNetworkFailure(new TypeError("Cannot read properties of undefined (reading 'id')"))).toBe(

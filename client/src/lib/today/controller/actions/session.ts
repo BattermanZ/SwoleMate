@@ -271,35 +271,48 @@ export function createSessionActions(args: {
 		if (!session || !mood) return;
 		state.error.set(null);
 
+		// Persist a completed, replayable end record (status 'pending_sync' WITH
+		// mood / notes / endedAt) and clear the live UI. Shared by the offline branch
+		// and the online path's network-failure fallback so a drop mid-end never
+		// loses the entered mood/notes or leaves the workout un-ended: syncOne's
+		// endWorkout branch fires on reconnect only for such a record
+		// (F-HIGH-2 / F-MED-1 / F-MED-6).
+		async function persistPendingEnd(endedAt: string) {
+			const endedExercises = session!.exercises.map((e) =>
+				e.status === 'done' ? e : { ...e, status: 'done' as const, endedAt }
+			);
+			const ended: UiSession = { ...session!, endedAt, mood: mood!, exercises: endedExercises };
+			state.currentSession.set(null);
+			state.sessionNotes.set('');
+			state.openExerciseIds.set([]);
+			state.plannedTemplateExercises.set([]);
+			void clearPlannedTemplate();
+			resetLocalSessionUi(state);
+
+			const key = sessionKeyForId(session!.id);
+			const existing = await loadOfflineSession(key).catch(() => null);
+			await saveOfflineSession({
+				key,
+				status: 'pending_sync',
+				updated_at: new Date().toISOString(),
+				session: ended,
+				end_mood: mood!,
+				end_notes: get(state.endNotes).trim() || undefined,
+				// A server-started session keeps its id so reconnect ends the existing
+				// workout instead of creating a duplicate.
+				server_workout_id:
+					existing?.server_workout_id ?? (session!.id > 0 ? session!.id : undefined),
+				server_exercise_ids_by_local: existing?.server_exercise_ids_by_local ?? {},
+				deleted_server_exercise_ids: existing?.deleted_server_exercise_ids ?? []
+			});
+			await refreshPendingSyncCount(state);
+		}
+
 		try {
 			const endedAt = new Date().toISOString();
 
 			if (get(state.offlineMode) || session.id < 0) {
-				const endedExercises = session.exercises.map((e) =>
-					e.status === 'done' ? e : { ...e, status: 'done' as const, endedAt }
-				);
-				const ended: UiSession = { ...session, endedAt, mood, exercises: endedExercises };
-				state.currentSession.set(null);
-				state.sessionNotes.set('');
-				state.openExerciseIds.set([]);
-				state.plannedTemplateExercises.set([]);
-				void clearPlannedTemplate();
-				resetLocalSessionUi(state);
-
-				const key = sessionKeyForId(session.id);
-				const existing = await loadOfflineSession(key).catch(() => null);
-				await saveOfflineSession({
-					key,
-					status: 'pending_sync',
-					updated_at: new Date().toISOString(),
-					session: ended,
-					end_mood: mood,
-					end_notes: get(state.endNotes).trim() || undefined,
-					server_workout_id: existing?.server_workout_id,
-					server_exercise_ids_by_local: existing?.server_exercise_ids_by_local ?? {},
-					deleted_server_exercise_ids: existing?.deleted_server_exercise_ids ?? []
-				});
-				await refreshPendingSyncCount(state);
+				await persistPendingEnd(endedAt);
 				setOffline(state, 'Saved locally. Sync when you’re back online.');
 				state.endModalOpen.set(false);
 				return;
@@ -344,9 +357,13 @@ export function createSessionActions(args: {
 			await refreshFromBackend();
 		} catch (e) {
 			if (isNetworkFailure(e)) {
-				setOffline(state);
-				await persistInProgressSession(state);
-				await hydrateOfflineState(state);
+				// The end request dropped mid-flight. Preserve the entered mood/notes and
+				// mark the workout completed-pending so reconnect actually ends it,
+				// rather than persisting a bare in_progress record that loses the mood
+				// and leaves the workout un-ended forever (F-HIGH-2 / F-MED-1 / F-MED-6).
+				await persistPendingEnd(new Date().toISOString());
+				setOffline(state, 'Saved locally. Sync when you’re back online.');
+				state.endModalOpen.set(false);
 			} else {
 				state.error.set(getErrorMessage(e));
 			}

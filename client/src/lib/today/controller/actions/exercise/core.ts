@@ -1,5 +1,4 @@
 import { cancelExercise, createExercise, getLastExerciseData } from '$lib/api';
-import { loadOfflineSession, sessionKeyForId } from '$lib/offline/todaySessions';
 import { toUiExercise } from '$lib/today/backend';
 import { createId } from '$lib/utils/id';
 import { get } from 'svelte/store';
@@ -153,9 +152,12 @@ export function createExerciseCoreActions(args: {
 					sets: []
 				};
 
-				state.currentSession.set({
-					...session,
-					exercises: [...session.exercises, newExercise]
+				// Merge into the live store rather than overwriting a pre-await snapshot,
+				// so concurrent edits (notes/settings/sets) survive (F-HIGH-1).
+				state.currentSession.update((current) => {
+					if (!current) return current;
+					if (current.exercises.some((e) => e.id === newExercise.id)) return current;
+					return { ...current, exercises: [...current.exercises, newExercise] };
 				});
 				state.openExerciseIds.update((current) => [...current, newExercise.id]);
 				state.exerciseQuery.set('');
@@ -208,9 +210,12 @@ export function createExerciseCoreActions(args: {
 				sets: []
 			};
 
-			state.currentSession.set({
-				...session,
-				exercises: [...session.exercises, newExercise]
+			// Merge into the live store rather than overwriting a pre-await snapshot,
+			// so concurrent edits (notes/settings/sets) survive (F-HIGH-1).
+			state.currentSession.update((current) => {
+				if (!current) return current;
+				if (current.exercises.some((e) => e.id === newExercise.id)) return current;
+				return { ...current, exercises: [...current.exercises, newExercise] };
 			});
 
 			state.openExerciseIds.update((current) => [...current, newExercise.id]);
@@ -248,17 +253,20 @@ export function createExerciseCoreActions(args: {
 
 		try {
 			if (get(state.offlineMode) || session.id < 0) {
-				state.currentSession.set({
-					...session,
-					exercises: session.exercises.filter((e) => e.id !== exerciseId)
-				});
+				state.currentSession.update((current) =>
+					current
+						? { ...current, exercises: current.exercises.filter((e) => e.id !== exerciseId) }
+						: current
+				);
 				state.openExerciseIds.update((current) => current.filter((id) => id !== exerciseId));
 				if (exerciseId > 0) {
-					const key = sessionKeyForId(session.id);
-					const existing = await loadOfflineSession(key).catch(() => null);
-					const prev = existing?.deleted_server_exercise_ids ?? [];
-					await persistInProgressSession(state, {
-						deleted_server_exercise_ids: Array.from(new Set([...prev, exerciseId]))
+					// Derive the deleted-id list from the record at write time so an
+					// overlapping persist cannot clobber this deletion (F-MED-3).
+					await persistInProgressSession(state, (existing) => {
+						const prev = existing?.deleted_server_exercise_ids ?? [];
+						return {
+							deleted_server_exercise_ids: Array.from(new Set([...prev, exerciseId]))
+						};
 					});
 				} else {
 					await persistInProgressSession(state);
@@ -268,10 +276,12 @@ export function createExerciseCoreActions(args: {
 
 			state.loading.set(true);
 			await cancelExercise(exerciseId);
-			state.currentSession.set({
-				...session,
-				exercises: session.exercises.filter((e) => e.id !== exerciseId)
-			});
+			// Merge into the live store rather than overwriting a pre-await snapshot (F-HIGH-1).
+			state.currentSession.update((current) =>
+				current
+					? { ...current, exercises: current.exercises.filter((e) => e.id !== exerciseId) }
+					: current
+			);
 			state.openExerciseIds.update((current) => current.filter((id) => id !== exerciseId));
 		} catch (e) {
 			if (isNetworkFailure(e)) {

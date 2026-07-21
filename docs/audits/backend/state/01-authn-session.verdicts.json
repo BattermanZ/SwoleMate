@@ -1,0 +1,72 @@
+[
+  {
+    "title": "Unauthenticated attacker can permanently lock out any account (incl. admin) via failed-login lockout",
+    "severity": "high",
+    "category": "security",
+    "file": "server/src/routes/auth.rs",
+    "line": "58-64, 69",
+    "description": "Login enforces a per-account lockout: db.record_failed_login (server/src/db/auth.rs:245-260) increments failed_login_count and, once it reaches 5, sets locked_until = now+5min. While locked, the handler returns TooManyRequests at server/src/routes/auth.rs:58-64 BEFORE the password is checked, so even the legitimate owner with the correct password is bounced. failed_login_count is NOT reset when the lock expires (only reset on a successful login at line 77, which is unreachable while locked). Because the counter stays at 5, one further failed attempt after the window immediately re-locks (5+1 >= 5). An attacker needs only one bad-password request per ~5 minutes to keep a target account locked indefinitely.",
+    "attackOrTrigger": "Attacker POSTs /api/auth/login (route skipped by SessionAuth via should_skip_auth, no session/CSRF gate) with {username:'admin', password:'x'} five times to lock, then one bad attempt every 5 min. IP limiter defaults to 30/10min (auth/rate_limit.rs:16), far above the ~1/5min needed, so a single IP sustains a permanent admin lockout.",
+    "why": "Remote, unauthenticated, sustained DoS of authentication for arbitrary named accounts including the sole admin, at trivial cost. Missing counter-reset-on-expiry turns brute-force defense into a permanent account-freeze primitive.",
+    "fixSketch": "Reset failed_login_count when locked_until has elapsed, or use time-based exponential backoff instead of a sticky counter; don't block a correct-password login solely on lock state; prefer per-IP tarpitting over hard account lock.",
+    "survives": true,
+    "status": "verified",
+    "refutes": 0,
+    "votes": 3,
+    "verdicts": [
+      {
+        "title": "Unauthenticated attacker can permanently lock out any account (incl. admin) via failed-login lockout",
+        "refuted": false,
+        "reason": "auth.rs matches the claim exactly: locked_until check at lines 58-64 returns TooManyRequests before any password verification (verify_password is only reached at line 66, after the lock check), so the correct-password path is unreachable while locked. reset_login_failures is only called at line 77 inside the success path, which is unreachable during a lock, and record_failed_login is only invoked on a failed verify (line 69) which cannot occur while locked. The control flow in this file is consistent with the claimed mechanism; nothing in auth.rs itself guards against the counter staying saturated across lock expiry."
+      },
+      {
+        "title": "Unauthenticated attacker can permanently lock out any account (incl. admin) via failed-login lockout",
+        "refuted": false,
+        "reason": "Confirmed reachable end-to-end from this lens: /api/auth/login has no session/CSRF/auth gate visible in auth.rs (it's the public login endpoint), the locked_until check at lines 58-64 runs before password verification and returns TooManyRequests unconditionally while locked, and record_failed_login's SQL (db/auth.rs:245-260) re-arms the 5-minute lock whenever failed_login_count+1 >= 5 -- since the counter only resets on a successful login (unreachable while locked), it permanently stays >=5 after the first lockout. No admin exemption or ownership check intervenes; any named username, including admin, can be targeted by an unauthenticated caller. The cited IP limiter (30/10min) does not block the ~1 request/5min cadence needed to sustain the lock."
+      },
+      {
+        "title": "Unauthenticated attacker can permanently lock out any account (incl. admin) via failed-login lockout",
+        "refuted": false,
+        "reason": "Read server/src/routes/auth.rs:25-100 directly. Confirms the claim exactly: the locked_until check (lines 58-64) short-circuits and returns TooManyRequests before password verification, and db.reset_login_failures (line 77) is only reached on a successful login, which is unreachable while locked_until is in the future. There is no separate unlock/expiry code path in this handler that resets failed_login_count when the lock naturally expires — the only reset is tied to a successful password check. The IP-based rate limiter (is_ip_rate_limited/record_ip_failure) is an independent, much looser per-IP throttle (30/10min per the claim) and provides no per-account protection against this pattern. No guard, middleware, or DB constraint visible in this file mitigates the missing counter-reset-on-expiry; nothing exempts admin accounts either. Under the already-mitigated lens, I find no existing control that neutralizes this."
+      }
+    ]
+  },
+  {
+    "title": "Username enumeration via divergent login responses (locked 429, disabled fast 401, unknown delayed 401)",
+    "severity": "medium",
+    "category": "security",
+    "file": "server/src/routes/auth.rs",
+    "line": "44-74",
+    "description": "Login leaks account existence via content and timing. Unknown users (45-52) get 401 after verify_dummy_password + 200ms sleep. Disabled users (54-56) return 401 IMMEDIATELY with no argon2 and no sleep, so measurably faster. Locked users (58-64) return 429 with distinct body 'Too many login attempts. Try again later.' (different from the IP-limit message at 38-40). Attacker can distinguish disabled accounts by timing and confirm a username exists by sending 5 bad passwords and watching the account flip to the locked 429 state; a nonexistent username never locks and keeps returning delayed 401s.",
+    "attackOrTrigger": "Send 5 bad-password POSTs to /api/auth/login for a candidate username; if responses become 429 'Too many login attempts. Try again later.' the username exists, else it does not. A near-zero-latency 401 (no argon2 cost) reveals a disabled account.",
+    "why": "Defeats the deliberate generic-response design (dummy hash + 200ms sleep on the unknown path shows enumeration was meant to be blocked). Enumerated usernames feed the targeted lockout DoS above and credential stuffing.",
+    "fixSketch": "Make the disabled and locked paths return the same status/body and same argon2+sleep timing as the unknown/wrong-password paths (run verify_dummy_password + 200ms delay, return uniform 401); do not surface lock state to unauthenticated callers.",
+    "survives": true,
+    "status": "verified",
+    "refutes": 0,
+    "votes": 1,
+    "verdicts": [
+      {
+        "title": "Username enumeration via divergent login responses (locked 429, disabled fast 401, unknown delayed 401)",
+        "refuted": false,
+        "reason": "Line-by-line this matches: unknown-user branch (44-52) does verify_dummy_password + 200ms sleep before 401; disabled-user branch (54-56) returns Unauthorized immediately with no argon2 call and no sleep; locked branch (58-64) returns TooManyRequests with a distinct message from the IP-limiter message at 38-40. The three branches are textually and behaviorally divergent in this file exactly as described — no unified/generic-response guard unifies them."
+      }
+    ]
+  },
+  {
+    "title": "Login endpoint is exempt from CSRF origin check, enabling cross-site forced login",
+    "severity": "low",
+    "category": "security",
+    "file": "server/src/middleware/session_auth.rs",
+    "line": "86-97",
+    "description": "should_skip_auth returns true for '/api/auth/login', so SessionAuth (including csrf_origin_ok at 129-150) never runs for the login POST. Login is state-changing and sets an authenticated session cookie but has no Origin/Referer validation. A malicious site can trigger a cross-site POST to /api/auth/login with the attacker's own credentials; the browser sends the request (CORS blocks reading the response, not sending) and the SameSite=Lax response cookie is still set on the victim's browser, silently logging the victim into an attacker-controlled account (login CSRF).",
+    "attackOrTrigger": "Victim visits evil.com which auto-submits a POST to /api/auth/login with attacker-known credentials; the victim's browser is now authenticated as the attacker's account, so workouts the victim logs land in the attacker's account, which the attacker later reads.",
+    "why": "Impact is bounded (victim data flows into an attacker-controlled account) so low severity, but the CSRF origin check that guards every other mutating route is deliberately bypassed for login.",
+    "fixSketch": "Run the csrf_origin_ok Origin/Referer check for /api/auth/login even though the session gate is skipped, rejecting login POSTs whose Origin/Referer does not match the server origin when enforce_csrf is on.",
+    "survives": true,
+    "status": "unverified",
+    "refutes": 0,
+    "votes": 0,
+    "verdicts": []
+  }
+]

@@ -76,6 +76,45 @@ describe('today controller weight mode actions', () => {
 		expect(apiMocks.replaceSets).toHaveBeenCalledTimes(1);
 	});
 
+	it('collapses split sides to their average to preserve volume when disabling split (F-LOW-1)', async () => {
+		const state = createTodayState();
+		state.offlineMode.set(true);
+		state.currentSession.set({
+			id: -1,
+			startedAt: '2026-01-01T10:00:00.000Z',
+			notes: '',
+			exercises: [
+				{
+					id: -5,
+					name: 'DB Shoulder Press',
+					notes: '',
+					startedAt: '2026-01-01T10:00:00.000Z',
+					endedAt: '2026-01-01T10:05:00.000Z',
+					status: 'active',
+					perSideWeight: true,
+					splitWeight: true,
+					settings: [],
+					sets: [{ id: -9, reps: 8, weight: 50, weightLeft: 40, weightRight: 60 }]
+				}
+			]
+		});
+
+		const refreshFromBackend = vi.fn(async () => undefined);
+		const actions = createExerciseWeightModeActions({ state, refreshFromBackend });
+		await actions.toggleExerciseSplitWeight(-5, false);
+
+		const exercise = get(state.currentSession)!.exercises[0]!;
+		expect(exercise.splitWeight).toBe(false);
+		expect(exercise.perSideWeight).toBe(true);
+		// (40 + 60) / 2 = 50; doubled for per-side volume => 100/rep == 40 + 60. The
+		// old Math.max would have recorded 60 (=> 120/rep), discarding the light side.
+		expect(exercise.sets[0]).toMatchObject({
+			weight: 50,
+			weightLeft: undefined,
+			weightRight: undefined
+		});
+	});
+
 	it('persists only locally when toggling split mode offline', async () => {
 		const state = createTodayState();
 		state.offlineMode.set(true);

@@ -48,6 +48,15 @@ struct TestEnv {
     prev_app_env: Option<String>,
     prev_bootstrap_admin_username: Option<String>,
     prev_bootstrap_admin_password: Option<String>,
+    // Neutralise the process-global MCP pre-auth IP throttle by default so the many
+    // MCP tests (which all share the same test peer IP) don't pollute each other's
+    // buckets. Tests that exercise the throttle set a low value with their own guard
+    // and a distinct X-Real-IP.
+    _mcp_auth_limit: EnvVarGuard,
+    // Tests drive per-IP rate limiting through the X-Real-IP header, which is only
+    // trusted when the app is told it sits behind a proxy (B-LOW-4). Mirror the
+    // Docker deployment (which sets this) so the header is honoured under test.
+    _trust_proxy_headers: EnvVarGuard,
 }
 
 impl TestEnv {
@@ -77,6 +86,14 @@ impl TestEnv {
         std::env::set_var("BOOTSTRAP_ADMIN_USERNAME", ADMIN_USERNAME);
         std::env::set_var("BOOTSTRAP_ADMIN_PASSWORD", ADMIN_PASSWORD);
 
+        let mcp_auth_limit = EnvVarGuard::set("MCP_AUTH_RATE_LIMIT_PER_MINUTE", "1000000");
+        let trust_proxy_headers = EnvVarGuard::set("TRUST_PROXY_HEADERS", "true");
+
+        // Integration tests share one process and reuse small autoincrement user /
+        // token ids across fresh databases, so the process-global rate-limit buckets
+        // would otherwise bleed between cases. Start each test from a clean slate.
+        swolemate_server::mcp::rate_limit::reset_rate_limit_state();
+
         Self {
             _lock: lock,
             prev_dir,
@@ -85,6 +102,8 @@ impl TestEnv {
             prev_app_env,
             prev_bootstrap_admin_username,
             prev_bootstrap_admin_password,
+            _mcp_auth_limit: mcp_auth_limit,
+            _trust_proxy_headers: trust_proxy_headers,
         }
     }
 }
@@ -309,7 +328,9 @@ async fn login_cookie(
     username: &str,
     password: &str,
 ) -> actix_web::cookie::Cookie<'static> {
-    let req = test::TestRequest::post()
+    // Send same-origin headers so this helper also works when the app under test
+    // enforces CSRF on login (B-LOW-1); a real browser login always carries Origin.
+    let req = with_same_origin(test::TestRequest::post())
         .uri("/api/auth/login")
         .set_json(json!({ "username": username, "password": password }))
         .to_request();
@@ -812,6 +833,46 @@ async fn workout_stats_empty_workouts_returns_empty_arrays() {
 }
 
 #[actix_web::test]
+async fn workout_stats_exclude_in_progress_zero_duration_workouts() {
+    // B-MED-11: an in-progress / abandoned workout has end_time == start_time (zero
+    // duration) and must not be counted in the duration stats, which would deflate
+    // the average and inflate the 0-30min bucket.
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    let username = "stats-user";
+    let password = "stats-user-password";
+    create_user_as_admin(&app, &admin_cookie, username, password).await;
+    let cookie = login_cookie_active(&app, username, password).await;
+
+    // One completed 40-minute workout.
+    let start: chrono::DateTime<chrono::Utc> = "2026-03-02T10:00:00Z".parse().unwrap();
+    let end = start + chrono::Duration::minutes(40);
+    create_workout_with_times(&app, &cookie, start, end).await;
+
+    // One in-progress workout (created, never ended -> end_time == start_time).
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri("/api/workouts")
+        .set_json(json!({
+            "date": start,
+            "start_time": start,
+            "timezone_offset_minutes": 0
+        }))
+        .to_request();
+    assert_eq!(test::call_service(&app, req).await.status(), 201);
+
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri("/api/progress/workout-stats")
+        .to_request();
+    let body = json_body(test::call_service(&app, req).await).await;
+
+    // Only the completed workout counts, and the average is its real duration —
+    // not dragged toward zero by the in-progress one.
+    assert_eq!(body["total_workouts"].as_i64().unwrap(), 1);
+    assert_eq!(body["average_duration_minutes"].as_f64().unwrap(), 40.0);
+}
+
+#[actix_web::test]
 async fn health_check_works() {
     let _env = TestEnv::new();
     let (_db, _admin_cookie, app) = setup_test_app().await;
@@ -1150,6 +1211,50 @@ async fn can_create_template_from_workout_and_start_without_sets() {
         "Bench"
     );
     assert_eq!(started["exercises"][0]["sets"].as_array().unwrap().len(), 0);
+}
+
+#[actix_web::test]
+async fn starting_a_second_template_session_while_one_is_active_conflicts() {
+    // B-LOW-13: the single-active-session invariant is enforced atomically at the
+    // INSERT, so a second start (before the first is ended) is rejected with 409.
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "one-session", "passwordpassword").await;
+    let cookie = login_cookie_active(&app, "one-session", "passwordpassword").await;
+    let now = chrono::Utc::now();
+
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri("/api/templates")
+        .set_json(json!({
+            "name": "Full Body",
+            "exercises": [
+                { "exercise_type": "Deadlift", "per_side_weight": false, "split_weight": false }
+            ]
+        }))
+        .to_request();
+    let template = json_body(test::call_service(&app, req).await).await;
+    let template_id = template["template"]["id"].as_i64().unwrap();
+
+    let start_body = json!({
+        "date": now,
+        "start_time": now,
+        "timezone_offset_minutes": 0
+    });
+
+    // First start succeeds and leaves an active session.
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/templates/{template_id}/start"))
+        .set_json(&start_body)
+        .to_request();
+    assert_eq!(test::call_service(&app, req).await.status(), 201);
+
+    // Second start (session still active) is rejected.
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri(&format!("/api/templates/{template_id}/start"))
+        .set_json(&start_body)
+        .to_request();
+    assert_eq!(test::call_service(&app, req).await.status(), 409);
 }
 
 #[actix_web::test]
@@ -1609,6 +1714,21 @@ async fn logs_endpoints_work_and_enforce_limits() {
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 413);
+
+    // B-MED-6: a debug entry whose serialized metadata exceeds 2048 bytes with a
+    // multibyte character straddling byte 2048 must not panic the worker.
+    let big = "é".repeat(1100); // ~2200 bytes, boundary lands mid-character
+    let req = with_cookie(test::TestRequest::post(), &cookie)
+        .uri("/api/logs")
+        .set_json(json!([
+            { "level": "debug", "message": "m", "metadata": { "x": big } }
+        ]))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "oversized multibyte metadata must be truncated safely, not panic"
+    );
 }
 
 #[actix_web::test]
@@ -1672,6 +1792,45 @@ async fn backups_endpoints_create_list_restore_delete_admin_only() {
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success());
+}
+
+#[actix_web::test]
+async fn restoring_a_corrupt_backup_is_rejected_and_keeps_the_app_alive() {
+    // B-MED-8: a corrupt / unreadable archive must be rejected before the live pool
+    // is torn down, so a failed restore can't take the whole app down.
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    // Write a bogus archive with a valid backup name into the backups dir.
+    let filename = "swolemate_corrupt.tar.gz";
+    std::fs::write(
+        std::path::Path::new("backups").join(filename),
+        b"this is not a gzip archive",
+    )
+    .expect("write corrupt backup");
+
+    let req = with_cookie(test::TestRequest::post(), &admin_cookie)
+        .uri(&format!("/api/backups/{filename}/restore"))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(
+        resp.status(),
+        400,
+        "a corrupt archive must be rejected, not tear down the pool"
+    );
+
+    // The app must still serve requests (the pool was never closed).
+    let now = chrono::Utc::now();
+    let req = with_cookie(test::TestRequest::post(), &admin_cookie)
+        .uri("/api/workouts")
+        .set_json(json!({ "date": now, "start_time": now }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(
+        resp.status(),
+        201,
+        "the database pool must remain usable after a rejected restore"
+    );
 }
 
 #[actix_web::test]
@@ -1907,26 +2066,67 @@ async fn invalid_backup_filenames_are_rejected_before_io() {
 }
 
 #[actix_web::test]
-async fn login_is_rate_limited_after_repeated_failed_attempts() {
+async fn repeated_failed_logins_do_not_lock_the_owner_out() {
+    // Regression for the permanent-lockout DoS (B-HIGH-1): a stream of bad passwords
+    // must NOT freeze the account. Every wrong attempt returns a uniform 401 (never
+    // a distinct 429 that would leak account existence, B-MED-1), and the legitimate
+    // owner's correct password still authenticates afterwards.
     let _env = TestEnv::new();
     let (_db, admin_cookie, app) = setup_test_app().await;
     create_user_as_admin(&app, &admin_cookie, "lockme", "lockme-password").await;
 
-    for _ in 0..5 {
+    for _ in 0..6 {
         let req = test::TestRequest::post()
             .uri("/api/auth/login")
             .set_json(json!({ "username": "lockme", "password": "wrong-password" }))
             .to_request();
         let resp = test::call_service(&app, req).await;
-        assert_eq!(resp.status(), 401);
+        assert_eq!(
+            resp.status(),
+            401,
+            "a bad password must return a uniform 401, not an account-lock 429"
+        );
     }
 
+    // The owner can still log in — the failed attempts did not lock the account.
     let req = test::TestRequest::post()
         .uri("/api/auth/login")
-        .set_json(json!({ "username": "lockme", "password": "wrong-password" }))
+        .set_json(json!({ "username": "lockme", "password": "lockme-password" }))
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), 429);
+    assert!(
+        resp.status().is_success(),
+        "correct password must still authenticate after repeated failures"
+    );
+}
+
+#[actix_web::test]
+async fn login_does_not_leak_account_existence_via_status() {
+    // B-MED-1: unknown, disabled, and wrong-password accounts must all return the
+    // same 401 so an attacker cannot enumerate usernames from the response.
+    let _env = TestEnv::new();
+    let (db, admin_cookie, app) = setup_test_app().await;
+    create_user_as_admin(&app, &admin_cookie, "realuser", "realuser-password").await;
+
+    // Disable a second account.
+    create_user_as_admin(&app, &admin_cookie, "disableduser", "disabled-password").await;
+    sqlx::query("UPDATE users SET disabled_at = CURRENT_TIMESTAMP WHERE LOWER(username) = 'disableduser'")
+        .execute(&db.pool().await)
+        .await
+        .expect("disable user");
+
+    for username in ["realuser", "disableduser", "ghostuser"] {
+        let req = test::TestRequest::post()
+            .uri("/api/auth/login")
+            .set_json(json!({ "username": username, "password": "wrong-password" }))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(
+            resp.status(),
+            401,
+            "login for {username} must return 401 regardless of account state"
+        );
+    }
 }
 
 #[actix_web::test]
@@ -1985,6 +2185,56 @@ async fn csrf_blocks_mutating_authenticated_requests_without_origin_in_productio
 }
 
 #[actix_web::test]
+async fn csrf_blocks_login_without_origin_in_production_mode() {
+    // B-LOW-1: the login endpoint skips session auth but still establishes a
+    // session, so it must honour the CSRF origin check like any other mutating
+    // request. A cross-site POST (no matching Origin) is rejected; a same-origin
+    // POST succeeds.
+    let _env = TestEnv::new();
+    let session_cfg = auth::SessionConfig::for_env("production");
+    let (_db, app) = setup_test_app_raw_with_cfg(session_cfg).await;
+
+    let req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(json!({ "username": ADMIN_USERNAME, "password": ADMIN_PASSWORD }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 403, "cross-site login must be blocked by CSRF");
+
+    let req = with_same_origin(test::TestRequest::post())
+        .uri("/api/auth/login")
+        .set_json(json!({ "username": ADMIN_USERNAME, "password": ADMIN_PASSWORD }))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(resp.status().is_success(), "same-origin login must succeed");
+}
+
+#[actix_web::test]
+async fn request_ip_trusts_x_real_ip_only_when_configured() {
+    // B-LOW-4: the spoofable X-Real-IP header is only honoured when we're told we
+    // sit behind a trusted proxy; otherwise the real peer address is used so a
+    // client can't forge its source IP to dodge per-IP rate limiting.
+    use std::net::SocketAddr;
+    use swolemate_server::auth::rate_limit::request_ip;
+
+    let _env = TestEnv::new(); // sets TRUST_PROXY_HEADERS=true
+    let peer: SocketAddr = "203.0.113.9:5555".parse().unwrap();
+    let build = || {
+        test::TestRequest::default()
+            .peer_addr(peer)
+            .insert_header(("x-real-ip", "198.51.100.23"))
+            .to_http_request()
+    };
+
+    // Trusted proxy: the forwarded client IP wins.
+    assert_eq!(request_ip(&build()).as_deref(), Some("198.51.100.23"));
+
+    // Not trusted: the spoofable header is ignored, real peer address used.
+    let _guard = EnvVarGuard::set("TRUST_PROXY_HEADERS", "false");
+    assert_eq!(request_ip(&build()).as_deref(), Some("203.0.113.9"));
+}
+
+#[actix_web::test]
 async fn admin_disable_user_revokes_existing_session() {
     let _env = TestEnv::new();
     let (_db, admin_cookie, app) = setup_test_app().await;
@@ -2003,6 +2253,142 @@ async fn admin_disable_user_revokes_existing_session() {
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 401);
+}
+
+#[actix_web::test]
+async fn mcp_auth_is_rate_limited_per_ip_before_db_lookup() {
+    // B-MED-3: an unauthenticated flood of bogus bearer tokens is throttled by IP
+    // (before any token DB lookup) so it cannot amplify into unbounded DB work.
+    let _env = TestEnv::new();
+    let _limit = EnvVarGuard::set("MCP_AUTH_RATE_LIMIT_PER_MINUTE", "3");
+    let (_db, app) = setup_test_app_raw().await;
+
+    let ip = "198.51.100.77";
+    let mut statuses = Vec::new();
+    for _ in 0..4 {
+        let req = test::TestRequest::post()
+            .uri("/mcp")
+            .insert_header(("x-real-ip", ip))
+            .insert_header((actix_web::http::header::AUTHORIZATION, "Bearer bogus-token"))
+            .set_json(json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {} }))
+            .to_request();
+        statuses.push(test::call_service(&app, req).await.status().as_u16());
+    }
+
+    // The first three bogus attempts are admitted (and rejected as unauthorized);
+    // the fourth is throttled before it reaches the token lookup.
+    assert_eq!(statuses[0], 401);
+    assert_eq!(statuses[3], 429, "auth attempts must be rate limited per IP");
+}
+
+#[actix_web::test]
+async fn changing_password_revokes_mcp_tokens() {
+    // B-MED-4: a leaked MCP bearer token must not survive the owner rotating their
+    // password — the canonical response to compromise.
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+    create_user_as_admin(&app, &admin_cookie, "mcp-pw-revoke", "passwordpassword").await;
+    let user_cookie = login_cookie_active(&app, "mcp-pw-revoke", "passwordpassword").await;
+
+    let created =
+        create_mcp_personal_token(&app, &user_cookie, "Leaked", &["workouts.read"], Some(30)).await;
+    let token = created["token"].as_str().unwrap().to_string();
+
+    // The token works before the password change.
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {token}"),
+        ))
+        .set_json(json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {} }))
+        .to_request();
+    assert_eq!(test::call_service(&app, req).await.status(), 200);
+
+    // The owner changes their password.
+    let change_req = with_cookie(test::TestRequest::post(), &user_cookie)
+        .uri("/api/auth/change-password")
+        .set_json(json!({
+            // login_cookie_active already rotated the password to `<pw>-changed`.
+            "current_password": "passwordpassword-changed",
+            "new_password": "brand-new-password"
+        }))
+        .to_request();
+    assert!(test::call_service(&app, change_req).await.status().is_success());
+
+    // The previously-valid token is now rejected.
+    let req = test::TestRequest::post()
+        .uri("/mcp")
+        .insert_header((
+            actix_web::http::header::AUTHORIZATION,
+            format!("Bearer {token}"),
+        ))
+        .set_json(json!({ "jsonrpc": "2.0", "id": 2, "method": "initialize", "params": {} }))
+        .to_request();
+    assert_eq!(
+        test::call_service(&app, req).await.status(),
+        401,
+        "MCP token must be revoked by a password change"
+    );
+}
+
+#[actix_web::test]
+async fn admin_cannot_disable_last_admin_and_can_re_enable_users() {
+    // B-MED-7: disabling the last active admin is rejected (mirrors delete_user),
+    // and a disabled account can be recovered via the new enable route.
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    // Find the sole admin's id.
+    let req = with_cookie(test::TestRequest::get(), &admin_cookie)
+        .uri("/api/admin/users")
+        .to_request();
+    let users = json_body(test::call_service(&app, req).await).await;
+    let admin_id = users
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|u| u["role"] == "admin")
+        .expect("admin present")["id"]
+        .as_i64()
+        .expect("admin id");
+
+    // Disabling the only admin must be rejected with a conflict.
+    let req = with_cookie(test::TestRequest::post(), &admin_cookie)
+        .uri(&format!("/api/admin/users/{admin_id}/disable"))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 409, "must not be able to disable the last admin");
+
+    // A normal user can be disabled then re-enabled.
+    let user_id = create_user_as_admin(&app, &admin_cookie, "toggleme", "passwordpassword").await;
+
+    let req = with_cookie(test::TestRequest::post(), &admin_cookie)
+        .uri(&format!("/api/admin/users/{user_id}/disable"))
+        .to_request();
+    assert!(test::call_service(&app, req).await.status().is_success());
+
+    // While disabled, login fails.
+    let req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(json!({ "username": "toggleme", "password": "passwordpassword" }))
+        .to_request();
+    assert_eq!(test::call_service(&app, req).await.status(), 401);
+
+    // Re-enable, and login works again.
+    let req = with_cookie(test::TestRequest::post(), &admin_cookie)
+        .uri(&format!("/api/admin/users/{user_id}/enable"))
+        .to_request();
+    assert!(test::call_service(&app, req).await.status().is_success());
+
+    let req = test::TestRequest::post()
+        .uri("/api/auth/login")
+        .set_json(json!({ "username": "toggleme", "password": "passwordpassword" }))
+        .to_request();
+    assert!(
+        test::call_service(&app, req).await.status().is_success(),
+        "re-enabled user must be able to log in"
+    );
 }
 
 #[actix_web::test]
@@ -2178,6 +2564,23 @@ async fn replace_sets_endpoint_replaces_existing_sets_and_validates_payload() {
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 400);
+
+    // B-LOW-7: the REST replace-sets endpoint bounds the array size (the same
+    // MAX_SETS_PER_EXERCISE_REPLACE cap the MCP tool enforces), so a client can't
+    // submit an unbounded payload.
+    let too_many_sets = (0..101)
+        .map(|_| json!({ "reps": 5, "weight": 20.0 }))
+        .collect::<Vec<_>>();
+    let req = with_cookie(test::TestRequest::put(), &cookie)
+        .uri(&format!("/api/exercises/{exercise_id}/sets"))
+        .set_json(json!(too_many_sets))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400);
+    assert!(json_body(resp).await["error"]
+        .as_str()
+        .unwrap()
+        .contains("at most 100"));
 }
 
 #[actix_web::test]
@@ -2789,7 +3192,15 @@ async fn malformed_backup_restore_fails_safely() {
         .uri(&format!("/api/backups/{malformed_name}/restore"))
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), 500);
+    // The malformed archive is now rejected up front (400) with the live pool intact
+    // rather than propagating a 500 after tearing the pool down (B-MED-8).
+    assert_eq!(resp.status(), 400);
+
+    // The app is still usable afterwards.
+    let req = with_cookie(test::TestRequest::get(), &admin_cookie)
+        .uri("/api/workouts")
+        .to_request();
+    assert!(test::call_service(&app, req).await.status().is_success());
 }
 
 #[actix_web::test]
@@ -2802,7 +3213,13 @@ async fn missing_backup_restore_fails_safely() {
         .uri(&format!("/api/backups/{missing_name}/restore"))
         .to_request();
     let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), 500);
+    // A missing archive is rejected up front (400) without tearing down the pool.
+    assert_eq!(resp.status(), 400);
+
+    let req = with_cookie(test::TestRequest::get(), &admin_cookie)
+        .uri("/api/workouts")
+        .to_request();
+    assert!(test::call_service(&app, req).await.status().is_success());
 }
 
 #[actix_web::test]
@@ -3766,6 +4183,196 @@ async fn refresh_tokens_rotate_and_old_refresh_token_is_rejected() {
 }
 
 #[actix_web::test]
+async fn refresh_token_reuse_revokes_the_whole_family() {
+    // B-MED-2: replaying an already-rotated refresh token (the stolen-token replay
+    // scenario) must revoke every descendant token in the family, not just reject
+    // the presented token — so a thief's live tokens die too.
+    let _env = TestEnv::new();
+    let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "oauth-reuse", "passwordpassword").await;
+    let _cookie = login_cookie_active(&app, "oauth-reuse", "passwordpassword").await;
+    let registered = register_oauth_client(&app, "workouts.read").await;
+    let client_id = registered["client_id"].as_str().unwrap();
+    let verifier = "refresh-reuse-verifier";
+    let code = authorize_oauth_code(
+        &app,
+        client_id,
+        "oauth-reuse",
+        "passwordpassword-changed",
+        "workouts.read",
+        verifier,
+    )
+    .await;
+    let tokens = exchange_token(&app, client_id, &code, verifier).await;
+    let rt1 = tokens["refresh_token"].as_str().unwrap().to_string();
+
+    let refresh = |token: String| {
+        let client_id = client_id.to_string();
+        test::TestRequest::post()
+            .uri("/oauth/token")
+            .insert_header((
+                actix_web::http::header::CONTENT_TYPE,
+                "application/x-www-form-urlencoded",
+            ))
+            .set_form(&[
+                ("grant_type", "refresh_token".to_string()),
+                ("client_id", client_id),
+                ("refresh_token", token),
+            ])
+            .to_request()
+    };
+
+    // Rotate RT1 -> RT2 (a thief's descendant token).
+    let resp = test::call_service(&app, refresh(rt1.clone())).await;
+    assert_eq!(resp.status(), 200);
+    let rt2 = json_body(resp).await["refresh_token"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // The legit client replays RT1 -> reuse detected -> family revoked.
+    let resp = test::call_service(&app, refresh(rt1)).await;
+    assert_eq!(resp.status(), 400);
+
+    // RT2 (issued in the same family) is now dead too.
+    let resp = test::call_service(&app, refresh(rt2)).await;
+    assert_eq!(
+        resp.status(),
+        400,
+        "reuse detection must revoke the descendant refresh token"
+    );
+    assert_eq!(json_body(resp).await["error"], "invalid_grant");
+}
+
+#[actix_web::test]
+async fn authorize_appends_code_with_correct_separator_for_query_redirect() {
+    // B-LOW-8: a registered redirect_uri may already carry a query string. The
+    // authorization code must be appended with "&", not a second "?", so the
+    // callback URL stays well-formed.
+    let _env = TestEnv::new();
+    let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "oauth-qredir", "passwordpassword").await;
+    let _cookie = login_cookie_active(&app, "oauth-qredir", "passwordpassword").await;
+
+    let redirect_uri = "https://client.example/callback?foo=bar";
+    let registered = register_oauth_client_with_redirects(
+        &app,
+        "workouts.read",
+        json!([redirect_uri]),
+    )
+    .await;
+    let client_id = registered["client_id"].as_str().unwrap();
+    let verifier = "query-redirect-verifier";
+    let challenge = pkce_challenge(verifier);
+
+    let req = test::TestRequest::post()
+        .uri("/oauth/authorize")
+        .set_form(&[
+            ("response_type", "code"),
+            ("client_id", client_id),
+            ("redirect_uri", redirect_uri),
+            ("scope", "workouts.read"),
+            ("state", "test-state"),
+            ("code_challenge", challenge.as_str()),
+            ("code_challenge_method", "S256"),
+            ("username", "oauth-qredir"),
+            ("password", "passwordpassword-changed"),
+            ("approve", "yes"),
+        ])
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 302);
+    let location = resp
+        .headers()
+        .get(actix_web::http::header::LOCATION)
+        .unwrap()
+        .to_str()
+        .unwrap();
+
+    assert!(
+        location.starts_with("https://client.example/callback?foo=bar&code="),
+        "code must be appended with & to the existing query, got: {location}"
+    );
+    // Exactly one '?' — no malformed second query delimiter.
+    assert_eq!(location.matches('?').count(), 1, "got: {location}");
+}
+
+#[actix_web::test]
+async fn replaying_authorization_code_revokes_issued_tokens() {
+    // B-LOW-2: exchanging an authorization code twice signals the code leaked.
+    // The replay must revoke every token already issued from that code (its
+    // rotation family), not just reject the second exchange.
+    let _env = TestEnv::new();
+    let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    create_user_as_admin(&app, &admin_cookie, "oauth-replay", "passwordpassword").await;
+    let _cookie = login_cookie_active(&app, "oauth-replay", "passwordpassword").await;
+    let registered = register_oauth_client(&app, "workouts.read").await;
+    let client_id = registered["client_id"].as_str().unwrap();
+    let verifier = "authcode-replay-verifier";
+    let code = authorize_oauth_code(
+        &app,
+        client_id,
+        "oauth-replay",
+        "passwordpassword-changed",
+        "workouts.read",
+        verifier,
+    )
+    .await;
+
+    // First exchange succeeds and yields a working access token.
+    let tokens = exchange_token(&app, client_id, &code, verifier).await;
+    let access_token = tokens["access_token"].as_str().unwrap().to_string();
+
+    let mcp_probe = |token: String| {
+        test::TestRequest::post()
+            .uri("/mcp")
+            .insert_header((
+                actix_web::http::header::AUTHORIZATION,
+                format!("Bearer {token}"),
+            ))
+            .set_json(json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {} }))
+            .to_request()
+    };
+
+    // The access token works before the replay.
+    let resp = test::call_service(&app, mcp_probe(access_token.clone())).await;
+    assert_eq!(resp.status(), 200);
+
+    // Replay the same authorization code -> rejected...
+    let replay = test::TestRequest::post()
+        .uri("/oauth/token")
+        .insert_header((
+            actix_web::http::header::CONTENT_TYPE,
+            "application/x-www-form-urlencoded",
+        ))
+        .set_form(&[
+            ("grant_type", "authorization_code"),
+            ("client_id", client_id),
+            ("code", &code),
+            ("redirect_uri", "https://client.example/callback"),
+            ("code_verifier", verifier),
+        ])
+        .to_request();
+    let resp = test::call_service(&app, replay).await;
+    assert_eq!(resp.status(), 400);
+    assert_eq!(json_body(resp).await["error"], "invalid_grant");
+
+    // ...and the token issued from the first exchange is now revoked.
+    let resp = test::call_service(&app, mcp_probe(access_token)).await;
+    assert_eq!(
+        resp.status(),
+        401,
+        "replaying the authorization code must revoke tokens issued from it"
+    );
+}
+
+#[actix_web::test]
 async fn oauth_revoke_revokes_access_token_for_mcp() {
     let _env = TestEnv::new();
     let _registration_guard = EnvVarGuard::set("OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION", "true");
@@ -4636,7 +5243,11 @@ async fn mcp_personal_token_rotate_revokes_old_token_and_mints_new_one() {
 }
 
 #[actix_web::test]
-async fn mcp_personal_token_rotate_preserves_existing_expiry() {
+async fn mcp_personal_token_rotate_reapplies_lifetime() {
+    // B-LOW-9: rotation re-applies the original token's lifetime from now rather
+    // than copying its (possibly nearly-elapsed) absolute expiry, so the rotated
+    // token never expires earlier than the original and keeps roughly a full
+    // window.
     let _env = TestEnv::new();
     let (_db, admin_cookie, app) = setup_test_app().await;
 
@@ -4659,7 +5270,8 @@ async fn mcp_personal_token_rotate_preserves_existing_expiry() {
     )
     .await;
     let old_id = created["id"].as_i64().unwrap();
-    let original_expires_at = created["expires_at"].as_str().unwrap().to_string();
+    let original_expires_at: chrono::DateTime<chrono::Utc> =
+        created["expires_at"].as_str().unwrap().parse().unwrap();
 
     let rotate_req = with_cookie(test::TestRequest::post(), &user_cookie)
         .uri(&format!("/api/mcp/tokens/{old_id}/rotate"))
@@ -4668,9 +5280,20 @@ async fn mcp_personal_token_rotate_preserves_existing_expiry() {
     assert_eq!(rotate_resp.status(), 201);
 
     let body = json_body(rotate_resp).await;
-    assert_eq!(
-        body["expires_at"].as_str(),
-        Some(original_expires_at.as_str())
+    let rotated_expires_at: chrono::DateTime<chrono::Utc> =
+        body["expires_at"].as_str().unwrap().parse().unwrap();
+
+    // The refreshed expiry is never earlier than the original (created moments ago)
+    // and still lands ~7 days out from now.
+    assert!(
+        rotated_expires_at >= original_expires_at,
+        "rotated expiry {rotated_expires_at} should be >= original {original_expires_at}"
+    );
+    let remaining = rotated_expires_at - chrono::Utc::now();
+    assert!(
+        remaining > chrono::Duration::days(6)
+            && remaining <= chrono::Duration::days(7) + chrono::Duration::minutes(1),
+        "rotated token should have ~7 days remaining, got {remaining}"
     );
 }
 
@@ -5067,4 +5690,103 @@ async fn mcp_non_tool_requests_are_rate_limited_too() {
     let body = json_body(resp).await;
     assert_eq!(body["error"]["code"], -32029);
     assert_eq!(body["error"]["message"], "Too Many Requests");
+}
+
+#[actix_web::test]
+async fn create_workout_is_idempotent_on_replayed_key() {
+    // F-HIGH-3: a retried offline-sync create carrying the same Idempotency-Key
+    // must return the original workout, not create a duplicate.
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    let username = "idem-workout-user";
+    let password = "idem-workout-password";
+    create_user_as_admin(&app, &admin_cookie, username, password).await;
+    let cookie = login_cookie_active(&app, username, password).await;
+
+    let start = chrono::Utc::now();
+    let make = || {
+        with_cookie(test::TestRequest::post(), &cookie)
+            .uri("/api/workouts")
+            .insert_header(("Idempotency-Key", "w:-100"))
+            .set_json(json!({
+                "date": start,
+                "start_time": start,
+                "timezone_offset_minutes": 0
+            }))
+            .to_request()
+    };
+
+    let first = json_body(test::call_service(&app, make()).await).await["id"]
+        .as_i64()
+        .expect("first id");
+    let second = json_body(test::call_service(&app, make()).await).await["id"]
+        .as_i64()
+        .expect("second id");
+
+    assert_eq!(first, second, "replayed key must return the same workout id");
+
+    // Exactly one workout exists for this user.
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri("/api/workouts")
+        .to_request();
+    let body = json_body(test::call_service(&app, req).await).await;
+    assert_eq!(
+        body.as_array().expect("workouts array").len(),
+        1,
+        "duplicate create must not produce a second workout"
+    );
+
+    // A different key creates a distinct workout.
+    let other = with_cookie(test::TestRequest::post(), &cookie)
+        .uri("/api/workouts")
+        .insert_header(("Idempotency-Key", "w:-200"))
+        .set_json(json!({ "date": start, "start_time": start, "timezone_offset_minutes": 0 }))
+        .to_request();
+    let other_id = json_body(test::call_service(&app, other).await).await["id"]
+        .as_i64()
+        .expect("other id");
+    assert_ne!(other_id, first, "a different key must create a new workout");
+}
+
+#[actix_web::test]
+async fn create_exercise_is_idempotent_on_replayed_key() {
+    let _env = TestEnv::new();
+    let (_db, admin_cookie, app) = setup_test_app().await;
+
+    let username = "idem-exercise-user";
+    let password = "idem-exercise-password";
+    create_user_as_admin(&app, &admin_cookie, username, password).await;
+    let cookie = login_cookie_active(&app, username, password).await;
+
+    let start = chrono::Utc::now();
+    let workout_id = create_workout_with_times(&app, &cookie, start, start).await;
+
+    let make = || {
+        with_cookie(test::TestRequest::post(), &cookie)
+            .uri(&format!("/api/workouts/{workout_id}/exercises"))
+            .insert_header(("Idempotency-Key", "e:-1"))
+            .set_json(json!({ "exercise_type": "Bench", "start_time": start }))
+            .to_request()
+    };
+
+    let first = json_body(test::call_service(&app, make()).await).await["id"]
+        .as_i64()
+        .expect("first id");
+    let second = json_body(test::call_service(&app, make()).await).await["id"]
+        .as_i64()
+        .expect("second id");
+
+    assert_eq!(first, second, "replayed key must return the same exercise id");
+
+    // The workout has exactly one exercise.
+    let req = with_cookie(test::TestRequest::get(), &cookie)
+        .uri(&format!("/api/workouts/{workout_id}"))
+        .to_request();
+    let body = json_body(test::call_service(&app, req).await).await;
+    assert_eq!(
+        body["exercises"].as_array().expect("exercises array").len(),
+        1,
+        "duplicate create must not produce a second exercise"
+    );
 }
