@@ -35,6 +35,13 @@ This protocol exists to:
  If editing such a file, briefly explain why the change belongs there, or propose a small extraction.
  Prefer one file/module per coherent responsibility, not per function.
 
+7. **Development server lifecycle (immutable).**
+ Use `just dev-start`, `just dev-status`, and `just dev-stop` whenever starting,
+ inspecting, or stopping the local development environment. Do not run
+ `cargo run`, `npm run dev`, Docker Compose, or equivalent server commands
+ directly unless the user explicitly requests it or the Justfile is broken.
+ `just dev-start` is the canonical non-containerised development path.
+
 ---
 
 ## 2) Role System
