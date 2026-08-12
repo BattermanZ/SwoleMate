@@ -12,24 +12,13 @@
   <a href="#running-with-docker-or-podman"><img alt="Docker | Podman" src="https://img.shields.io/badge/runs%20on-Docker%20%7C%20Podman-2496ED"></a>
 </p>
 
-A self-hosted, phone-first workout logger. You train, you log sets as you go, your data stays on your own server.
+A self-hosted, phone-first workout logger. Log sets while you lift, keep your history on your own server, and review progress from any screen.
 
-SwoleMate is built for logging a session while you're actually lifting, not for filling in a spreadsheet afterward. Add an exercise, log a set, move on. It runs as a Rust API backed by SQLite and a SvelteKit PWA, both of which you run yourself.
+SwoleMate is built for the gym floor, not for filling in a spreadsheet afterward. Start from a plan or a blank session, log reps, weights, timed sets, and notes, then inspect your training history and trends. The app is a SvelteKit progressive web app backed by a Rust API and SQLite.
 
 <p align="center">
   <img src="assets/screenshots/today-hero.png" width="300" alt="Live session on the Today screen: elapsed time, exercises, sets, and volume">
 </p>
-
-## Who it's for
-
-- People who want their workout history on their own hardware, not a fitness company's cloud.
-- People who log sets mid-workout on a phone and want that to be fast, not a chore.
-- People comfortable running a couple of Docker/Podman containers, or building from source.
-
-**SwoleMate is not:**
-- A hosted SaaS. There is no managed instance; you run your own.
-- A multi-tenant gym platform, coaching app, or social feed. It has users and an admin role, but it's built for a household, not an organization.
-- A public-internet-facing app out of the box. It's designed to sit behind your own reverse proxy with HTTPS.
 
 ## Highlights
 
@@ -42,24 +31,36 @@ SwoleMate is built for logging a session while you're actually lifting, not for 
 - Admin-only user management, so one person can run it for a household without giving everyone admin rights.
 - An MCP endpoint so you can connect compatible AI tools to your own data using a personal token.
 
+## Who it's for
+
+- People who want their workout history on their own hardware, not a fitness company's cloud.
+- People who log sets mid-workout on a phone and want that to be fast, not a chore.
+- People comfortable running a couple of Docker or Podman containers, or building from source.
+
+**SwoleMate is not:**
+
+- A hosted service. There is no managed instance; you run your own.
+- A multi-tenant gym platform, coaching app, or social feed. It has users and an admin role, but it is built for a household, not an organization.
+- Ready for direct public exposure by itself. Put it behind your own HTTPS reverse proxy.
+
 ## Screenshots
 
 <table>
   <tr>
     <td width="50%" valign="top">
       <img src="assets/screenshots/today-logging.png" width="100%" alt="Logging a set: reps and weight steppers with a big Log set button">
-      <p align="center"><sub><b>Today</b>: logging a set</sub></p>
+      <p align="center"><sub><b>Log as you lift</b>: tracking modes, completed sets, steppers, and notes</sub></p>
     </td>
     <td width="50%" valign="top">
-      <img src="assets/screenshots/progress-mobile.png" width="100%" alt="Strength trend chart, PRs, and estimated 1RM for one exercise">
-      <p align="center"><sub><b>Progress</b>: strength trend + PRs</sub></p>
+      <img src="assets/screenshots/timer-mobile.png" width="100%" alt="Full-screen countdown timer for a one-minute plank set, with pause and restart controls">
+      <p align="center"><sub><b>Stay focused</b>: a full-screen countdown for timed sets</sub></p>
     </td>
   </tr>
 </table>
 
 <p align="center">
   <img src="assets/screenshots/progress-desktop.png" width="820" alt="Progress dashboard on desktop: training calendar heatmap and exercise charts">
-  <br><sub><b>Progress</b> on desktop: training calendar and exercise charts</sub>
+  <br><sub><b>Review the work</b>: training calendar, records, comparisons, and exercise trends on desktop</sub>
 </p>
 
 ## How it works
@@ -137,29 +138,29 @@ SwoleMate ships two Dockerfiles (`server/Dockerfile`, `client/Dockerfile`) and a
 
 ### Running from source (development)
 
-**Backend**
-```bash
-cd server
-cargo run
-```
+This path requires Rust, Node.js 24, npm, and [`just`](https://github.com/casey/just). Install the frontend dependencies once, then use the repository's development lifecycle:
 
-**Frontend**
 ```bash
 cd client
 npm install
-npm run dev -- --host 0.0.0.0
+cd ..
+just dev-start
+just dev-status
 ```
 
-Default ports: frontend on `http://localhost:2470`, backend on `http://localhost:2469`. In development, the frontend proxies same-origin `/api/...` calls to the backend via Vite; see `client/vite.config.ts` and `client/.env.local` if you're running the backend somewhere other than `127.0.0.1:2469`.
+Open `http://localhost:2470`. Stop both services with `just dev-stop`.
 
-## Data, backups, and auth defaults
+The frontend runs on port `2470` and proxies API requests to the backend on port `2469`. Logs and process IDs live under `.dev/`. Cargo build artifacts use `/scratch/cargo-target` so they do not fill the repository.
 
-- **Storage**: a single SQLite file (default `database/swolemate.db`); WAL/SHM files live next to it when WAL is enabled. There is no external database to configure.
+## Data and safety defaults
+
+- **Storage**: a single SQLite file (default `database/swolemate.db`). There is no external database or third-party fitness service.
 - **Backups**: `.tar.gz` archives containing a consistent DB snapshot. Auto backups run weekly (Monday 01:00 local time). Retention keeps the most recent 6 weekly backups plus 1 monthly checkpoint for each of the last 6 months (max 12 total). Admins can also trigger manual backups and restores from the UI.
-- **Auth**: username/password with HttpOnly, SameSite=Lax cookie sessions (Secure in production, which requires HTTPS). Passwords must be at least 12 characters.
+- **Auth**: passwords are hashed server-side. Browser sessions use HttpOnly, SameSite=Lax cookies. Production cookies are Secure and require HTTPS.
 - **Roles**: admin users manage other users and backups; normal users can only see and log their own data.
 - **Forced password changes**: the bootstrap admin account and any user whose password an admin resets are forced to change it on next login. Existing databases upgraded from before v2.1.0 are not forced by default.
 - **MCP tokens**: personal, revocable, bearer tokens created from `Settings > AI access`, shown once on creation. They are separate from the browser session and only grant what the token's scopes allow.
+- **Public access**: the bundled services do not terminate TLS. Use a trusted reverse proxy, set `APP_ENV=production`, and expose only the proxy.
 
 ## Configuration
 
