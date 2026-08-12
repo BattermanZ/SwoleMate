@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800;900&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
 <style>
-  /* ── Energetic palette — same tokens as the mockups ───────────────── */
+  /* ── Implemented energetic palette ─────────────────────────────────── */
   :root {
     --bg: #f3ece1;
     --bg-2: #ebe2d2;
@@ -138,7 +138,14 @@
   }
   @media (max-width: 880px) {
     .layout { grid-template-columns: 1fr; gap: 16px; padding: 20px 18px 60px; }
-    .sidebar { position: static; max-height: none; }
+    .sidebar { display: none; }
+    .topbar-inner { padding: 12px 16px; }
+    .top-actions a { display: none; }
+    .intro { padding: 26px 22px; border-radius: 22px; }
+    .intro h1 { font-size: clamp(34px, 11vw, 48px); }
+    .doc h2 { font-size: 27px; }
+    .table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    footer.page { align-items: flex-start; flex-direction: column; }
   }
 
   /* ── Sidebar TOC ─────────────────────────────────────────────────── */
@@ -693,7 +700,7 @@
   .demo-nav a.active { color: var(--clay); }
   .demo-nav a.active .pill-nav { background: var(--clay); color: white; box-shadow: 0 6px 14px -6px var(--clay); }
 
-  /* Skeleton mapping table */
+  /* Reference tables */
   .table {
     width: 100%; border-collapse: separate; border-spacing: 0;
     border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
@@ -732,11 +739,11 @@
     <div class="topbar-inner">
       <div class="brand">
         <span class="logo">SM</span>
-        <div class="title">SwoleMate <small>design system · v0.1 · 2026-05-15</small></div>
+        <div class="title">SwoleMate <small>design system · v1.0 · 2026-08-12</small></div>
       </div>
       <div class="top-actions">
-        <a href="../mockups/today-energetic.html">↗ Today mockup</a>
-        <a href="../mockups/progress-energetic.html">↗ Progress mockup</a>
+        <a href="../mockups/today-energetic.html">Historical Today study ↗</a>
+        <a href="../mockups/progress-energetic.html">Historical Progress study ↗</a>
         <button class="icon-btn theme-toggle" id="theme-toggle" aria-label="Toggle theme">
           <svg class="ico-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
           <svg class="ico-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
@@ -764,13 +771,13 @@
       <a href="#notice">Notice banner</a>
       <a href="#tabs">Tabs (segmented)</a>
       <a href="#bottom-nav">Bottom nav</a>
+      <a href="#responsive-shell">Responsive shell</a>
+      <a href="#overlays">Dialogs &amp; overlays</a>
 
       <h3>Surfaces</h3>
       <a href="#card">Card / section</a>
       <a href="#metric">Metric tile</a>
-      <a href="#period-card">Period card</a>
       <a href="#pr-row">PR row</a>
-      <a href="#session-card">Session card</a>
 
       <h3>Pills &amp; data</h3>
       <a href="#spill">Spill (set pill)</a>
@@ -788,10 +795,17 @@
 
       <h3>Data viz</h3>
       <a href="#charts">Chart card</a>
+      <a href="#heatmap">Session heatmap</a>
+
+      <h3>Product patterns</h3>
+      <a href="#responsive-compositions">Route compositions</a>
+      <a href="#states">System states</a>
+      <a href="#accessibility">Accessibility</a>
 
       <h3>Reference</h3>
-      <a href="#skeleton-map">Skeleton mapping</a>
-      <a href="#migration">Migration plan</a>
+      <a href="#component-contracts">Component contracts</a>
+      <a href="#implementation-map">Implementation map</a>
+      <a href="#maintenance">Maintenance contract</a>
     </aside>
 
     <!-- Main -->
@@ -799,17 +813,18 @@
 
       <!-- ─── INTRO HERO ─────────────────────────────────────────── -->
       <section class="intro">
-        <div class="kicker">► Design system · v0.1</div>
+        <div class="kicker">► Design system · v1.0</div>
         <h1>Warm, loud, <em>built for the gym.</em></h1>
         <p>
           A focused design language for SwoleMate: warm cream surfaces, a hot-clay accent,
           gold for records, sage for progress, and one always-dark hero surface for live
           moments. Two themes that share the same vocabulary. Every token, component, and
-          state lives on this page as a real rendering — not a screenshot.
+          state lives on this page as a real rendering — not a screenshot. This document records
+          the implemented system; current components and <code>app.css</code> remain the executable truth.
         </p>
         <div class="meta">
-          <span><b>Stack</b> Svelte 5 · SvelteKit · Tailwind v4 · Skeleton v4 (replacing theme)</span>
-          <span><b>Surfaces</b> Today · Progress · History · Templates · Settings</span>
+          <span><b>Stack</b> Svelte 5 · SvelteKit · Tailwind v4 · native Svelte components</span>
+          <span><b>Surfaces</b> Mobile shell · desktop workspace · dialogs · data visualisation</span>
           <span><b>Voice</b> Onest + Instrument Serif</span>
         </div>
       </section>
@@ -822,9 +837,8 @@
         <p class="lede">
           Every color is a CSS variable defined on <code>:root</code> for light and
           <code>:root[data-theme="dark"]</code> for dark. Components never hardcode
-          hex values; they reach for tokens. Implementation-wise, drop the token
-          block into <code>app.css</code> to override Skeleton's <code>:root</code>
-          and ride the existing variant-* shims through the transition.
+          hex values; they reach for tokens. The canonical runtime definitions live in
+          <code>client/src/app.css</code>; this page mirrors them for reference and rendered examples.
         </p>
 
         <h3 class="sub">Surfaces <em>— the canvas tones</em></h3>
@@ -1006,12 +1020,9 @@
 <span class="tag">&lt;link</span> <span class="attr">rel</span>=<span class="str">"preconnect"</span> <span class="attr">href</span>=<span class="str">"https://fonts.gstatic.com"</span> <span class="attr">crossorigin</span><span class="tag">&gt;</span>
 <span class="tag">&lt;link</span> <span class="attr">href</span>=<span class="str">"https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&amp;family=Instrument+Serif:ital@0;1&amp;display=swap"</span> <span class="attr">rel</span>=<span class="str">"stylesheet"</span><span class="tag">&gt;</span>
 
-<span class="com">/* Override Skeleton's `--base-font-family` and `--heading-font-family` in app.css */</span>
-[data-theme=<span class="str">'rocket'</span>] {
-  --base-font-family: <span class="str">'Onest'</span>, system-ui, sans-serif;
-  --heading-font-family: <span class="str">'Onest'</span>, system-ui, sans-serif;
-  --heading-font-weight: 800;
-  --heading-letter-spacing: -0.02em;
+<span class="com">/* Runtime font stack in app.css */</span>
+body {
+  font-family: <span class="str">'Onest'</span>, system-ui, -apple-system, sans-serif;
 }</pre>
       </section>
 
@@ -1022,7 +1033,7 @@
         <h2>Spacing <em>— and radius</em></h2>
         <p class="lede">
           We avoid an explicit T-shirt scale because Tailwind already supplies one.
-          The values below are the ones actually used across the mockups. Reach for
+          The values below are the spacing relationships used across the application. Reach for
           them by habit, but go custom when the design wants it.
         </p>
 
@@ -1088,7 +1099,8 @@
         </ul>
         <p>
           Transition timings: <code>120ms</code> for hover/press, <code>180–240ms</code> for theme change.
-          Never animate page layout. Reduce-motion users get pulse + drift stopped automatically (TODO: wire <code>prefers-reduced-motion</code>).
+          Never animate page layout. Under <code>prefers-reduced-motion: reduce</code>, decorative pulse,
+          drift, and smooth scrolling stop; state changes remain immediate and understandable.
         </p>
       </section>
 
@@ -1096,11 +1108,11 @@
       <!-- COMPONENT · APP SHELL                                       -->
       <!-- ═══════════════════════════════════════════════════════════ -->
       <section class="doc" id="app-shell">
-        <h2>App shell <em>— top bar</em></h2>
+        <h2>App shell <em>— one product, two frames</em></h2>
         <p class="lede">
-          The mobile-first top bar carries brand, theme toggle, and logout. Sticky, lightly
-          frosted, sits over the page background with backdrop-blur. Replaces the existing
-          dual mobile/desktop AppBar split in <code>+layout.svelte</code> with one component.
+          The shell changes composition at <code>1024px</code>. Mobile uses a compact app bar and
+          five-destination bottom navigation. Desktop uses a persistent side rail and contextual
+          top bar. Route content is rendered once; the shell changes around it.
         </p>
 
         <div class="cmp">
@@ -1146,7 +1158,7 @@
             <div class="ddrow">
               <div class="dd do">
                 <div class="k">Do</div>
-                <p>Keep a max of two icon actions. Hide secondary actions behind the "More" tab in the bottom nav.</p>
+                <p>Keep a max of two icon actions on mobile. Put secondary destinations under More.</p>
               </div>
               <div class="dd dont">
                 <div class="k">Don't</div>
@@ -1326,8 +1338,8 @@
         <p class="lede">
           Every panel on every screen is a card. <code>var(--card)</code> background,
           <code>var(--line)</code> border, 18–22px radius, <code>--shadow-card</code> lift.
-          Inside: a head (h2 + lede), then body content. Replace Skeleton's
-          <code>card variant-glass-surface</code> usage everywhere.
+          Inside: a head (h2 + lede), then body content. This is the shared surface implemented
+          by <code>Card.svelte</code>; route layout stays outside the component.
         </p>
         <div class="cmp">
           <div class="head">
@@ -1410,8 +1422,8 @@
       <section class="doc" id="spill">
         <h2>Spill <em>— segmented set pill</em></h2>
         <p class="lede">
-          Replaces the production <code>SetPillsHybrid.svelte</code>. A horizontally-segmented
-          capsule rendering 1 set (or N grouped identical sets) as: optional count, optional reps,
+          <code>SetPillList.svelte</code> groups data and renders <code>Spill.svelte</code>: a horizontally
+          segmented capsule rendering 1 set (or N grouped identical sets) as optional count, reps,
           optional duration, optional weight. Weight cell color-mixes with intensity based on
           the relative load within the group (the <code>--w</code> CSS var).
         </p>
@@ -1449,7 +1461,7 @@
               <li><b>default</b> — 12px font, 7×10 padding. Use in expanded exercise card.</li>
               <li><b>.xs</b> — 10.5px font, 5×8 padding. Use in dense list contexts (Past 2 Sessions, Last Time recap).</li>
             </ul>
-            <div class="label">Grouping logic (port from existing SetPillsHybrid.svelte)</div>
+            <div class="label">Grouping logic (<code>SetPillList.svelte</code>)</div>
             <p>
               Sets group by key <code>`${reps}:${duration}:${weight}`</code>. Identical sets collapse into
               one pill with a count prefix. Non-matching sets get separate pills. Intensity scale uses
@@ -1670,9 +1682,9 @@
       <section class="doc" id="charts">
         <h2>Charts <em>— Chart.js theme integration</em></h2>
         <p class="lede">
-          The mockup uses static SVG for chart previews. In production, charts go through
-          <code>chart.js</code> (already a dep) with theme integration via <code>lib/progress/charting.ts</code>'s
-          existing <code>ChartTheme</code> + <code>observeTheme</code> helpers. Two universal rules:
+          This page uses static SVG for a portable preview. The application renders
+          <code>chart.js</code> with theme integration via <code>lib/progress/charting.ts</code>'s
+          <code>ChartTheme</code> and <code>observeTheme</code> helpers. Two universal rules:
         </p>
         <ul>
           <li><b>Series 1 (primary)</b> uses <code>--clay</code> with a vertical gradient fill (clay-2 top, clay 60% bottom).</li>
@@ -1700,95 +1712,173 @@
       </section>
 
       <!-- ═══════════════════════════════════════════════════════════ -->
-      <!-- SKELETON MAPPING                                            -->
+      <!-- RESPONSIVE PRODUCT ARCHITECTURE                             -->
       <!-- ═══════════════════════════════════════════════════════════ -->
-      <section class="doc" id="skeleton-map">
-        <h2>Skeleton mapping <em>— transition layer</em></h2>
+      <section class="doc" id="responsive-shell">
+        <h2>Responsive shell <em>— navigation follows the job</em></h2>
         <p class="lede">
-          The app currently rides Skeleton v4's "rocket" theme. We don't have to rip it out — we
-          override its CSS variables and keep its primitives until each route is ported. The
-          mapping below tells devs which Skeleton class to grep-replace as routes migrate.
+          Mobile optimises for logging with one hand; desktop optimises for scanning and comparison.
+          The breakpoint is <code>1024px</code>, shared by the viewport store and shell media query.
+          Never show mobile and desktop navigation together.
         </p>
         <table class="table">
-          <thead><tr><th>Token (design system)</th><th>Skeleton equivalent</th><th>Migration note</th></tr></thead>
+          <thead><tr><th>Concern</th><th>Mobile &lt; 1024px</th><th>Desktop ≥ 1024px</th></tr></thead>
           <tbody>
-            <tr><td><code>--clay</code></td><td><code>--color-primary-500</code></td><td>Override in <code>[data-theme='rocket']</code></td></tr>
-            <tr><td><code>--clay-2</code></td><td><code>--color-primary-400</code></td><td>Override</td></tr>
-            <tr><td><code>--clay-deep</code></td><td><code>--color-primary-700</code></td><td>Override; keep darker in both modes</td></tr>
-            <tr><td><code>--gold</code></td><td><code>--color-tertiary-500</code></td><td>Override</td></tr>
-            <tr><td><code>--sage</code></td><td><code>--color-success-500</code></td><td>Override</td></tr>
-            <tr><td><code>--warn</code></td><td><code>--color-warning-500</code></td><td>Override</td></tr>
-            <tr><td><code>--ink</code></td><td><code>--color-surface-950-50</code></td><td>Skeleton already flips this; we just redefine the value</td></tr>
-            <tr><td><code>--bg</code></td><td><code>--body-background-color</code></td><td>Same</td></tr>
-            <tr><td><b>Card</b></td><td><code>card variant-glass-surface</code></td><td>Replace with <code>.card</code> class from this system</td></tr>
-            <tr><td><b>Primary CTA</b></td><td><code>btn variant-filled-primary</code></td><td>Replace with <code>.btn-primary</code></td></tr>
-            <tr><td><b>Soft button</b></td><td><code>btn variant-soft</code></td><td>Replace with <code>.btn-soft</code></td></tr>
-            <tr><td><b>Spill pill</b></td><td><code>SetPillsHybrid.svelte</code></td><td>Refactor to use <code>.spill</code> classes (keep the grouping logic)</td></tr>
-            <tr><td><b>Stepper</b></td><td>Stack of <code>&lt;input&gt;</code> + buttons</td><td>New <code>StepperPill.svelte</code> component</td></tr>
+            <tr><td>Navigation</td><td>Sticky <code>AppBar</code> + fixed <code>BottomNav</code></td><td>Persistent <code>SideNav</code> rail</td></tr>
+            <tr><td>Context</td><td>Hero introduces the page</td><td><code>DesktopTopBar</code> gives title, subtitle, and actions</td></tr>
+            <tr><td>Content</td><td>Single column; horizontal overflow only for dense data</td><td>Two-column workspaces and two-up card grids</td></tr>
+            <tr><td>Insets</td><td><code>--sat/--sab/--sal/--sar</code> protect notches and home indicators</td><td>Centred workspace with controlled maximum width</td></tr>
+            <tr><td>Navigation set</td><td>Today, History, Progress, Plans, More</td><td>All primary and administrative destinations visible by role</td></tr>
+          </tbody>
+        </table>
+        <div class="ddrow">
+          <div class="dd do"><div class="k">Do</div><p>Change information density at the breakpoint while preserving task order, labels, and state.</p></div>
+          <div class="dd dont"><div class="k">Don't</div><p>Render duplicate route trees or hide a second live copy with CSS. Stateful content renders once.</p></div>
+        </div>
+      </section>
+
+      <section class="doc" id="overlays">
+        <h2>Dialogs &amp; overlays <em>— interrupt with purpose</em></h2>
+        <p class="lede">
+          Confirmation, release notes, workout completion, time editing, and the timed-set experience
+          sit above the shell. Use an overlay only when the user must decide or when a live timer must
+          remain legible at a glance.
+        </p>
+        <table class="table">
+          <thead><tr><th>Pattern</th><th>Owner</th><th>Behaviour</th></tr></thead>
+          <tbody>
+            <tr><td>Confirmation</td><td><code>ConfirmHost.svelte</code></td><td>One global request; clear consequence; safe and destructive actions separated</td></tr>
+            <tr><td>What's New</td><td><code>WhatsNewHost.svelte</code></td><td>Versioned changelog, dismissible by button, backdrop, or Escape</td></tr>
+            <tr><td>Timed set</td><td><code>SessionExercise.svelte</code></td><td>Countdown, hold metadata, completion state, optional audio cue</td></tr>
+            <tr><td>Task modal</td><td>Route-local modal</td><td>Title, concise body, explicit cancel, single primary action</td></tr>
+          </tbody>
+        </table>
+        <ul>
+          <li>Move focus into a dialog on open and restore it to the trigger on close.</li>
+          <li>Escape closes non-destructive overlays. Backdrop clicks never perform an action.</li>
+          <li>Scroll-lock the page, preserve safe areas, and keep the primary action reachable above the mobile keyboard.</li>
+          <li>Announce timer completion and asynchronous outcomes without relying on colour or sound alone.</li>
+        </ul>
+      </section>
+
+      <section class="doc" id="heatmap">
+        <h2>Session heatmap <em>— consistency over intensity</em></h2>
+        <p class="lede">
+          A rolling 53-week calendar of training days. Four adaptive bands use exercise count quartiles,
+          so a lighter routine and a high-volume routine both produce a meaningful range. Empty and future
+          cells remain visually distinct.
+        </p>
+        <ul>
+          <li>Weeks run Monday–Sunday; month labels attach to the first visible Monday of a month.</li>
+          <li>Mobile scrolls horizontally and opens at the newest weeks. Edge fades indicate hidden history.</li>
+          <li>Desktop shows the year in context with totals, active days, and current/longest weekly streaks.</li>
+          <li>Every populated cell exposes date, session count, and exercise count as accessible text.</li>
+        </ul>
+      </section>
+
+      <section class="doc" id="responsive-compositions">
+        <h2>Route compositions <em>— shared hierarchy, adapted density</em></h2>
+        <table class="table">
+          <thead><tr><th>Route</th><th>Mobile composition</th><th>Desktop composition</th></tr></thead>
+          <tbody>
+            <tr><td>Today</td><td>Hero → notices → session exercises</td><td>Session workspace with hero metrics and wider exercise controls</td></tr>
+            <tr><td>History</td><td>Hero → metrics → filters → chronological cards</td><td>Summary and filters above a two-up session grid; detail uses master/detail</td></tr>
+            <tr><td>Progress</td><td>Hero → tabs for overview/exercise</td><td>Metric rail → heatmap → exercise analysis beside aggregate story</td></tr>
+            <tr><td>Plans</td><td>Template list and editor as sequential states</td><td>Master/detail workspace; exercise cards may flow two-up</td></tr>
+            <tr><td>Settings</td><td>Account, preferences, tools, AI access stacked</td><td>Grouped cards in a scan-friendly workspace</td></tr>
+            <tr><td>Admin / Backups</td><td>High-consequence tools stacked with notices</td><td>Actions separated from records and status panels</td></tr>
+            <tr><td>Help / More</td><td>Task-oriented cards or navigation rows</td><td>Reference cards and two-up destination grid</td></tr>
+          </tbody>
+        </table>
+        <p><code>MasterDetail.svelte</code> owns selection layout: a bounded list pane and flexible detail pane, collapsing to one pane when no detail exists.</p>
+      </section>
+
+      <section class="doc" id="states">
+        <h2>System states <em>— never leave the user guessing</em></h2>
+        <table class="table">
+          <thead><tr><th>State</th><th>Visual treatment</th><th>Content rule</th></tr></thead>
+          <tbody>
+            <tr><td>Loading</td><td>Stable reserved space; quiet progress treatment</td><td>Say what is loading only when delay is perceptible</td></tr>
+            <tr><td>Empty</td><td>Normal card, low-emphasis explanation</td><td>Explain the first useful action; never imply an error</td></tr>
+            <tr><td>Error</td><td><code>Notice</code> with warning/error tone</td><td>Name the failed task and offer a retry when safe</td></tr>
+            <tr><td>Offline</td><td>Persistent but non-blocking notice</td><td>Distinguish locally saved, pending sync, and server-backed work</td></tr>
+            <tr><td>Disabled</td><td>Reduced contrast with unchanged geometry</td><td>Keep labels readable; use native <code>disabled</code></td></tr>
+            <tr><td>Success / PR</td><td>Sage for completion, gold for records</td><td>Pair colour with text, icon, or semantic status</td></tr>
+            <tr><td>Destructive</td><td>Isolated action and confirmation</td><td>State the object and irreversible consequence</td></tr>
           </tbody>
         </table>
       </section>
 
-      <!-- ═══════════════════════════════════════════════════════════ -->
-      <!-- MIGRATION PLAN                                              -->
-      <!-- ═══════════════════════════════════════════════════════════ -->
-      <section class="doc" id="migration">
-        <h2>Migration plan <em>— ordered, low-risk</em></h2>
-        <p class="lede">
-          Each step is independently shippable. The app never enters a half-migrated state where one
-          screen looks "new" and another looks broken. We end Skeleton's grip on the visual layer
-          gradually while keeping its primitives (modals, popovers) working.
-        </p>
-
-        <h3 class="sub">Step 1 · Tokens + fonts (1 day)</h3>
+      <section class="doc" id="accessibility">
+        <h2>Accessibility <em>— part of the component contract</em></h2>
         <ul>
-          <li>Drop the token block into <code>client/src/app.css</code> under <code>[data-theme='rocket']</code>.</li>
-          <li>Add Onest + Instrument Serif preconnect + stylesheet to <code>app.html</code>.</li>
-          <li>Update Skeleton font tokens (<code>--base-font-family</code>, <code>--heading-font-family</code>).</li>
-          <li>Replace meta <code>theme-color</code> in <code>app.html</code> with <code>#f3ece1</code> (light) — flip via JS on theme change.</li>
-          <li>Define the dark palette under <code>[data-theme='rocket'].dark</code> (rides existing dark-class toggle).</li>
+          <li><b>Keyboard:</b> every action is reachable in DOM order; visible <code>:focus-visible</code> rings use clay against light and dark surfaces.</li>
+          <li><b>Touch:</b> interactive targets are at least <code>44×44px</code>; coarse-pointer form controls use at least <code>16px</code> text to prevent iOS zoom.</li>
+          <li><b>Semantics:</b> use real buttons and links, heading order, labelled controls, <code>role="tablist"</code>/<code>aria-selected</code>, and dialog names.</li>
+          <li><b>Colour:</b> status is never colour-only. Body text uses ink tokens; muted text is reserved for supporting copy.</li>
+          <li><b>Motion:</b> respect reduced motion and avoid essential information that exists only during an animation.</li>
+          <li><b>Data:</b> charts and heatmaps require adjacent summaries or accessible labels; canvas is never the sole representation.</li>
+          <li><b>Responsive:</b> zoom and text growth must not clip actions, trap horizontal page scrolling, or hide navigation.</li>
         </ul>
-        <p>
-          <b>Verify</b>: every existing screen should look "warmer" but otherwise functionally identical. No structural changes.
-        </p>
+      </section>
 
-        <h3 class="sub">Step 2 · Core components (2–3 days)</h3>
-        <ul>
-          <li>Build <code>lib/components/ui/</code>: <code>Card</code>, <code>Spill</code>, <code>StepperPill</code>, <code>Chk</code>, <code>Chip</code>, <code>Badge</code>, <code>Btn</code> (with variant prop).</li>
-          <li>Refactor <code>SetPillsHybrid.svelte</code> to use <code>.spill</code> markup (keep grouping logic intact).</li>
-          <li>Add a <code>PageHero</code> component with variants: <code>timer</code> · <code>consistency</code> · <code>plain</code>.</li>
-          <li>Add <code>SegmentedTabs</code> and migrate <code>ProgressTabs.svelte</code> to use it.</li>
-          <li>Add <code>BottomNav</code> and migrate the mobile-bottom-nav markup from <code>+layout.svelte</code>.</li>
-        </ul>
+      <section class="doc" id="component-contracts">
+        <h2>Component contracts <em>— supported variation</em></h2>
+        <p class="lede">These are the public choices shared components deliberately expose. Add a variant only when at least two product contexts need the same semantic treatment.</p>
+        <table class="table">
+          <thead><tr><th>Component</th><th>Contract</th><th>Use</th></tr></thead>
+          <tbody>
+            <tr><td><code>Btn</code></td><td><code>primary | success | ink | soft | ghost | icon</code>; size <code>sm | md</code></td><td>One primary action per decision region; icon buttons require an accessible name</td></tr>
+            <tr><td><code>Card</code></td><td>Optional title, lede, actions, and body snippets</td><td>Section surface; actions align with the heading and wrap on narrow screens</td></tr>
+            <tr><td><code>Badge</code></td><td>Tones for soft, live, done, warning, and record states</td><td>Short status only; not interactive</td></tr>
+            <tr><td><code>Chip</code></td><td><code>xs | sm</code></td><td>Compact neutral metadata; never substitute for a button</td></tr>
+            <tr><td><code>Notice</code></td><td><code>info | success | warn | error</code>, message/body, optional action</td><td>Persistent contextual feedback; action label describes recovery</td></tr>
+            <tr><td><code>PageHero</code></td><td>Kicker, title, subcopy, actions, and content slots</td><td>One route-level spotlight; route-specific metrics stay in its content slot</td></tr>
+            <tr><td><code>MetricTile</code></td><td>Label, value, unit, delta, delta tone, semantic rail</td><td>Comparable numeric summaries with tabular numerals</td></tr>
+            <tr><td><code>SegmentedTabs</code></td><td>Items, bindable selection, label, selection callback</td><td>Two to four peer views; not primary navigation</td></tr>
+            <tr><td><code>Chk</code></td><td>Label, bindable checked state, disabled state, change callback</td><td>Boolean tracking/preferences with a full-row hit target</td></tr>
+            <tr><td><code>StepperPill</code></td><td>Numeric value, increment/decrement behavior, bounds, unit/label</td><td>Fast gym-floor entry; buttons and direct input remain available</td></tr>
+            <tr><td><code>Spill / SetPillList</code></td><td><code>sm | xs</code>, set modes, grouping, PR state</td><td>Dense read-only set history; editing uses explicit controls</td></tr>
+            <tr><td><code>PRRow / RPill</code></td><td>Gold/sage record tone; rep and weight values</td><td>Milestones and rep-specific performance summaries</td></tr>
+            <tr><td><code>Logo</code></td><td>Size with derived or explicit radius/font size; accessible label</td><td>Same mark in app bar, side rail, login, and install assets</td></tr>
+            <tr><td><code>BottomNav / SideNav</code></td><td>Shared navigation items and active-route logic</td><td>Mutually exclusive responsive navigation frames</td></tr>
+            <tr><td><code>DesktopTopBar</code></td><td>Title, optional italic subtitle, actions slot</td><td>Desktop page context; does not duplicate the route hero</td></tr>
+            <tr><td><code>MasterDetail</code></td><td>List, optional detail, and empty snippets</td><td>Selection-heavy desktop tools such as plans and history</td></tr>
+          </tbody>
+        </table>
+      </section>
 
-        <h3 class="sub">Step 3 · Port Today (2–3 days)</h3>
-        <ul>
-          <li>Replace <code>routes/+page.svelte</code>'s inline utilities with the new components.</li>
-          <li>Replace the <code>SessionExercise.svelte</code> add-set form with three StepperPill instances per mode.</li>
-          <li>Wire the live PR flash banner above the hero.</li>
-        </ul>
+      <section class="doc" id="implementation-map">
+        <h2>Implementation map <em>— where the system lives</em></h2>
+        <p class="lede">Prefer an existing primitive before adding route-local styling. Route compositions may own layout; reusable appearance belongs in a component.</p>
+        <table class="table">
+          <thead><tr><th>Layer</th><th>Canonical source</th><th>Responsibilities</th></tr></thead>
+          <tbody>
+            <tr><td>Tokens and reset</td><td><code>client/src/app.css</code></td><td>Theme values, safe areas, base typography, global input safeguards</td></tr>
+            <tr><td>UI primitives</td><td><code>lib/components/ui/</code></td><td>Btn, Card, Chip, Badge, Chk, Spill, SetPillList, StepperPill, PageHero, SegmentedTabs, BottomNav, MetricTile, PRRow, RPill, Logo, MasterDetail, Notice</td></tr>
+            <tr><td>Global overlays</td><td><code>ConfirmHost</code>, <code>WhatsNewHost</code></td><td>Application-level modal hosts and their stores</td></tr>
+            <tr><td>Shell</td><td><code>lib/components/shell/</code></td><td>AppBar, DesktopTopBar, SideNav, shared navigation and theme logic</td></tr>
+            <tr><td>Data visualisation</td><td><code>lib/progress/charting.ts</code></td><td>Chart.js colours, grid, labels, theme observation</td></tr>
+            <tr><td>Desktop compositions</td><td><code>lib/components/*/*Desktop.svelte</code></td><td>Route-specific density and pane arrangements</td></tr>
+            <tr><td>Responsive switch</td><td><code>lib/stores/viewport.ts</code> + shell CSS</td><td>Single shared <code>1024px</code> boundary</td></tr>
+          </tbody>
+        </table>
+      </section>
 
-        <h3 class="sub">Step 4 · Port Progress + chart theme (2–3 days)</h3>
+      <section class="doc" id="maintenance">
+        <h2>Maintenance contract <em>— keep docs and product together</em></h2>
         <ul>
-          <li>Update <code>lib/progress/charting.ts</code>'s <code>readTheme()</code> to emit the new <code>ChartTheme</code> values (see mapping above).</li>
-          <li>Replace inline metric grids with <code>MetricTile</code>.</li>
-          <li>Replace <code>RecentPrFeed</code>'s record rows with <code>PRRow</code>.</li>
-          <li>Replace <code>ExerciseFocusPanel</code>'s stat trio with <code>MetricTile</code> and rep pills with <code>RPill</code>.</li>
+          <li>Update this document in the same change that adds a token, shared component, variant, shell pattern, or breakpoint.</li>
+          <li>Do not document proposed UI as current. Mark experiments explicitly and keep mockups as historical references.</li>
+          <li>When a token changes, verify both themes and chart mappings. When a component changes, verify default, interactive, disabled, loading, empty, and error states where applicable.</li>
+          <li>Check mobile and desktop widths, keyboard traversal, focus, reduced motion, long labels, and safe-area behavior.</li>
+          <li>Use semantic versioning for this document: patch for corrections, minor for components/patterns, major for a visual-language or architecture reset.</li>
+          <li>The Svelte source wins if this page drifts. Treat drift as a documentation defect and repair it promptly.</li>
         </ul>
-
-        <h3 class="sub">Step 5 · Port the rest + cleanup (2 days)</h3>
-        <ul>
-          <li>History · Templates · Settings · Admin · Backups · Help — mostly card-and-form pages.</li>
-          <li>Delete the v2 compat shims from <code>app.css</code> once nothing references them.</li>
-          <li>Migrate the codebase to Svelte 5 runes in the same pass (separate PR series).</li>
-        </ul>
-
-        <h3 class="sub">Risks &amp; mitigations</h3>
-        <ul>
-          <li><b>Chart.js theme observer</b> already watches the <code>.dark</code> class. Verify it still fires when we add the <code>data-theme</code> attribute — patch the observer to watch both.</li>
-          <li><b>Form sizing on Safari/Firefox</b>: <code>field-sizing: content</code> isn't universal. Use the span-with-input-overlay pattern in StepperPill until it lands.</li>
-          <li><b>Existing modals</b> (EndSessionModal, EditWorkoutTimesModal) need focus-trap + Escape handler — track in a separate accessibility PR.</li>
-        </ul>
+        <div class="ddrow">
+          <div class="dd do"><div class="k">Before merging</div><p>Link the owning source, render the example in both themes, and compare it with the live development route.</p></div>
+          <div class="dd dont"><div class="k">Avoid</div><p>One-off hex values, copied button CSS, new breakpoints, or route-local versions of an existing primitive.</p></div>
+        </div>
       </section>
 
     </main>
@@ -1796,14 +1886,14 @@
 
   <!-- ─── FOOTER ──────────────────────────────────────────────────── -->
   <footer class="page">
-    <div>SwoleMate design system · v0.1 · 2026-05-15</div>
-    <div><a href="../mockups/index.html">← back to mockups gallery</a></div>
+    <div>SwoleMate design system · v1.0 · 2026-08-12</div>
+    <div><a href="../mockups/index.html">Historical mockups gallery ↗</a></div>
   </footer>
 
   <script>
     (function () {
       const root = document.documentElement;
-      const KEY = 'swolemate-mockup-theme';
+      const KEY = 'swolemate-design-system-theme';
       function apply(theme) {
         if (theme === 'dark') root.setAttribute('data-theme', 'dark');
         else root.removeAttribute('data-theme');
