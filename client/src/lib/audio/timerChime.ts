@@ -4,6 +4,7 @@ const CHIME_SRC = '/timer-done.wav';
 
 let element: HTMLAudioElement | null = null;
 let primed = false;
+let playbackSequence = 0;
 
 /** Test seam: inject (or clear) the audio element and reset prime state. */
 export function __setTimerChimeElementForTesting(el: HTMLAudioElement | null): void {
@@ -62,16 +63,21 @@ export function playTimerChime(): void {
 	const el = resolveElement();
 	if (!el) return;
 
-	// "transient-solo" briefly pauses other audio (like a navigation prompt),
-	// plays the chime exclusively — through the hardware mute switch on iOS —
-	// and lets the system resume the user's music/podcast when it finishes.
+	// "transient-solo" briefly pauses other audio (like a navigation prompt) and
+	// plays the chime through the hardware mute switch on iOS. Explicitly release
+	// the exclusive session afterward so the interrupted music/podcast can resume.
 	setAudioSessionType('transient-solo');
+	const sequence = ++playbackSequence;
+	const releaseAudioSession = () => {
+		if (sequence === playbackSequence) setAudioSessionType('ambient');
+	};
+	el.addEventListener('ended', releaseAudioSession, { once: true });
 
 	try {
 		el.currentTime = 0;
 		const result = el.play();
-		if (result && typeof result.catch === 'function') result.catch(() => {});
+		if (result && typeof result.catch === 'function') result.catch(releaseAudioSession);
 	} catch {
-		// ignore playback failures
+		releaseAudioSession();
 	}
 }

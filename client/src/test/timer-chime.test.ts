@@ -7,11 +7,14 @@ import {
 import { writeTimerSoundPreference } from '$lib/preferences/timerSound';
 
 function fakeAudio() {
+	const listeners = new Map<string, () => void>();
 	return {
 		muted: false,
 		currentTime: 5,
 		play: vi.fn().mockResolvedValue(undefined),
-		pause: vi.fn()
+		pause: vi.fn(),
+		addEventListener: vi.fn((type: string, listener: () => void) => listeners.set(type, listener)),
+		emit: (type: string) => listeners.get(type)?.()
 	};
 }
 
@@ -77,7 +80,7 @@ describe('timer chime', () => {
 		expect(session.type).toBe('ambient');
 	});
 
-	it('claims a transient-solo session when the chime rings so music resumes after', () => {
+	it('releases the transient-solo session when the chime ends so other audio can resume', () => {
 		const session = { type: 'ambient' };
 		(navigator as unknown as { audioSession: typeof session }).audioSession = session;
 		const el = fakeAudio();
@@ -87,6 +90,23 @@ describe('timer chime', () => {
 
 		expect(session.type).toBe('transient-solo');
 		expect(el.play).toHaveBeenCalledTimes(1);
+
+		el.emit('ended');
+
+		expect(session.type).toBe('ambient');
+	});
+
+	it('releases the transient-solo session when chime playback fails', async () => {
+		const session = { type: 'ambient' };
+		(navigator as unknown as { audioSession: typeof session }).audioSession = session;
+		const el = fakeAudio();
+		el.play = vi.fn().mockRejectedValue(new Error('NotAllowedError'));
+		__setTimerChimeElementForTesting(el as unknown as HTMLAudioElement);
+
+		playTimerChime();
+		await Promise.resolve();
+
+		expect(session.type).toBe('ambient');
 	});
 
 	it('does not throw on unlock when the audio session API is absent', async () => {
