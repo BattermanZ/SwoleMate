@@ -234,6 +234,15 @@ SwoleMate/
 └── README.md
 ```
 
+The helper scripts have their own dependencies. `sqlite3` needs its install
+script to fetch or build its native binding, so name it after the install:
+
+```bash
+cd scripts
+npm ci
+npm rebuild --ignore-scripts=false sqlite3
+```
+
 ## License
 
 [GNU AGPLv3](LICENSE).
