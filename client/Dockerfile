@@ -12,6 +12,8 @@ RUN npm run build
 
 # Stage 2: Serve with nginx
 FROM docker.io/library/nginx:alpine
+# Pick up Alpine security fixes released after the base image was built.
+RUN apk upgrade --no-cache
 # Copy the built static files
 COPY --from=builder /app/build /usr/share/nginx/html
 # Copy nginx configuration
